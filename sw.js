@@ -1,12 +1,3 @@
-// Service Worker stub
-self.addEventListener('install', (event) => {
-    self.skipWaiting();
-});
-
-self.addEventListener('activate', (event) => {
-    event.waitUntil(clients.claim());
-});
-
-self.addEventListener('fetch', (event) => {
-    // Default fetch behavior
+self.addEventListener('fetch', function(event) {
+    // Service Worker fetch handler
 });
