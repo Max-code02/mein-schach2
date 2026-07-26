@@ -1,0 +1,6 @@
+{
+  "name": "Schach Live",
+  "description": "Spiele Schach live gegen Freunde oder KI mit Echtzeit-Statistiken, Leaderboard und KI-Analyse.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
