@@ -2,7 +2,8 @@
 // script_chat.js - MAX' SUPREME CONTROL CENTER
 // ==========================================
 
-const socket = new WebSocket("wss://mein-schach-vo91.onrender.com");
+const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const socket = new WebSocket(`${wsProtocol}//${window.location.host}`);
 const adminPass = "Admina111"; 
 
 // 1. ELEMENTE AUS DER HTML HOLEN

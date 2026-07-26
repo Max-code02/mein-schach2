@@ -78,7 +78,7 @@ async function loadLeaderboard() {
                 <div style="display: flex; gap: 12px; font-size: 10px; margin-top: 5px; padding: 0 5px; color: #00ff00; align-items: center;">
                     <span>⭐ LVL: ${p.level || 1}</span>
                     
-                    <button onclick="window.location.href='https://mein-schach-uten.onrender.com/download-contact/${p.username}'"
+                    <button onclick="window.location.href='https://mein-schach2.onrender.com/download-contact/${p.username}'"
                             style="background: #3498db; border: none; color: white; cursor: pointer; border-radius: 4px; padding: 3px 8px; font-size: 9px; margin-left: auto;">
                         👤 KONTAKT +
                     </button>

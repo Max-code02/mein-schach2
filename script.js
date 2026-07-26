@@ -116,7 +116,9 @@ let myEngineWorker = new Worker('engineWorker.js');
 
 // Variable für STOCKFISH -> nutzt die NEUE Datei
 let stockfishWorker = new Worker('stockfishWorker.js');
-const socket = new WebSocket("wss://mein-schach-uten.onrender.com");
+const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const socket = new WebSocket(`${wsProtocol}//${window.location.host}`);
+let isSpectatorMode = false;
 
 const sounds = {
     move: new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/move-self.mp3'),
@@ -194,7 +196,7 @@ async function sendeAnAnalyse(fr, fc, tr, tc, figur, istSchlag) {
 
     try {
         // Ruf an deinen Render-Server
-        const response = await fetch('https://mein-schach-1.onrender.com/analyse', {
+        const response = await fetch('https://mein-schach2.onrender.com/analyse', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(zugDaten)
@@ -463,7 +465,7 @@ if (d.type === 'system_alert') {
     if (d.type === "VIDEO_READY") {
         const downloadBtn = document.createElement("a");
         // Wir nehmen 'd.url', weil deine Daten in 'd' gespeichert sind
-        downloadBtn.href = "https://mein-schach-uten.onrender.com" + d.url; 
+        downloadBtn.href = "https://mein-schach2.onrender.com" + d.url; 
         downloadBtn.className = "video-download-button";
         downloadBtn.innerText = "🎬 DEIN SIEG ALS VIDEO!";
         
@@ -576,7 +578,45 @@ case 'gameStart':
     resetGame(); 
     break;
 
+        case 'spectate_init':
+            isSpectatorMode = true;
+            if (d.board) {
+                board = d.board;
+            }
+            if (d.turn) {
+                turn = d.turn;
+            }
+            if (statusEl) {
+                statusEl.innerText = `👁️ Zuschauen in Raum ${d.room || ''} (${d.whitePlayer || 'Weiß'} vs ${d.blackPlayer || 'Schwarz'}) - Am Zug: ${turn === 'white' ? 'Weiß' : 'Schwarz'}`;
+            }
+            addChat("System", d.text || `👁️ Zuschauen in Raum ${d.room} gestartet.`, "system");
+            draw();
+            break;
+
+        case 'spectate_end':
+            isSpectatorMode = false;
+            if (statusEl) {
+                statusEl.innerText = "Weiß am Zug";
+            }
+            addChat("System", "👁️ Zuschauen beendet.", "system");
+            draw();
+            break;
+
         case 'move':
+            if (isSpectatorMode) {
+                if (d.board) {
+                    board = d.board;
+                }
+                if (d.turn) {
+                    turn = d.turn;
+                }
+                if (statusEl) {
+                    statusEl.innerText = `👁️ Zuschauen (Am Zug: ${turn === 'white' ? 'Weiß' : 'Schwarz'})`;
+                }
+                draw();
+                sounds.move.play();
+                break;
+            }
             if (gameModeSelect && (gameModeSelect.value === "online" || gameModeSelect.value === "random")) {
                 if (canMoveLogic(d.move.fr, d.move.fc, d.move.tr, d.move.tc)) {
                     doMove(d.move.fr, d.move.fc, d.move.tr, d.move.tc, false);
@@ -1060,6 +1100,7 @@ function startGeneration() {
     }
 }
 function handleSquareClick(r, c) {
+    if (isSpectatorMode) return;
     const isLocal = gameModeSelect && gameModeSelect.value === "local";
     if (!isLocal && turn !== myColor) {
         if (selected) {

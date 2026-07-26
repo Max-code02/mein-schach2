@@ -1,0 +1,1091 @@
+require('dotenv').config();
+const axios = require('axios');
+const path = require('path');
+let bannedIPs = new Set(); 
+const express = require('express');
+const app = express();
+app.use('/videos', express.static(path.join(__dirname, 'videos')));
+const cors = require('cors');
+app.use(cors());
+app.use(express.json());
+
+const { validateSecurity } = require('./antihack.js');
+const { getLocationFromIP } = require('./geoTracker.js');
+const { parseEmojis } = require('./emojis');
+const { isNameAllowed } = require('./badnames');
+const { addSpectator, removeSpectator, broadcastToSpectators } = require('./spectator');
+const { startAutoMessages } = require('./autoMessages');
+const { handleAdminCommand } = require('./adminSystem');
+const { runBackup } = require('./autoBackup'); // Wichtig für den /s Befehl
+const { startBackupScheduler } = require('./autoBackup');
+const { isSpamming } = require('./antispam');
+const userMessageLog = new Map(); 
+const SPAM_THRESHOLD = 5;
+const SPAM_INTERVAL = 3000;
+const { createClient } = require('@supabase/supabase-js');
+
+// DER TÜRSTEHER - Muss ganz oben stehen!
+// Route für die digitale Visitenkarte eines Spielers
+app.get('/download-contact/:playerName', (req, res) => {
+    const name = req.params.playerName;
+    // Link zu deiner echten Spiel-Webseite auf GitHub
+    const gameUrl = "https://max-code01.github.io/mein-schach"; 
+    const vCardContent = [
+        "BEGIN:VCARD",
+        "VERSION:3.0",
+        `FN:Schach-Rivale: ${name}`,       // Name, der im Telefonbuch erscheint
+        `N:;${name};;;`,
+        `URL:${gameUrl}`,                  // Verlinkung zurück zu deinem Spiel
+        "NOTE:Gefunden auf Max' Ultra-Schach. Fordere ihn heraus!",
+        "END:VCARD"
+    ].join("\n");
+
+    // WICHTIG: Diese Header sagen dem Browser, dass er eine Datei speichern soll
+    res.setHeader('Content-Type', 'text/vcard');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}_rivale.vcf"`);
+    
+    res.send(vCardContent);
+});
+
+// Das definiert den Chef-Zugang (Admin)
+const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL || 'https://sfbubqwnuthicpenmwye.supabase.co', 
+    process.env.SUPABASE_SERVICE_KEY || 'sb_publishable_H-ZV5me7vxZN_fNPdQ0ifA_--7AdGnZ'
+);
+const WebSocket = require('ws');
+const http = require('http');
+const fs = require('fs');
+
+let createCanvas, loadImage;
+try {
+    const canvasPkg = require('canvas');
+    createCanvas = canvasPkg.createCanvas;
+    loadImage = canvasPkg.loadImage;
+} catch (e) {
+    console.warn("Canvas package warning:", e.message);
+}
+
+let ffmpeg;
+try {
+    ffmpeg = require('fluent-ffmpeg');
+} catch (e) {
+    console.warn("fluent-ffmpeg warning:", e.message);
+}
+
+// Ordner für die Spiel-Bilder und fertigen Videos erstellen
+const TEMP_DIR = path.join(__dirname, 'temp_moves');
+const VIDEO_DIR = path.join(__dirname, 'videos');
+// Erstellt die Ordner beim Serverstart, falls sie fehlen
+[TEMP_DIR, VIDEO_DIR].forEach(dir => {
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+        console.log(`📁 Ordner erstellt: ${dir}`);
+    }
+});
+
+function banIPPermanently(ip) {
+    if (ip && !bannedIPs.has(ip)) {
+        bannedIPs.add(ip);
+        console.log(`🚫 IP ${ip} wurde zur internen Sperrliste hinzugefügt.`);
+        
+        const htaccessPath = path.join(__dirname, '.htaccess');
+        const denyLine = `\nDeny from ${ip}`;
+
+        fs.appendFile(htaccessPath, denyLine, (err) => {
+            if (err) {
+                console.error("Fehler beim Schreiben in .htaccess:", err);
+            } else {
+                console.log(`🚫 IP ${ip} wurde permanent in .htaccess gesperrt!`);
+            }
+        });
+    }
+}
+
+module.exports = { banIPPermanently };
+
+const nodemailer = require('nodemailer');
+const engine = require('./engineWorker.js');
+const ghost = require('./ghostplayer.js');
+
+// 🤖 Der neue Discord-Alarm
+async function sendBanEmail(playerName, reason, ip) {
+    const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+    
+    if (!webhookUrl) {
+        console.error("❌ Fehler: DISCORD_WEBHOOK_URL fehlt in den Render-Variablen!");
+        return false;
+    }
+
+    const payload = {
+        embeds: [{
+            title: "🚨 BAN-ALARM: Spieler gesperrt",
+            color: 15158332, // Rot
+            fields: [
+                { name: "Spieler", value: playerName, inline: true },
+                { name: "Grund", value: reason, inline: true },
+                { name: "IP-Adresse", value: `\`${ip}\``, inline: false }
+            ],
+            footer: { text: "Schach-Server Wächter" },
+            timestamp: new Date()
+        }]
+    };
+
+    try {
+        const response = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+            console.log("✅ Ban-Alarm an Discord gesendet!");
+            return true;
+        } else {
+            console.error("❌ Discord Fehler-Status:", response.status);
+            return false;
+        }
+    } catch (error) {
+        console.error("❌ Fehler beim Senden an Discord:", error.message);
+        return false;
+    }
+}
+
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://sfbubqwnuthicpenmwye.supabase.co';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || 'sb_publishable_H-ZV5me7vxZN_fNPdQ0ifA_--7AdGnZ';
+
+// --- GHOST PLAYER KONFIGURATION ---
+const ghostNames = ["ChessMaster99", "Lukas_Pro", "QueenGambit", "DarkKnight", "Susi_Sunshine", "CheckMate", "KingOfKings", "Master_88"];
+const ghostSentences = ["Hallo!", "Viel Glück!", "Gutes Spiel!", "Lust auf eine Revanche?", "Puh, das war knapp!", "Respekt!", "Moin moin", "Schach!","Gleich hab ich dich!"];
+
+app.use((req, res, next) => {
+    const clientIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+    if (bannedIPs.has(clientIP)) {
+        return res.status(403).send("<h1>403 Forbidden</h1>Deine IP wurde vom Antihack-System gesperrt.");
+    }
+
+    if (req.headers['x-forwarded-proto'] !== 'https' && process.env.NODE_ENV === 'production') {
+        return res.redirect(`https://${req.hostname}${req.url}`);
+    }
+
+    next();
+});
+
+function createGhostPlayer() {
+    const randomName = ghostNames[Math.floor(Math.random() * ghostNames.length)];
+    
+    const ghost = {
+        playerName: randomName,
+        isBot: true,
+        readyState: 1,
+        send: (data) => {},
+        terminate: () => {},
+        on: () => {}
+    };
+
+    setTimeout(() => {
+        broadcast({ 
+            type: 'chat', 
+            text: `${randomName}: ${ghostSentences[Math.floor(Math.random() * ghostSentences.length)]}`, 
+            playerName: randomName 
+        });
+    }, Math.random() * 5000 + 3000);
+
+    return ghost;
+}
+
+let serverConfig = { globalMute: false };
+let waitingPlayer = null;
+
+const server = http.createServer(app); 
+const wss = new WebSocket.Server({ server });
+
+// --- DATEI-PFADE ---
+const LB_FILE = './leaderboard.json';
+const USER_FILE = './userDB.json';
+const BAN_FILE = './bannedIPs.json';
+
+// --- SERVER SPEICHER / VARIABLEN ---
+let moveCounters = {};
+let leaderboard = {};
+let userDB = {}; 
+let profiles = {};
+let mutedPlayers = new Map(); 
+let warnings = {}; 
+let loginAttempts = new Map();
+let blockedIPs = new Map();
+
+let serverLocked = false; 
+let slowModeDelay = 0; 
+let messageHistory = new Map(); 
+let lastSentMessage = new Map(); 
+let lastWinTime = new Map(); 
+let winStreakCount = new Map();
+let lastKnownIPs = {}; 
+const adminPass = "Admina1";
+const helperPass = "Maxi";
+
+const PIECE_URLS = {
+    'K': 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg',
+    'Q': 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg',
+    'R': 'https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg',
+    'B': 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg',
+    'N': 'https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg',
+    'P': 'https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg',
+    
+    'k': 'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg',
+    'q': 'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg',
+    'r': 'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg',
+    'b': 'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg',
+    'n': 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg',
+    'p': 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg'
+};
+
+const loadedPieceImages = {}; 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function preloadPieceImages() {
+    if (!loadImage) return;
+    console.log("⏳ Lade Schachfiguren von Wikimedia (mit Sicherheits-Pausen)...");
+    
+    let geladeneAnzahl = 0;
+    const figurenKeys = Object.entries(PIECE_URLS);
+
+    for (const [key, url] of figurenKeys) {
+        try {
+            loadedPieceImages[key] = await loadImage(url);
+            geladeneAnzahl++;
+            console.log(`✅ Geladen (${geladeneAnzahl}/12): Figur ${key}`);
+            await sleep(600); 
+        } catch (err) {
+            console.error(`❌ Fehler beim Laden von Figur ${key}:`, err.message);
+            if (err.message && err.message.includes('429')) {
+                console.log(`🔄 Warteschlange voll (429). Versuche ${key} in 3 Sek. erneut...`);
+                await sleep(3000);
+                try {
+                    loadedPieceImages[key] = await loadImage(url);
+                    geladeneAnzahl++;
+                    console.log(`✅ Im zweiten Versuch geladen: ${key}`);
+                } catch (retryErr) {
+                    console.error(`❌ Finaler Abbruch für Figur ${key}`);
+                }
+            }
+        }
+    }
+
+    if (geladeneAnzahl === 12) {
+        console.log("🏁 PERFEKT: Alle 12 Figuren sind im Speicher!");
+    } else {
+        console.warn(`⚠️ ACHTUNG: Nur ${geladeneAnzahl} von 12 Figuren geladen.`);
+    }
+}
+
+preloadPieceImages();
+
+async function captureMoveSnapshot(gameId, boardArray, moveCount) {
+    if (!createCanvas) return;
+    const canvas = createCanvas(400, 400);
+    const ctx = canvas.getContext('2d');
+
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            ctx.fillStyle = (r + c) % 2 === 0 ? '#eeeed2' : '#769656';
+            ctx.fillRect(c * 50, r * 50, 50, 50);
+        }
+    }
+
+    boardArray.forEach((row, r) => {
+        row.forEach((pieceCode, c) => {
+            if (pieceCode && loadedPieceImages[pieceCode]) {
+                const img = loadedPieceImages[pieceCode];
+                ctx.drawImage(img, c * 50 + 5, r * 50 + 5, 40, 40);
+            }
+        });
+    });
+
+    const fileName = `game_${gameId}_move_${String(moveCount).padStart(3, '0')}.png`;
+    const filePath = path.join(TEMP_DIR, fileName);
+    
+    const out = fs.createWriteStream(filePath);
+    const stream = canvas.createPNGStream();
+    stream.pipe(out);
+}
+
+function generateGameVideo(gameId, ws) {
+    if (!ffmpeg) return;
+    const outputFileName = `Match_${gameId}_Highlight.mp4`;
+    const outputPath = path.join(VIDEO_DIR, outputFileName);
+    
+    ffmpeg()
+        .input(path.join(TEMP_DIR, `game_${gameId}_move_%03d.png`))
+        .inputFPS(2) 
+        .videoCodec('libx264')
+        .outputOptions(['-pix_fmt yuv420p'])
+        .on('end', () => {
+            console.log(`✅ Video für Spiel ${gameId} fertig!`);
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: "VIDEO_READY",
+                    url: `/videos/${outputFileName}`
+                }));
+            }
+            
+            setTimeout(() => {
+                if (fs.existsSync(outputPath)) {
+                    fs.unlinkSync(outputPath); 
+                    console.log(`🗑️ Video ${outputFileName} automatisch gelöscht.`);
+                }
+            }, 30 * 60 * 1000);
+            
+        })
+        .on('error', (err) => console.error("❌ Video-Fehler:", err.message))
+        .save(outputPath);
+}
+
+function createPlayerProfile(name) {
+    return {
+        uid: Math.random().toString(36).substring(2, 10).toUpperCase(),
+        level: 1,
+        xp: 0,
+        wins: 0,
+        joined: new Date().toLocaleDateString('de-DE')
+    };
+}
+
+function sendLeaderboardUpdate(target) {
+    const sorted = Object.entries(leaderboard)
+        .sort((a, b) => {
+            const winsA = typeof a[1] === 'object' ? a[1].wins : a[1];
+            const winsB = typeof b[1] === 'object' ? b[1].wins : b[1];
+            return winsB - winsA;
+        })
+        .slice(0, 10);
+
+    const msg = JSON.stringify({ 
+        type: 'leaderboard', 
+        list: sorted.map(e => {
+            const data = typeof e[1] === 'object' ? e[1] : { 
+                wins: e[1], 
+                level: 1, 
+                xp: 0, 
+                joined: new Date().toLocaleDateString('de-DE') 
+            };
+            return { 
+                name: e[0], 
+                wins: data.wins, 
+                level: data.level, 
+                xp: data.xp,
+                joined: data.joined 
+            };
+        }) 
+    });
+
+    if (target) {
+        target.send(msg);
+    } else {
+        wss.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) client.send(msg);
+        });
+    }
+}
+
+const sendSystemAlert = (targetWs, message) => {
+    if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+        targetWs.send(JSON.stringify({ 
+            type: 'system_alert', 
+            message: message 
+        }));
+    }
+};
+
+function escapeHTML(str) {
+    if (typeof str !== 'string') return str;
+    return str.replace(/[&<>"']/g, function(m) {
+        return {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[m];
+    });
+}
+
+async function loadProfilesFromSupabase() {
+    try {
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/players`, {
+            headers: { 
+                'apikey': SUPABASE_KEY, 
+                'Authorization': `Bearer ${SUPABASE_KEY}` 
+            }
+        });
+        const data = await response.json();
+        
+        if (Array.isArray(data)) {
+            data.forEach(player => {
+                userDB[player.username] = {
+                    password: player.password || "",
+                    wins: player.wins || 0,
+                    xp: player.xp || 0,
+                    level: player.level || 1,
+                    ip_ban: player.ip_ban || false,
+                    is_banned: player.is_banned || false
+                };
+
+                if (player.ip_ban === true && player.ip_address) {
+                    bannedIPs.add(player.ip_address);
+                }
+            });
+            console.log(`✅ ${data.length} Profile erfolgreich aus Supabase geladen.`);
+        }
+    } catch (err) {
+        console.error("❌ Fehler beim Laden von Supabase:", err);
+    }
+}
+
+function loadData() {
+    if (fs.existsSync(LB_FILE)) {
+        try {
+            const data = fs.readFileSync(LB_FILE, 'utf8');
+            leaderboard = JSON.parse(data);
+        } catch (e) {
+            console.log("Fehler beim Laden: Leaderboard");
+        }
+    }
+    if (fs.existsSync(USER_FILE)) {
+        try {
+            const data = fs.readFileSync(USER_FILE, 'utf8');
+            userDB = JSON.parse(data);
+        } catch (e) {
+            console.log("Fehler beim Laden: UserDB");
+        }
+    }
+    if (fs.existsSync(BAN_FILE)) {
+        try {
+            const data = fs.readFileSync(BAN_FILE, 'utf8');
+            const savedIPs = JSON.parse(data);
+            bannedIPs = new Set(savedIPs);
+        } catch (e) {
+            console.log("Fehler beim Laden: Bans");
+        }
+    }
+}
+loadData();
+
+async function loadBannedIPs() {
+    try {
+        const { data, error } = await supabaseAdmin
+            .from('ip_ban')
+            .select('ip_address');
+
+        if (error) {
+            console.error("Fehler beim Laden der Blacklist:", error);
+        } else if (data) {
+            data.forEach(row => bannedIPs.add(row.ip_address));
+            console.log(`✅ ${bannedIPs.size} gesperrte IPs aus Supabase geladen.`);
+        }
+    } catch (err) {
+        console.error("loadBannedIPs catch:", err.message);
+    }
+}
+
+loadBannedIPs();
+
+function saveAll() {
+    try {
+        fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2));
+        fs.writeFileSync(USER_FILE, JSON.stringify(userDB, null, 2));
+        fs.writeFileSync(BAN_FILE, JSON.stringify([...bannedIPs], null, 2));
+    } catch (e) {
+        console.log("Konnte Daten nicht speichern");
+    }
+}
+
+function broadcast(msgObj) {
+    const msg = JSON.stringify(msgObj);
+    wss.clients.forEach(function(client) {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(msg);
+        }
+    });
+}
+
+wss.on('connection', function(ws, req) {
+    const detectedIP = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
+    ws.clientIP = detectedIP;
+    
+    getLocationFromIP(detectedIP).then(locationData => {
+        ws.location = locationData; 
+        if (locationData && locationData.status !== "local") {
+            console.log(`🌍 RADAR: ${ws.playerName || 'Gast'} aus ${locationData.city}, ${locationData.country} (ISP: ${locationData.isp})`);
+        }
+    }).catch(err => console.log("Radar-Fehler:", err));
+
+    ws.lastMessageTime = 0;
+
+    if (bannedIPs.has(ws.clientIP)) {
+        sendSystemAlert(ws, '❌ ZUGRIFF VERWEIGERT: Deine IP ist permanent gebannt!');
+        setTimeout(() => ws.terminate(), 1000);
+        return;
+    }
+
+    if (blockedIPs.has(ws.clientIP)) {
+        const expiry = blockedIPs.get(ws.clientIP);
+        if (Date.now() < expiry) {
+            const restZeit = Math.ceil((expiry - Date.now()) / 60000);
+            sendSystemAlert(ws, `🚫 IP-SPERRE: Zu viele Fehlversuche. Warte noch ${restZeit} Minuten.`);
+            setTimeout(() => ws.terminate(), 1000);
+            return;
+        } else {
+            blockedIPs.delete(ws.clientIP);
+            loginAttempts.delete(ws.clientIP);
+        }
+    }
+
+    if (!ws.playerName) {
+        const tempID = Math.floor(1000 + Math.random() * 9000);
+        ws.playerName = "Spieler_" + tempID;
+    }
+    sendLeaderboardUpdate(ws);
+
+    ws.on('message', async function(message) {
+        const ip = ws.clientIP;
+        const now = Date.now();
+        let data;
+
+        const triggerUltraBan = async (reason) => {
+            if (ip === '::1' || ip === '127.0.0.1' || ip === 'localhost') {
+                console.log(`🛡️ Schutz: Server-IP (${ip}) wird nicht gebannt. Grund: ${reason}`);
+                return; 
+            }
+
+            const currentName = ((typeof data !== 'undefined' && data.playerName) ? data.playerName : ws.playerName || "Unbekannt").trim();
+            console.error(`⛔ ULTRA-BAN: ${ip} | User: ${currentName} | Grund: ${reason}`);
+
+            bannedIPs.add(ip);
+            try {
+                fs.writeFileSync(BAN_FILE, JSON.stringify([...bannedIPs], null, 2));
+            } catch (e) {
+                console.error("Fehler beim Speichern der bans.json");
+            }
+
+            try {
+                const { error } = await supabaseAdmin
+                    .from('players')
+                    .update({ 
+                        ip_ban: true, 
+                        is_banned: true,  
+                    })
+                    .eq('username', currentName);
+                if (error) throw error;
+                console.log(`☁️ Supabase: Account ${currentName} und IP erfolgreich als gebannt markiert.`);
+            } catch (err) {
+                console.error("❌ Fehler beim Supabase-Update:", err.message);
+            }
+
+            try {
+                await sendBanEmail(currentName, reason, ip);
+            } catch (e) {}
+
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'system_alert', message: "🚫 DEIN ACCOUNT UND DEINE IP WURDEN PERMANENT GESPERRT." }));
+                setTimeout(() => { ws.terminate(); }, 500);
+            }
+        };
+
+        try {
+            data = JSON.parse(message);
+        } catch (e) {
+            return;
+        }
+
+        try {
+            let cmd = "";
+            let args = [];
+        if (data.type === 'chat' && data.text && typeof data.text === 'string') {
+            if (data.text.startsWith('/')) {
+                const parts = data.text.trim().split(/\s+/);
+                args = parts;
+                cmd = parts[0].toLowerCase();
+            }
+        } else if (data.type === 'chat') {
+            return;
+        }
+
+        const isSafe = validateSecurity(data, ws, bannedIPs, triggerUltraBan);
+        if (!isSafe) return;
+
+        const currentName = (ws.playerName || "").trim();
+        const ADMIN_NAMES = ['Max', '222'];
+
+        if (data.type !== 'login_attempt' && data.type !== 'login' && data.type !== 'join') { 
+            if (data.playerName === 'Max' && ws.playerName !== 'Max') {
+                console.log(`⚠️ Identitäts-Check abgelehnt für: ${ws.playerName}`);
+                return triggerUltraBan("Admin-Identitätsklau Versuch");
+            }
+        }
+
+        if (cmd.startsWith('/') && ADMIN_NAMES.includes(currentName)) {
+            const isCommand = await handleAdminCommand(ws, data.text, {
+                wss, supabaseAdmin, banPlayer: triggerUltraBan, bannedIPs, profiles: userDB
+            });
+            if (isCommand) return; 
+        }
+
+        if (data.type === 'login' || data.type === 'join') {
+            const chosenName = data.name || data.playerName;
+            if (typeof isNameAllowed === 'function' && !isNameAllowed(chosenName)) {
+                ws.send(JSON.stringify({ 
+                    type: 'chat', 
+                    text: '❌ Dieser Name ist verboten! Bitte wähle einen anderen.', 
+                    system: true 
+                }));
+                return; 
+            }
+        }
+
+        if (data.type === 'ping') {
+            ws.send(JSON.stringify({ type: 'pong' }));
+            return;
+        }
+
+        if (data.type === 'chat_message' || data.type === 'login_attempt') {
+            const currentIP = ws.clientIP || "unknown";
+            if (!userMessageLog.has(currentIP)) userMessageLog.set(currentIP, []);
+            let timestamps = userMessageLog.get(currentIP);
+            timestamps = timestamps.filter(time => now - time < 3000); 
+            timestamps.push(now);
+            userMessageLog.set(currentIP, timestamps);
+
+            if (timestamps.length > 5) {
+                ws.send(JSON.stringify({ type: 'chat', text: '🚫 System: Spam erkannt! Kick.', system: true }));
+                setTimeout(() => ws.terminate(), 500);
+                return; 
+            }
+        }
+
+        if (data.type === 'login_attempt') {
+            const { playerName, password, clientIP } = data;
+            if (bannedIPs.has(clientIP)) {
+                return ws.send(JSON.stringify({ type: 'login_error', text: 'Deine IP ist gesperrt!' }));
+            }
+
+            const { data: user, error } = await supabaseAdmin
+                .from('players')
+                .upsert({ 
+                    username: playerName, 
+                    password: password, 
+                    ip_address: clientIP,
+                    last_login: new Date().toISOString()
+                }, { onConflict: 'username' })
+                .select()
+                .single();
+
+            if (error) {
+                ws.send(JSON.stringify({ type: 'login_error', text: 'Datenbank-Fehler!' }));
+            } else {
+                ws.playerName = playerName; 
+                profiles[playerName] = user; 
+                
+                ws.send(JSON.stringify({ 
+                    type: 'login_success', 
+                    name: playerName, 
+                    elo: user.elo || 1200,
+                    wins: user.wins || 0
+                }));
+                console.log(`✅ Login & Profil bereit: ${playerName}`);
+            }
+            return; 
+        }
+
+        if (data.type === 'chat_message') {
+            const { username, content } = data;
+            await supabaseAdmin.from('messages').insert([{ username, content }]);
+            wss.clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(JSON.stringify({ type: 'chat', user: username, text: content }));
+                }
+            });
+            return;
+        }
+
+        if (data.type === 'get_chat_history') {
+            const { data: messages } = await supabaseAdmin
+                .from('messages')
+                .select('*')
+                .order('created_at', { ascending: true })
+                .limit(30);
+            ws.send(JSON.stringify({ type: 'chat_history', messages: messages || [] }));
+            return;
+        }
+
+        if (data.type === 'find_random' || data.type === 'findGame') {
+            if (waitingPlayer && waitingPlayer !== ws && waitingPlayer.readyState === 1) {
+                if (waitingPlayer.botTimeout) {
+                    clearTimeout(waitingPlayer.botTimeout);
+                    console.log("🛑 Bot-Timer gestoppt - Menschlicher Gegner gefunden!");
+                }
+
+                const roomID = "room_" + Math.random().toString(36).substr(2, 9);
+                ws.room = roomID;
+                waitingPlayer.room = roomID;
+                
+                ws.send(JSON.stringify({ 
+                    type: 'gameStart', 
+                    room: roomID, 
+                    color: 'black', 
+                    opponent: waitingPlayer.playerName || "Spieler 1" 
+                }));
+                waitingPlayer.send(JSON.stringify({ 
+                    type: 'gameStart', 
+                    room: roomID, 
+                    color: 'white', 
+                    opponent: ws.playerName || "Spieler 2" 
+                }));
+                
+                waitingPlayer = null; 
+            } else {
+                waitingPlayer = ws;
+                console.log(`⏳ ${ws.playerName || "Gast"} sucht ein Spiel...`);
+
+                ws.botTimeout = setTimeout(() => {
+                    if (waitingPlayer === ws) {
+                        const roomID = "bot_room_" + Date.now();
+                        const ghostNames = ["ChessMaster99", "Lukas_Pro", "QueenGambit", "DarkKnight", "Susi_Sunshine", "CheckMate", "KingOfKings", "Master_88"];
+                        const botName = ghostNames[Math.floor(Math.random() * ghostNames.length)];
+
+                        ws.room = roomID;
+                        ws.isBotMatch = true;
+                        ws.opponentName = botName; 
+                        waitingPlayer = null; 
+
+                        ws.send(JSON.stringify({ 
+                            type: 'gameStart', 
+                            opponent: botName, 
+                            isBotMatch: true, 
+                            room: roomID, 
+                            color: 'white' 
+                        }));
+
+                        console.log(`🤖 Bot-Match erstellt: ${botName} vs. ${ws.playerName}`);
+
+                        setTimeout(() => {
+                            if (ws.readyState === 1) {
+                                ws.send(JSON.stringify({ 
+                                    type: 'chat', 
+                                    text: "Gutes spiel", 
+                                    sender: botName, 
+                                    system: false 
+                                }));
+                            }
+                        }, 1000);
+                    }
+                }, 5000); 
+            }
+            return;
+        }
+
+        if (data.type === 'resign') {
+            const room = data.room || "global";
+            const loser = currentName;
+
+            const resignMsg = JSON.stringify({
+                type: 'game_over',
+                reason: 'resign',
+                loser: loser,
+                text: `🏳️ ${loser} hat das Spiel aufgegeben!`
+            });
+
+            wss.clients.forEach(client => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(resignMsg);
+                }
+            });
+
+            console.log(`[GAME] ${loser} hat in Raum ${room} aufgegeben.`);
+            return; 
+        }
+
+        if (data.type === 'game_win') {
+            console.log(`🏆 Sieg bestätigt für: ${currentName}`);
+            if (userDB[currentName]) {
+                userDB[currentName].wins = (userDB[currentName].wins || 0) + 1;
+            }
+        }
+
+        const inputName = (data.name || data.playerName || data.sender || "").trim();
+        const inputPass = data.password || "";
+        if (inputName) {
+            ws.playerName = inputName;
+        }
+
+        if (data.type === 'chat' && data.text && data.text.startsWith('/')) {
+            const parts = data.text.trim().split(/\s+/); 
+            const cmd = parts[0].toLowerCase();
+
+            if (ADMIN_NAMES.includes(inputName)) { 
+                const isCommand = await handleAdminCommand(ws, data.text, {
+                    wss,
+                    supabaseAdmin,
+                    runBackup,
+                    banPlayer: triggerUltraBan,
+                    BAN_FILE,
+                    bannedIPs,
+                    profiles: userDB
+                });
+                if (isCommand) return; 
+            }
+
+            if (!ADMIN_NAMES.includes(inputName)) {
+                if (!data.text.includes(adminPass)) {
+                    let attempts = (loginAttempts.get(ws.clientIP) || 0) + 1;
+                    loginAttempts.set(ws.clientIP, attempts);
+
+                    if (attempts >= 5) {
+                        bannedIPs.add(ws.clientIP);
+                        if (typeof saveAll === 'function') saveAll();
+                        ws.send(JSON.stringify({ type: 'chat', text: '❌ GEBANNT: Zu viele Fehlversuche!', system: true }));
+                        setTimeout(() => ws.terminate(), 1000);
+                    }
+                    return; 
+                }
+            }
+
+            loginAttempts.set(ws.clientIP, 0);
+
+            if (cmd === '/warn') {
+                const targetLower = (parts[1] || "").toLowerCase();
+                warnings[targetLower] = (warnings[targetLower] || 0) + 1;
+                broadcast({ type: 'chat', text: "WARNUNG für " + parts[1] + ": (" + warnings[targetLower] + "/3)", system: true });
+                return;
+            }
+
+            if (cmd === '/mute') {
+                const targetLower = (parts[1] || "").toLowerCase();
+                mutedPlayers.set(targetLower, Date.now() + 3600000); 
+                ws.send(JSON.stringify({ type: 'chat', text: parts[1] + " stummgeschaltet.", system: true }));
+                return;
+            }
+
+            if (cmd === '/unmute') {
+                const targetLower = (parts[1] || "").toLowerCase();
+                mutedPlayers.delete(targetLower);
+                ws.send(JSON.stringify({ type: 'chat', text: parts[1] + " entstummt.", system: true }));
+                return;
+            }
+
+            if (cmd === '/kick') {
+                const providedPass = parts[parts.length - 1];
+                if (providedPass === adminPass) {
+                    const targetNameInput = parts[1] ? parts[1].trim() : "";
+                    let targetWs = null;
+                    wss.clients.forEach(function(client) {
+                        if (client.playerName && client.playerName.toLowerCase() === targetNameInput.toLowerCase()) {
+                            targetWs = client;
+                        }
+                    });
+                    if (targetWs) {
+                        broadcast({ type: 'chat', text: `🚫 [KICK] ${targetWs.playerName} wurde entfernt!`, system: true });
+                        setTimeout(() => { targetWs.terminate(); }, 500);
+                    }
+                }
+                return;
+            }
+
+            if (cmd === '/ban') {
+                const cleanParts = data.text.trim().split(/\s+/); 
+                const providedPass = cleanParts[cleanParts.length - 1];
+                const targetName = cleanParts.slice(1, -1).join(' ').trim();
+
+                if (providedPass === adminPass && targetName) {
+                    if (userDB[targetName]) {
+                        userDB[targetName].is_banned = true;
+                    }
+                    wss.clients.forEach(function(c) {
+                        if (c.playerName && c.playerName.toLowerCase() === targetName.toLowerCase()) {
+                            bannedIPs.add(c.clientIP);
+                            setTimeout(() => c.terminate(), 1000);
+                        }
+                    });
+                    saveAll();
+                    ws.send(JSON.stringify({ type: 'chat', text: `🚫 Account ${targetName} wurde gesperrt.`, system: true }));
+                }
+                return;
+            }
+
+            if (cmd === '/help') {
+                const helpText = `
+🛠️ --- ADMIN BEFEHLS-LISTE ---
+/warn, /mute, /unmute, /kick, /ban, /pardon, /banlist, /stats, /whois, /help
+                `;
+                ws.send(JSON.stringify({ type: 'chat', text: helpText, system: true }));
+                return;
+            }
+        }
+
+        if (data.type === 'chat' || data.type === 'move') {
+            if (typeof serverLocked !== 'undefined' && serverLocked && data.type === 'move') {
+                return;
+            }
+
+            if (data.type === 'chat') {
+                if (isSpamming(ws, data.text)) return;
+                if (global.chatFrozen === true && ws.playerName !== "Max") {
+                    ws.send(JSON.stringify({ 
+                        type: 'chat', 
+                        text: "🧊 Der Chat ist aktuell vom Admin gesperrt.", 
+                        system: true 
+                    }));
+                    return; 
+                }
+
+                if (typeof parseEmojis === 'function') {
+                    data.text = parseEmojis(data.text);
+                }
+                if (typeof escapeHTML === 'function') {
+                    data.text = escapeHTML(data.text);
+                }
+
+                if (ws.text && ws.text.startsWith('/watch')) {
+                    const parts = ws.text.split(' ');
+                    let target = parts[1];
+                    if (typeof addSpectator === 'function') {
+                        addSpectator(ws, target, wss);
+                    }
+                    return;
+                }
+            }
+
+            if (data.type === 'move') {
+                if (ws.isSpectator) {
+                    ws.send(JSON.stringify({ type: 'chat', text: '👁️ Zuschauer dürfen nicht ziehen!', system: true }));
+                    return; 
+                }
+                const targetRoom = data.room || ws.room || "global";
+                if (!moveCounters[targetRoom]) moveCounters[targetRoom] = 0;
+                moveCounters[targetRoom]++; 
+                
+                captureMoveSnapshot(targetRoom, data.board, moveCounters[targetRoom]);
+                ws.lastBoardState = data.board; 
+
+                if (typeof broadcastToSpectators === 'function') {
+                    broadcastToSpectators({
+                        type: 'move',
+                        move: data.move,
+                        board: data.board,
+                        turn: data.turn
+                    }, targetRoom);
+                }
+            }
+
+            const targetRoom = data.room || ws.room || "global";
+            wss.clients.forEach(function(client) {
+                if (client !== ws && client.readyState === 1 && (client.room === targetRoom || targetRoom === 'global')) {
+                    client.send(JSON.stringify(data));
+                }
+            });
+
+            if (data.type === 'move' && ws.isBotMatch) {
+                const currentBotName = ws.opponentName || "Grandmaster_Ghost";
+                setTimeout(() => {
+                    if (typeof ghost !== 'undefined' && ghost.handleGhostMove) {
+                        ghost.handleGhostMove(ws, data.board, 'black', currentBotName);
+                    }
+                }, 700);
+            }
+        }
+
+        if (data.type === 'win') {
+            const name = data.name || ws.playerName || "Anonym";
+            if (!userDB[name]) {
+                userDB[name] = { level: 1, xp: 0, wins: 0 };
+            }
+            userDB[name].wins += 1;
+            userDB[name].xp += 50;
+            saveAll();
+            sendLeaderboardUpdate();
+        }
+
+        if (data.type === 'game_over') {
+            const winnerName = data.player || ws.playerName; 
+            const targetRoom = data.room || ws.room || "global";
+            generateGameVideo(targetRoom, ws);
+        }
+
+    } catch (e) {
+        console.error("Fehler bei der Nachrichtenverarbeitung:", e);
+    }
+});
+
+    ws.on('close', function() {
+        if (waitingPlayer === ws) {
+            waitingPlayer = null;
+        }
+    });
+});
+
+const PORT = 3000;
+
+async function startServer() {
+    if (process.env.NODE_ENV !== 'production') {
+        const { createServer: createViteServer } = require('vite');
+        const vite = await createViteServer({
+            server: { middlewareMode: true },
+            appType: 'spa',
+        });
+        app.use(vite.middlewares);
+    } else {
+        const distPath = path.join(process.cwd(), 'dist');
+        app.use(express.static(distPath));
+        app.get('*', (req, res) => {
+            res.sendFile(path.join(distPath, 'index.html'));
+        });
+    }
+
+    server.listen(PORT, '0.0.0.0', async function() { 
+        console.log("MASTER-SERVER STARTET...");
+        await loadProfilesFromSupabase(); 
+        
+        try {
+            if (fs.existsSync(BAN_FILE)) {
+                const data = fs.readFileSync(BAN_FILE, 'utf8');
+                const parsed = JSON.parse(data);
+                bannedIPs = new Set(parsed);
+                console.log(`✅ ${bannedIPs.size} IP-Sperren geladen.`);
+            }
+        } catch (err) {
+            console.error("❌ Fehler beim Laden der IP-Bans:", err);
+        }
+
+        if (typeof startBackupScheduler === 'function') {
+            startBackupScheduler(supabaseAdmin);
+        }
+        if (typeof startAutoMessages === 'function') {
+            startAutoMessages(wss); 
+            console.log("🤖 Info-Bot (AutoMessages) wurde gestartet.");
+        }
+
+        console.log("✅ MASTER-SERVER READY AUF PORT " + PORT);
+
+        try {
+            if (fs.existsSync('./chaosLernBot.js')) {
+                const { fork } = require('child_process');
+                fork('./chaosLernBot.js'); 
+                console.log("🚀 CHAOS-BOT ALS UNTERPROZESS AKTIVIERT!");
+            }
+        } catch (e) {
+            console.warn("Chaos-Bot Notice:", e.message);
+        }
+    });
+}
+
+startServer();
+
+process.on('uncaughtException', (err) => {
+    console.error('🔥 KRITISCHER ABSTURZ-FEHLER:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('🕒 UNBEHANDELTER PROMISE-FEHLER:', reason);
+});
