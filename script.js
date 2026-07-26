@@ -117,7 +117,8 @@ let myEngineWorker = new Worker('engineWorker.js');
 // Variable für STOCKFISH -> nutzt die NEUE Datei
 let stockfishWorker = new Worker('stockfishWorker.js');
 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const socket = new WebSocket(`${wsProtocol}//${window.location.host}`);
+const wsHost = window.location.host.includes('github.io') ? 'mein-schach2.onrender.com' : window.location.host;
+const socket = new WebSocket(`${wsProtocol}//${wsHost}`);
 let isSpectatorMode = false;
 
 const sounds = {
