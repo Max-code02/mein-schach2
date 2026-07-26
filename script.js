@@ -287,7 +287,12 @@ function sendMsg() {
             room: onlineRoom 
         }));
         saveMessage(getMyName(), t);
-        addChat("Ich", t, "me"); 
+        
+        let cleanText = t;
+        const pws = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi'];
+        pws.forEach(pw => { cleanText = cleanText.replaceAll(pw, '').trim(); });
+
+        addChat("Ich", cleanText, "me"); 
         chatInput.value = "";
     }
 }

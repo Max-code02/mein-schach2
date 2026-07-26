@@ -25,8 +25,7 @@ const CONFIG = {
         'dulli', 'vollidiot', 'schwul', 'lesbe', 'transe', 'schwuchtel',
 
         // --- 3. System-Schutz ---
-        'admin', 'moderator', 'support', 'server', 'system', 'root', 'max_admin', 
-        'offiziell', 'gebannt', 'ban', 'stumm', 'muted', 'konsole', 'console',
+        'free-elo', 'hack', 'cheat', 'generator',
 
         // --- 4. Werbung & Links ---
         'discord.gg', 'http', 'https', '.com', '.de', '.net', '.gg/', 'paypal', 
@@ -106,20 +105,25 @@ function isSpamming(ws, messageText = "") {
         return true;
     }
 
-    // 15. CHECK: Wortfilter (Blacklist)
-    const hasBannedWord = CONFIG.BANNED_WORDS.some(word => messageText.toLowerCase().includes(word));
-    if (hasBannedWord) {
-        data.warnings++;
-        if (ws.readyState === 1) {
-            ws.send(JSON.stringify({ type: 'chat', text: `🔞 Beleidigungen sind verboten! Verwarnung: ${data.warnings}/3`, system: true }));
-        }
-        if (data.warnings >= 3) {
-            data.mutedUntil = now + (CONFIG.BASE_MUTE * 10);
+    // 15. CHECK: Wortfilter (Blacklist) - Befehle & Admin-Passwörter ausnehmen
+    const isCmd = messageText.startsWith('/') || messageText.startsWith('!') || messageText.startsWith('?');
+    const hasAdminPass = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'Maxi'].some(pw => messageText.includes(pw));
+    
+    if (!isCmd && !hasAdminPass) {
+        const hasBannedWord = CONFIG.BANNED_WORDS.some(word => messageText.toLowerCase().includes(word));
+        if (hasBannedWord) {
+            data.warnings++;
             if (ws.readyState === 1) {
-                ws.send(JSON.stringify({ type: 'chat', text: "🚨 Zu viele Verwarnungen! 5 Min Sperre.", system: true }));
+                ws.send(JSON.stringify({ type: 'chat', text: `🔞 Beleidigungen sind verboten! Verwarnung: ${data.warnings}/3`, system: true }));
             }
+            if (data.warnings >= 3) {
+                data.mutedUntil = now + (CONFIG.BASE_MUTE * 10);
+                if (ws.readyState === 1) {
+                    ws.send(JSON.stringify({ type: 'chat', text: "🚨 Zu mehere Verwarnungen! 5 Min Sperre.", system: true }));
+                }
+            }
+            return true;
         }
-        return true;
     }
 
     // 16. CHECK: Befehls-Spam-Schutz

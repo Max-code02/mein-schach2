@@ -68,7 +68,9 @@ function send() {
         }));
 
         // TARNUNG LOKAL: In deiner Sprechblase das PW sofort löschen
-        let cleanDisplay = val.replace(adminPass, "").trim();
+        let cleanDisplay = val;
+        const pws = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi'];
+        pws.forEach(pw => { cleanDisplay = cleanDisplay.replaceAll(pw, '').trim(); });
         addMessage(myName, cleanDisplay, 'me');
         
         chatInput.value = "";

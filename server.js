@@ -254,6 +254,96 @@ let mutedPlayers = new Map();
 let warnings = {}; 
 let loginAttempts = new Map();
 let blockedIPs = new Map();
+const activeRoomStates = new Map();
+const SERVER_INSTANCE_ID = Math.random().toString(36).substring(2, 9);
+
+// Supabase Realtime Message Broker for cross-server & cross-client messaging
+let realTimeChannel = null;
+if (supabaseAdmin && typeof supabaseAdmin.channel === 'function') {
+    try {
+        realTimeChannel = supabaseAdmin.channel('global_chat_broker');
+        realTimeChannel.on('broadcast', { event: 'message' }, (payload) => {
+            if (payload && payload.payload) {
+                const msgData = payload.payload;
+                if (msgData._origin === SERVER_INSTANCE_ID) return; // Skip self
+                
+                const targetRoom = msgData._targetRoom;
+                delete msgData._origin;
+                delete msgData._targetRoom;
+                delete msgData._ignoreSelf;
+
+                const msgStr = JSON.stringify(msgData);
+                wss.clients.forEach(client => {
+                    if (client.readyState === 1) {
+                        if (!targetRoom || targetRoom === 'global' || client.room === targetRoom) {
+                            client.send(msgStr);
+                        }
+                    }
+                });
+                
+                // If it's a move, also broadcast to spectators on this instance
+                if (msgData.type === 'move') {
+                    const room = msgData.room || targetRoom;
+                    
+                    // Keep local room states updated for cross-instance spectators
+                    if (room && activeRoomStates) {
+                        const state = activeRoomStates.get(room) || { whitePlayer: 'Weiß', blackPlayer: 'Schwarz' };
+                        activeRoomStates.set(room, {
+                            board: msgData.board,
+                            turn: msgData.turn,
+                            whitePlayer: msgData.whitePlayer || state.whitePlayer,
+                            blackPlayer: msgData.blackPlayer || state.blackPlayer
+                        });
+                    }
+
+                    if (typeof broadcastToSpectators === 'function') {
+                        broadcastToSpectators(msgData, room);
+                    }
+                }
+            }
+        }).subscribe((status) => {
+            console.log(`📡 Supabase Realtime Broker Status: ${status}`);
+        });
+    } catch (e) {
+        console.error("Supabase Realtime Broker setup error:", e.message);
+    }
+}
+
+function broadcastGlobalMessage(msgObj, publishToRealtime = true) {
+    const msgStr = JSON.stringify(msgObj);
+    wss.clients.forEach(client => {
+        if (client.readyState === 1) {
+            client.send(msgStr);
+        }
+    });
+
+    if (publishToRealtime && realTimeChannel) {
+        realTimeChannel.send({
+            type: 'broadcast',
+            event: 'message',
+            payload: { ...msgObj, _origin: SERVER_INSTANCE_ID }
+        }).catch(() => {});
+    }
+}
+
+function broadcastRoomMessage(msgObj, roomID, publishToRealtime = true, senderWs = null) {
+    const msgStr = JSON.stringify(msgObj);
+    wss.clients.forEach(client => {
+        if (client !== senderWs && client.readyState === 1 && (client.room === roomID || roomID === 'global')) {
+            client.send(msgStr);
+        }
+    });
+    
+    // Spectators get the message separately via broadcastToSpectators logic
+    
+    if (publishToRealtime && realTimeChannel) {
+        realTimeChannel.send({
+            type: 'broadcast',
+            event: 'message',
+            payload: { ...msgObj, _origin: SERVER_INSTANCE_ID, _targetRoom: roomID, _ignoreSelf: !!senderWs }
+        }).catch(() => {});
+    }
+}
 
 let serverLocked = false; 
 let slowModeDelay = 0; 
@@ -262,7 +352,7 @@ let lastSentMessage = new Map();
 let lastWinTime = new Map(); 
 let winStreakCount = new Map();
 let lastKnownIPs = {}; 
-const adminPass = "Admina1";
+const adminPass = "Admina111";
 const helperPass = "Maxi";
 
 const PIECE_URLS = {
@@ -666,11 +756,33 @@ wss.on('connection', function(ws, req) {
                 }
             }
 
-            if (cmd.startsWith('/') && ADMIN_NAMES.includes(currentName)) {
-                const isCommand = await handleAdminCommand(ws, data.text, {
-                    wss, supabaseAdmin, banPlayer: triggerUltraBan, bannedIPs, profiles: userDB
+            const ADMIN_PASSWORDS_LIST = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi', '222'];
+            const textStr = (data.text || "").trim();
+            const containsAdminPw = typeof data.text === 'string' && ADMIN_PASSWORDS_LIST.some(pw => data.text.includes(pw));
+            const isCmd = typeof data.text === 'string' && (textStr.startsWith('/') || textStr.startsWith('!') || textStr.startsWith('?'));
+
+            if (data.type === 'chat' && (isCmd || containsAdminPw)) {
+                const isHandled = await handleAdminCommand(ws, data.text, {
+                    wss, 
+                    supabaseAdmin, 
+                    banPlayer: triggerUltraBan, 
+                    bannedIPs, 
+                    bannedPlayers, 
+                    profiles: userDB, 
+                    addSpectator, 
+                    removeSpectator,
+                    roomStates: activeRoomStates
                 });
-                if (isCommand) return; 
+
+                if (!isHandled) {
+                    ws.send(JSON.stringify({ 
+                        type: 'chat', 
+                        text: '❓ Unbekannter Befehl. Nutze !help oder /help für Hilfe.', 
+                        system: true 
+                    }));
+                }
+                // CRITICAL SECURITY RULE: Commands and messages containing admin passwords MUST NEVER be broadcast!
+                return;
             }
 
             if (data.type === 'login' || data.type === 'join') {
@@ -741,12 +853,33 @@ wss.on('connection', function(ws, req) {
 
             if (data.type === 'chat_message') {
                 const { username, content } = data;
-                await supabaseAdmin.from('messages').insert([{ username, content }]);
-                wss.clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN) {
-                        client.send(JSON.stringify({ type: 'chat', user: username, text: content }));
+                const containsPw = ADMIN_PASSWORDS_LIST.some(pw => content.includes(pw));
+                const isCmdType = content.startsWith('/') || content.startsWith('!') || content.startsWith('?');
+                
+                if (containsPw || isCmdType) {
+                    const isHandled = await handleAdminCommand(ws, content, {
+                        wss, 
+                        supabaseAdmin, 
+                        banPlayer: triggerUltraBan, 
+                        bannedIPs, 
+                        bannedPlayers, 
+                        profiles: userDB, 
+                        addSpectator, 
+                        removeSpectator,
+                        roomStates: activeRoomStates
+                    });
+                    if (!isHandled) {
+                        ws.send(JSON.stringify({ 
+                            type: 'chat', 
+                            text: '❓ Unbekannter Befehl. Nutze !help oder /help für Hilfe.', 
+                            system: true 
+                        }));
                     }
-                });
+                    return;
+                }
+
+                await supabaseAdmin.from('messages').insert([{ username, content }]);
+                broadcastGlobalMessage({ type: 'chat', user: username, text: content });
                 return;
             }
 
@@ -771,6 +904,13 @@ wss.on('connection', function(ws, req) {
                     ws.room = roomID;
                     waitingPlayer.room = roomID;
                     
+                    activeRoomStates.set(roomID, {
+                        board: null,
+                        turn: 'white',
+                        whitePlayer: waitingPlayer.playerName || "Spieler 1",
+                        blackPlayer: ws.playerName || "Spieler 2"
+                    });
+
                     ws.send(JSON.stringify({ 
                         type: 'gameStart', 
                         room: roomID, 
@@ -881,14 +1021,15 @@ wss.on('connection', function(ws, req) {
                         data.text = escapeHTML(data.text);
                     }
 
-                    if (ws.text && ws.text.startsWith('/watch')) {
-                        const parts = ws.text.split(' ');
-                        let target = parts[1];
-                        if (typeof addSpectator === 'function') {
-                            addSpectator(ws, target, wss);
-                        }
-                        return;
-                    }
+                    const chatObj = {
+                        type: 'chat',
+                        sender: ws.playerName || data.sender || 'Gast',
+                        text: data.text,
+                        system: false
+                    };
+
+                    broadcastGlobalMessage(chatObj);
+                    return;
                 }
 
                 if (data.type === 'move') {
@@ -903,30 +1044,37 @@ wss.on('connection', function(ws, req) {
                     captureMoveSnapshot(targetRoom, data.board, moveCounters[targetRoom]);
                     ws.lastBoardState = data.board; 
 
+                    const roomState = {
+                        board: data.board,
+                        turn: data.turn,
+                        whitePlayer: ws.color === 'white' ? (ws.playerName || 'Weiß') : (ws.opponentName || 'Weiß'),
+                        blackPlayer: ws.color === 'black' ? (ws.playerName || 'Schwarz') : (ws.opponentName || 'Schwarz')
+                    };
+                    activeRoomStates.set(targetRoom, roomState);
+
                     if (typeof broadcastToSpectators === 'function') {
                         broadcastToSpectators({
                             type: 'move',
                             move: data.move,
                             board: data.board,
-                            turn: data.turn
+                            turn: data.turn,
+                            room: targetRoom
                         }, targetRoom);
                     }
-                }
 
-                const targetRoom = data.room || ws.room || "global";
-                wss.clients.forEach(function(client) {
-                    if (client !== ws && client.readyState === 1 && (client.room === targetRoom || targetRoom === 'global')) {
-                        client.send(JSON.stringify(data));
+                    data.whitePlayer = roomState.whitePlayer;
+                    data.blackPlayer = roomState.blackPlayer;
+                    broadcastRoomMessage(data, targetRoom, true, ws);
+
+                    if (ws.isBotMatch) {
+                        const currentBotName = ws.opponentName || "Grandmaster_Ghost";
+                        setTimeout(() => {
+                            if (typeof ghost !== 'undefined' && ghost && ghost.handleGhostMove) {
+                                ghost.handleGhostMove(ws, data.board, 'black', currentBotName);
+                            }
+                        }, 700);
                     }
-                });
-
-                if (data.type === 'move' && ws.isBotMatch) {
-                    const currentBotName = ws.opponentName || "Grandmaster_Ghost";
-                    setTimeout(() => {
-                        if (typeof ghost !== 'undefined' && ghost && ghost.handleGhostMove) {
-                            ghost.handleGhostMove(ws, data.board, 'black', currentBotName);
-                        }
-                    }, 700);
+                    return;
                 }
             }
 

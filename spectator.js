@@ -20,8 +20,10 @@ function addSpectator(ws, target, wss, roomStates = null) {
     let foundPlayerName = null;
 
     // 1. Smarte Suche: Ist 'target' vielleicht ein Spielername?
-    if (!target.startsWith('room_')) {
+    if (!target.startsWith('room_') && !target.startsWith('bot_room_')) {
         let found = false;
+        
+        // 1a. Check local WebSocket clients
         wss.clients.forEach(client => {
             if (client.playerName && client.playerName.toLowerCase() === target.toLowerCase()) {
                 if (client.room) {
@@ -31,6 +33,20 @@ function addSpectator(ws, target, wss, roomStates = null) {
                 }
             }
         });
+
+        // 1b. Check cross-instance room states
+        if (!found && roomStates) {
+            for (const [roomID, state] of roomStates.entries()) {
+                if ((state.whitePlayer && state.whitePlayer.toLowerCase() === target.toLowerCase()) || 
+                    (state.blackPlayer && state.blackPlayer.toLowerCase() === target.toLowerCase())) {
+                    finalRoom = roomID;
+                    foundPlayerName = target;
+                    found = true;
+                    break;
+                }
+            }
+        }
+
         if (!found) {
             ws.send(JSON.stringify({ type: 'chat', text: `❌ Spieler "${target}" wurde nicht gefunden oder ist in keinem aktiven Spiel.`, system: true }));
             return;
