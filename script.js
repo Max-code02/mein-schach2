@@ -137,6 +137,46 @@ let enPassantTarget = null;
 let halfMoveClock = 0; // Für die 50-Züge-Regel
 let positionHistory = {}; // Für die 3-fache Wiederholung
 
+function resetGame() {
+    board = [
+        ['r','n','b','q','k','b','n','r'],
+        ['p','p','p','p','p','p','p','p'],
+        ['','','','','','','',''],
+        ['','','','','','','',''],
+        ['','','','','','','',''],
+        ['','','','','','','',''],
+        ['P','P','P','P','P','P','P','P'],
+        ['R','N','B','Q','K','B','N','R']
+    ];
+    turn = "white";
+    selected = null;
+    history = [];
+    hasMoved = {
+        whiteK: false, whiteR1: false, whiteR8: false,
+        blackK: false, blackR1: false, blackR8: false
+    };
+    enPassantTarget = null;
+    halfMoveClock = 0;
+    positionHistory = {};
+    lastMove = null;
+    premove = null;
+    if (typeof statusEl !== 'undefined' && statusEl) statusEl.textContent = "Weiß am Zug";
+    if (typeof draw === "function") draw();
+}
+window.resetGame = resetGame;
+
+function makeMove(fromSquare, toSquare) {
+    if (!fromSquare || !toSquare || fromSquare.length < 2 || toSquare.length < 2) return;
+    const fc = fromSquare.charCodeAt(0) - 97;
+    const fr = 8 - parseInt(fromSquare[1]);
+    const tc = toSquare.charCodeAt(0) - 97;
+    const tr = 8 - parseInt(toSquare[1]);
+    if (typeof doMove === 'function') {
+        doMove(fr, fc, tr, tc);
+    }
+}
+window.makeMove = makeMove;
+
 // --- NEU: FEN-GENERATOR ---
 function boardToFEN() {
     let fen = "";
