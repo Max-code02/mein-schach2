@@ -54,7 +54,7 @@ background: #007bff;
 
 <div class="glass-panel stats-card">
         <h1>🏆 Die 10 besten Spieler</h1>
-        <p style="color: #888; font-size: 0.9em;">Live-Daten aus deiner Supabase-Datenbank</p>
+        <p style="color: #888; font-size: 0.9em;">Live-Daten aus deiner Google Firestore Datenbank</p>
         
         <table class="leaderboard-table">
             <thead>
@@ -83,13 +83,6 @@ background: #007bff;
 </div>
 
 <script type="module">
-    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
-    
-    // ECHTE DATEN AUS DEINER INDEX.HTML
-    const supabaseUrl = 'https://sfbubqwnuthicpenmwye.supabase.co'
-    const supabaseKey = 'sb_publishable_H-ZV5me7vxZN_fNPdQ0ifA_--7AdGnZ'
-    const supabase = createClient(supabaseUrl, supabaseKey)
-
     async function loadStats() {
         const tbody = document.getElementById('leaderboard-body');
         try {
@@ -105,27 +98,6 @@ background: #007bff;
                 `).join('');
                 return;
             }
-        } catch(e) {}
-
-        try {
-            const { data, error } = await supabase
-                .from('players')
-                .select('username, wins')
-                .order('wins', { ascending: false })
-                .limit(100);
-
-            if (error || !data) {
-                tbody.innerHTML = "<tr><td colspan='3'>Keine Spielerdaten vorhanden.</td></tr>";
-                return;
-            }
-
-            tbody.innerHTML = data.map((p, i) => `
-                <tr class="${i === 0 ? 'rank-highlight' : ''}">
-                    <td>${i === 0 ? '🥇' : '#' + (i + 1)}</td>
-                    <td>${p.username}</td>
-                    <td>${p.wins || 0} 🏆</td>
-                </tr>
-            `).join('');
         } catch(e) {
             tbody.innerHTML = "<tr><td colspan='3'>Keine Spielerdaten vorhanden.</td></tr>";
         }
