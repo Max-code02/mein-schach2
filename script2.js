@@ -75,7 +75,8 @@ function handleSaveAccount() {
         }));
     } else {
         // HTTP API Fallback
-        fetch('/api/login', {
+        const apiBaseUrl = window.apiBase || (window.location.hostname.includes('github.io') ? 'https://mein-schach2.onrender.com' : '');
+        fetch(`${apiBaseUrl}/api/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: name, password: hashedPass })

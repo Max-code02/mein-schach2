@@ -2,8 +2,11 @@
 // script_chat.js - MAX' SUPREME CONTROL CENTER
 // ==========================================
 
-const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const wsHost = window.location.host;
+const RENDER_SERVER = 'mein-schach2.onrender.com';
+const isGitHubPages = typeof window !== 'undefined' && window.location.hostname.includes('github.io');
+
+const wsProtocol = (typeof window !== 'undefined' && (window.location.protocol === 'https:' || isGitHubPages)) ? 'wss:' : 'ws:';
+const wsHost = isGitHubPages ? RENDER_SERVER : (typeof window !== 'undefined' ? window.location.host : RENDER_SERVER);
 const socket = new WebSocket(`${wsProtocol}//${wsHost}`);
 const adminPass = "Admina111"; 
 

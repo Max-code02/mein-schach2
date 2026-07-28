@@ -148,10 +148,16 @@ let myEngineWorker = new Worker('engineWorker.js');
 
 // Variable für STOCKFISH -> nutzt die NEUE Datei
 let stockfishWorker = new Worker('stockfishWorker.js');
-const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const wsHost = window.location.host;
+const RENDER_SERVER = 'mein-schach2.onrender.com';
+const isGitHubPages = typeof window !== 'undefined' && window.location.hostname.includes('github.io');
+
+const wsProtocol = (typeof window !== 'undefined' && (window.location.protocol === 'https:' || isGitHubPages)) ? 'wss:' : 'ws:';
+const wsHost = isGitHubPages ? RENDER_SERVER : (typeof window !== 'undefined' ? window.location.host : RENDER_SERVER);
+const apiBase = isGitHubPages ? `https://${RENDER_SERVER}` : '';
+
 const socket = new WebSocket(`${wsProtocol}//${wsHost}`);
 window.socket = socket;
+window.apiBase = apiBase;
 let isSpectatorMode = false;
 
 const sounds = {
@@ -470,7 +476,7 @@ async function sendeAnAnalyse(fr, fc, tr, tc, figur, istSchlag) {
 
     try {
         // Ruf an deinen lokalen Express-Server
-        const response = await fetch('/analyse', {
+        const response = await fetch(`${apiBase}/analyse`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(zugDaten)

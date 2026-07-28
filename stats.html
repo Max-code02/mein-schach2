@@ -85,8 +85,9 @@ background: #007bff;
 <script type="module">
     async function loadStats() {
         const tbody = document.getElementById('leaderboard-body');
+        const apiBaseUrl = window.location.hostname.includes('github.io') ? 'https://mein-schach2.onrender.com' : '';
         try {
-            const res = await fetch('/api/leaderboard');
+            const res = await fetch(`${apiBaseUrl}/api/leaderboard`);
             const data = await res.json();
             if (data.success && data.list && data.list.length > 0) {
                 tbody.innerHTML = data.list.map((p, i) => `
