@@ -1,3 +1,48 @@
+// --- GLOBALE VARIABLEN & SHIM (KÖNIG- & TEXTUR-DEFINITIONEN) ---
+function findKing(turnColor) {
+    if (typeof board === 'undefined' || !board || !Array.isArray(board)) return null;
+    const color = turnColor || (typeof turn !== 'undefined' ? turn : "white");
+    const target = color === "white" ? "K" : "k";
+    for (let r = 0; r < 8; r++) {
+        if (!board[r]) continue;
+        for (let c = 0; c < 8; c++) {
+            if (board[r][c] === target) return { r, c };
+        }
+    }
+    return null;
+}
+
+const PIECES = {
+    'P': 'https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg', 'R': 'https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg',
+    'N': 'https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg', 'B': 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg',
+    'Q': 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg', 'K': 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg',
+    'p': 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg', 'r': 'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg',
+    'n': 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg', 'b': 'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg',
+    'q': 'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg', 'k': 'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg'
+};
+
+const textures = PIECES;
+const texture = PIECES;
+
+if (typeof window !== 'undefined') {
+    window.findKing = findKing;
+    window.PIECES = PIECES;
+    window.textures = textures;
+    window.texture = texture;
+}
+if (typeof globalThis !== 'undefined') {
+    globalThis.findKing = findKing;
+    globalThis.PIECES = PIECES;
+    globalThis.textures = textures;
+    globalThis.texture = texture;
+}
+if (typeof self !== 'undefined') {
+    self.findKing = findKing;
+    self.PIECES = PIECES;
+    self.textures = textures;
+    self.texture = texture;
+}
+
 const boardEl = document.getElementById("chess-board");
 const statusEl = document.getElementById("status-display");
 const chatMessages = document.getElementById("chat-messages");
@@ -115,15 +160,6 @@ const sounds = {
     check: new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/move-check.mp3')
 };
 
-const PIECES = {
-    'P': 'https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg', 'R': 'https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg',
-    'N': 'https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg', 'B': 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg',
-    'Q': 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg', 'K': 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg',
-    'p': 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg', 'r': 'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg',
-    'n': 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg', 'b': 'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg',
-    'q': 'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg', 'k': 'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg'
-};
-
 let board, turn = "white", selected = null, history = [];
 
 // --- SPEZIALZUG VARIABLEN ---
@@ -143,18 +179,6 @@ function isOwn(p, turnColor) {
     return turnColor === "white" ? p === p.toUpperCase() : p === p.toLowerCase();
 }
 window.isOwn = isOwn;
-
-function findKing(turnColor) {
-    if (!board) return null;
-    const target = turnColor === "white" ? "K" : "k";
-    for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-            if (board[r][c] === target) return { r, c };
-        }
-    }
-    return null;
-}
-window.findKing = findKing;
 
 function isPathClear(fr, fc, tr, tc) {
     const dr = Math.sign(tr - fr);
@@ -257,7 +281,7 @@ function isSafeMove(fr, fc, tr, tc) {
     board[tr][tc] = piece;
     board[fr][fc] = "";
     
-    const k = findKing(turn);
+    const k = typeof findKing === 'function' ? findKing(turn) : (window.findKing ? window.findKing(turn) : null);
     const opponent = turn === "white" ? "black" : "white";
     const safe = k ? !isAttacked(k.r, k.c, opponent) : true;
     
@@ -335,7 +359,7 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
 
     draw();
 
-    const k = findKing(turn);
+    const k = typeof findKing === 'function' ? findKing(turn) : (window.findKing ? window.findKing(turn) : null);
     if (k && isAttacked(k.r, k.c, turn === "white" ? "black" : "white")) {
         try { if (sounds && sounds.check) sounds.check.play().catch(()=>{}); } catch(e) {}
         if (statusEl) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " steht im SCHACH!";
@@ -723,7 +747,7 @@ function draw() {
     const currentBoardEl = document.getElementById("chess-board") || boardEl;
     if (!currentBoardEl) return;
     currentBoardEl.innerHTML = "";
-    const k = findKing(turn);
+    const k = typeof findKing === 'function' ? findKing(turn) : (window.findKing ? window.findKing(turn) : null);
     const inCheck = k ? isAttacked(k.r, k.c, turn === "white" ? "black" : "white") : false;
 
     let possibleMoves = [];
