@@ -106,7 +106,8 @@ function isSpamming(ws, messageText = "") {
     }
 
     // 15. CHECK: Wortfilter (Blacklist) - Befehle & Admin-Passwörter ausnehmen
-    const isCmd = messageText.startsWith('/') || messageText.startsWith('!') || messageText.startsWith('?');
+    const trimmedMsg = messageText.trim();
+    const isCmd = trimmedMsg.startsWith('/') || trimmedMsg.startsWith('!') || trimmedMsg.startsWith('?');
     const hasAdminPass = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'Maxi'].some(pw => messageText.includes(pw));
     
     if (!isCmd && !hasAdminPass) {

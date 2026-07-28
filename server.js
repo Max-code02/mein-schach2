@@ -1,3 +1,4 @@
+console.log("HELLO");
 require('dotenv').config();
 const axios = require('axios');
 const path = require('path');
@@ -6,8 +7,6 @@ const cors = require('cors');
 const http = require('http');
 const fs = require('fs');
 const WebSocket = require('ws');
-const { createClient } = require('@supabase/supabase-js');
-
 let bannedIPs = new Set();
 const userMessageLog = new Map();
 const SPAM_THRESHOLD = 5;
@@ -102,12 +101,10 @@ app.get('/download-contact/:playerName', (req, res) => {
     res.send(vCardContent);
 });
 
-// Supabase setup
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://sfbubqwnuthicpenmwye.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || 'sb_publishable_H-ZV5me7vxZN_fNPdQ0ifA_--7AdGnZ';
-
-const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_KEY);
-
+// DB setup
+const { db } = require('./src/db/index.js');
+const schema = require('./src/db/schema.js');
+const { eq, asc } = require('drizzle-orm');
 // Create required working directories
 const TEMP_DIR = path.join(__dirname, 'temp_moves');
 const VIDEO_DIR = path.join(__dirname, 'videos');
@@ -131,10 +128,9 @@ function banIPPermanently(ip, reason = "Anti-Hack Trigger") {
             else console.log(`🚫 IP ${ip} wurde permanent in .htaccess gesperrt!`);
         });
 
-        if (supabaseAdmin) {
-            supabaseAdmin.from('ip_ban').insert([{ ip_address: ip, reason: reason }]).then(({ error }) => {
-                if (error) console.error("Supabase Ban-Fehler:", error.message);
-                else console.log(`🚫 IP ${ip} permanent in Supabase gespeichert.`);
+        if (db) {
+            db.insert(schema.ipBan).values({ ip_address: ip, reason: reason }).then(() => {
+                console.log(`🚫 IP ${ip} permanent in DB gespeichert.`);
             }).catch(err => console.error(err.message));
         }
     }
@@ -259,55 +255,6 @@ const SERVER_INSTANCE_ID = Math.random().toString(36).substring(2, 9);
 
 // Supabase Realtime Message Broker for cross-server & cross-client messaging
 let realTimeChannel = null;
-if (supabaseAdmin && typeof supabaseAdmin.channel === 'function') {
-    try {
-        realTimeChannel = supabaseAdmin.channel('global_chat_broker');
-        realTimeChannel.on('broadcast', { event: 'message' }, (payload) => {
-            if (payload && payload.payload) {
-                const msgData = payload.payload;
-                if (msgData._origin === SERVER_INSTANCE_ID) return; // Skip self
-                
-                const targetRoom = msgData._targetRoom;
-                delete msgData._origin;
-                delete msgData._targetRoom;
-                delete msgData._ignoreSelf;
-
-                const msgStr = JSON.stringify(msgData);
-                wss.clients.forEach(client => {
-                    if (client.readyState === 1) {
-                        if (!targetRoom || targetRoom === 'global' || client.room === targetRoom) {
-                            client.send(msgStr);
-                        }
-                    }
-                });
-                
-                // If it's a move, also broadcast to spectators on this instance
-                if (msgData.type === 'move') {
-                    const room = msgData.room || targetRoom;
-                    
-                    // Keep local room states updated for cross-instance spectators
-                    if (room && activeRoomStates) {
-                        const state = activeRoomStates.get(room) || { whitePlayer: 'Weiß', blackPlayer: 'Schwarz' };
-                        activeRoomStates.set(room, {
-                            board: msgData.board,
-                            turn: msgData.turn,
-                            whitePlayer: msgData.whitePlayer || state.whitePlayer,
-                            blackPlayer: msgData.blackPlayer || state.blackPlayer
-                        });
-                    }
-
-                    if (typeof broadcastToSpectators === 'function') {
-                        broadcastToSpectators(msgData, room);
-                    }
-                }
-            }
-        }).subscribe((status) => {
-            console.log(`📡 Supabase Realtime Broker Status: ${status}`);
-        });
-    } catch (e) {
-        console.error("Supabase Realtime Broker setup error:", e.message);
-    }
-}
 
 function broadcastGlobalMessage(msgObj, publishToRealtime = true) {
     const msgStr = JSON.stringify(msgObj);
@@ -542,35 +489,23 @@ function escapeHTML(str) {
     });
 }
 
-async function loadProfilesFromSupabase() {
+async function loadProfilesFromDB() {
     try {
-        const response = await fetch(`${SUPABASE_URL}/rest/v1/players`, {
-            headers: { 
-                'apikey': SUPABASE_KEY, 
-                'Authorization': `Bearer ${SUPABASE_KEY}` 
-            }
+        const schema = require('./src/db/schema.js');
+        const data = await db.select().from(schema.players);
+        data.forEach(p => {
+            userDB[p.username] = {
+                password: p.password || "",
+                wins: p.wins || 0,
+                xp: p.xp || 0,
+                level: p.level || 1,
+                ip_ban: p.ip_ban || false,
+                is_banned: p.is_banned || false
+            };
         });
-        const data = await response.json();
-        
-        if (Array.isArray(data)) {
-            data.forEach(player => {
-                userDB[player.username] = {
-                    password: player.password || "",
-                    wins: player.wins || 0,
-                    xp: player.xp || 0,
-                    level: player.level || 1,
-                    ip_ban: player.ip_ban || false,
-                    is_banned: player.is_banned || false
-                };
-
-                if (player.ip_ban === true && player.ip_address) {
-                    bannedIPs.add(player.ip_address);
-                }
-            });
-            console.log(`✅ ${data.length} Profile erfolgreich aus Supabase geladen.`);
-        }
+        console.log(`✅ ${data.length} Profile erfolgreich aus DB geladen.`);
     } catch (err) {
-        console.error("❌ Fehler beim Laden von Supabase:", err);
+        console.error("❌ Fehler beim Laden von DB:", err);
     }
 }
 
@@ -605,15 +540,11 @@ loadData();
 
 async function loadBannedIPs() {
     try {
-        const { data, error } = await supabaseAdmin
-            .from('ip_ban')
-            .select('ip_address');
-
-        if (error) {
-            console.error("Fehler beim Laden der Blacklist:", error);
-        } else if (data) {
+        const schema = require('./src/db/schema.js');
+        const data = await db.select().from(schema.ipBan);
+        if (data) {
             data.forEach(row => bannedIPs.add(row.ip_address));
-            console.log(`✅ ${bannedIPs.size} gesperrte IPs aus Supabase geladen.`);
+            console.log(`✅ ${bannedIPs.size} gesperrte IPs aus DB geladen.`);
         }
     } catch (err) {
         console.error("loadBannedIPs catch:", err.message);
@@ -701,17 +632,15 @@ wss.on('connection', function(ws, req) {
             }
 
             try {
-                const { error } = await supabaseAdmin
-                    .from('players')
-                    .update({ 
+                await db.update(schema.players)
+                    .set({ 
                         ip_ban: true, 
                         is_banned: true,  
                     })
-                    .eq('username', currentName);
-                if (error) throw error;
-                console.log(`☁️ Supabase: Account ${currentName} und IP erfolgreich als gebannt markiert.`);
+                    .where(eq(schema.players.username, currentName));
+                console.log(`☁️ DB: Account ${currentName} und IP erfolgreich als gebannt markiert.`);
             } catch (err) {
-                console.error("❌ Fehler beim Supabase-Update:", err.message);
+                console.error("❌ Fehler beim DB-Update:", err.message);
             }
 
             try {
@@ -764,7 +693,7 @@ wss.on('connection', function(ws, req) {
             if (data.type === 'chat' && (isCmd || containsAdminPw)) {
                 const isHandled = await handleAdminCommand(ws, data.text, {
                     wss, 
-                    supabaseAdmin, 
+                    db: db, 
                     banPlayer: triggerUltraBan, 
                     bannedIPs, 
                     bannedPlayers, 
@@ -823,18 +752,29 @@ wss.on('connection', function(ws, req) {
                     return ws.send(JSON.stringify({ type: 'login_error', text: 'Deine IP ist gesperrt!' }));
                 }
 
-                const { data: user, error } = await supabaseAdmin
-                    .from('players')
-                    .upsert({ 
+                let user;
+                let error = null;
+                try {
+                    const result = await db.insert(schema.players).values({ 
                         username: playerName, 
                         password: password, 
                         ip_address: clientIP,
-                        last_login: new Date().toISOString()
-                    }, { onConflict: 'username' })
-                    .select()
-                    .single();
+                        last_login: new Date()
+                    }).onConflictDoUpdate({
+                        target: schema.players.username,
+                        set: {
+                            password: password,
+                            ip_address: clientIP,
+                            last_login: new Date()
+                        }
+                    }).returning();
+                    user = result[0];
+                } catch (err) {
+                    error = err;
+                    console.error(err);
+                }
 
-                if (error) {
+                if (error || !user) {
                     ws.send(JSON.stringify({ type: 'login_error', text: 'Datenbank-Fehler!' }));
                 } else {
                     ws.playerName = playerName; 
@@ -859,7 +799,7 @@ wss.on('connection', function(ws, req) {
                 if (containsPw || isCmdType) {
                     const isHandled = await handleAdminCommand(ws, content, {
                         wss, 
-                        supabaseAdmin, 
+                        db: db, 
                         banPlayer: triggerUltraBan, 
                         bannedIPs, 
                         bannedPlayers, 
@@ -878,17 +818,13 @@ wss.on('connection', function(ws, req) {
                     return;
                 }
 
-                await supabaseAdmin.from('messages').insert([{ username, content }]);
+                await db.insert(schema.messages).values({ username, content: content });
                 broadcastGlobalMessage({ type: 'chat', user: username, text: content });
                 return;
             }
 
             if (data.type === 'get_chat_history') {
-                const { data: messages } = await supabaseAdmin
-                    .from('messages')
-                    .select('*')
-                    .order('created_at', { ascending: true })
-                    .limit(30);
+                const messages = await db.select().from(schema.messages).orderBy(asc(schema.messages.created_at)).limit(30);
                 ws.send(JSON.stringify({ type: 'chat_history', messages: messages || [] }));
                 return;
             }
@@ -1110,7 +1046,7 @@ const PORT = 3000;
 
 server.listen(PORT, '0.0.0.0', async function() { 
     console.log("MASTER-SERVER STARTET...");
-    await loadProfilesFromSupabase(); 
+    await loadProfilesFromDB(); 
     
     try {
         if (fs.existsSync(BAN_FILE)) {
@@ -1124,7 +1060,7 @@ server.listen(PORT, '0.0.0.0', async function() {
     }
 
     if (typeof startBackupScheduler === 'function') {
-        startBackupScheduler(supabaseAdmin);
+        startBackupScheduler(db);
     }
     if (typeof startAutoMessages === 'function') {
         startAutoMessages(wss); 

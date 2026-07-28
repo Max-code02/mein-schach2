@@ -15,7 +15,7 @@ function parseArgsWithQuotes(text) {
 }
 
 async function handleAdminCommand(ws, text, context) {
-    const { wss, supabaseAdmin, runBackup, banPlayer, unbanPlayer, bannedIPs, bannedPlayers, profiles, addSpectator, removeSpectator, roomStates } = context;
+    const { wss, db, runBackup, banPlayer, unbanPlayer, bannedIPs, bannedPlayers, profiles, addSpectator, removeSpectator, roomStates } = context;
 
     let rawText = text.trim();
     let hasAdminPass = false;
@@ -66,13 +66,14 @@ async function handleAdminCommand(ws, text, context) {
             if (bannedIPs) bannedIPs.delete(targetName);
             if (bannedPlayers) bannedPlayers.delete(targetName);
 
-            // 2. Supabase DB unban if configured
-            if (supabaseAdmin) {
+            // 2. Postgres DB unban if configured
+            if (db) {
                 try {
-                    await supabaseAdmin.from('players').update({ is_banned: false, ban_reason: null }).eq('username', targetName);
-                    await supabaseAdmin.from('bans').delete().eq('username', targetName);
+                    const schema = require('./src/db/schema.js');
+                    const { eq } = require('drizzle-orm');
+                    await db.update(schema.players).set({ is_banned: false }).where(eq(schema.players.username, targetName));
                 } catch(e) {
-                    console.error("Supabase Unban Error:", e);
+                    console.error("DB Unban Error:", e);
                 }
             }
 
@@ -130,7 +131,7 @@ async function handleAdminCommand(ws, text, context) {
 
         case 's': // Save/Backup
         case 'backup':
-            if (typeof runBackup === 'function') await runBackup(supabaseAdmin);
+            if (typeof runBackup === 'function') await runBackup(db);
             ws.send(JSON.stringify({ type: 'chat', text: '💾 Hochsicherheits-Backup erstellt!', system: true }));
             break;
 
@@ -213,9 +214,11 @@ async function handleAdminCommand(ws, text, context) {
                     const profile = profiles.get(targetName);
                     profile.wins = amount;
                 }
-                if (supabaseAdmin) {
+                if (db) {
                     try {
-                        await supabaseAdmin.from('players').update({ wins: amount }).eq('username', targetName);
+                        const schema = require('./src/db/schema.js');
+                        const { eq } = require('drizzle-orm');
+                        await db.update(schema.players).set({ wins: amount }).where(eq(schema.players.username, targetName));
                     } catch(e){}
                 }
                 ws.send(JSON.stringify({ type: 'chat', text: `⭐ ${targetName} hat jetzt ${amount} Siege.`, system: true }));

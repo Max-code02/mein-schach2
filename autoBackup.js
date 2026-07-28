@@ -10,7 +10,7 @@ const FormData = require('form-data');
  * Alles an einem Ort, damit du nichts im Code suchen musst.
  */
 const CONFIG = {
-    TABLES_TO_BACKUP: ['players', 'user_stats'], // Sichert alle wichtigen Tabellen
+    TABLES_TO_BACKUP: ['players', 'ip_ban', 'messages'], // Sichert alle wichtigen Tabellen
     BACKUP_INTERVAL_MS: 86400000,                // 24 Stunden Rhythmus
     KEEP_BACKUPS_DAYS: 7,                        // Speicherplatz-Schutz
     MIN_ROWS_EXPECTED: 1,                        // Fail-Safe gegen Datenverlust
@@ -46,7 +46,7 @@ async function sendToDiscord(filePath, fileName, rowCount, tableName) {
 /**
  * Der Kernprozess: Lädt Daten, komprimiert sie und speichert sie lokal + Discord.
  */
-async function runBackup(supabaseAdmin) {
+async function runBackup(db) {
     console.log("💾 [BACKUP] Starte Hochsicherheits-Sicherungsprozess...");
     const backupDir = path.join(__dirname, 'backups');
     
@@ -63,10 +63,15 @@ async function runBackup(supabaseAdmin) {
         for (const tableName of CONFIG.TABLES_TO_BACKUP) {
             console.log(`⏳ [DB] Lade Tabelle: ${tableName}...`);
             
-            const { data, error } = await supabaseAdmin.from(tableName).select('*');
-            
-            if (error) {
-                throw new Error(`Supabase-Fehler bei Tabelle ${tableName}: ${error.message}`);
+            let data = [];
+            try {
+                const schema = require('./src/db/schema.js');
+                if (tableName === 'players') data = await db.select().from(schema.players);
+                else if (tableName === 'ip_ban') data = await db.select().from(schema.ipBan);
+                else if (tableName === 'messages') data = await db.select().from(schema.messages);
+            } catch (err) {
+                console.error(`❌ [DB] Fehler bei ${tableName}:`, err.message);
+                continue;
             }
 
             if (data.length < CONFIG.MIN_ROWS_EXPECTED && tableName === 'players') {
@@ -139,15 +144,15 @@ function cleanOldBackups(directory) {
 /**
  * Startet den automatischen Rhythmus.
  */
-function startBackupScheduler(supabaseAdmin) {
+function startBackupScheduler(db) {
     console.log("🛠️ [SYSTEM] Backup-Scheduler aktiviert.");
 
     setTimeout(() => {
-        runBackup(supabaseAdmin);
+        runBackup(db);
     }, 10000);
 
     setInterval(() => {
-        runBackup(supabaseAdmin);
+        runBackup(db);
     }, CONFIG.BACKUP_INTERVAL_MS);
 }
 
