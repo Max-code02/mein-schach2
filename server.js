@@ -105,6 +105,44 @@ app.get('/download-contact/:playerName', (req, res) => {
 const { db } = require('./src/db/index.js');
 const schema = require('./src/db/schema.js');
 const { eq, asc } = require('drizzle-orm');
+
+// Google Firebase Firestore & Google Gemini AI Setup
+const admin = require('firebase-admin');
+const { GoogleGenAI } = require('@google/genai');
+
+let firestoreDb = null;
+try {
+    const configPath = path.join(__dirname, 'firebase-applet-config.json');
+    if (fs.existsSync(configPath)) {
+        const fbConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        if (fbConfig.projectId) {
+            if (!admin.apps.length) {
+                admin.initializeApp({
+                    projectId: fbConfig.projectId
+                });
+            }
+            const { getFirestore } = require('firebase-admin/firestore');
+            if (fbConfig.firestoreDatabaseId) {
+                firestoreDb = getFirestore(admin.app(), fbConfig.firestoreDatabaseId);
+            } else {
+                firestoreDb = getFirestore();
+            }
+            console.log("🔥 Google Firestore (Firebase) verknüpft für SchachLive!");
+        }
+    }
+} catch (err) {
+    console.warn("Firestore Init Warning:", err.message);
+}
+
+let aiClient = null;
+if (process.env.GEMINI_API_KEY) {
+    try {
+        aiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        console.log("🤖 Google Gemini AI Client initialisiert!");
+    } catch (err) {
+        console.warn("Gemini Init Warning:", err.message);
+    }
+}
 // Create required working directories
 const TEMP_DIR = path.join(__dirname, 'temp_moves');
 const VIDEO_DIR = path.join(__dirname, 'videos');
@@ -204,36 +242,79 @@ app.get('/', (req, res) => {
 });
 
 // REST Endpoints for Auth and Analysis
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
     const { username, password } = req.body || {};
     if (!username || !password) {
         return res.status(400).json({ success: false, error: "Name und Passwort erforderlich!" });
     }
-    const user = userDB[username];
+
+    let user = userDB[username];
+
+    // Try fetching from Firestore if missing locally
+    if (!user && firestoreDb) {
+        try {
+            const doc = await firestoreDb.collection('players').doc(username).get();
+            if (doc.exists) {
+                user = doc.data();
+                userDB[username] = user;
+            }
+        } catch (e) {}
+    }
+
     if (user && user.password && user.password !== password) {
         return res.status(401).json({ success: false, error: "Falsches Passwort!" });
     }
+
     if (!userDB[username]) {
         userDB[username] = { username, password, elo: 1200, wins: 0, level: 1, xp: 0 };
-        saveAll();
+    } else {
+        userDB[username].password = password;
+        userDB[username].last_login = new Date().toISOString();
     }
+
+    saveAll();
     res.json({ success: true, name: username, elo: userDB[username].elo || 1200, wins: userDB[username].wins || 0 });
 });
 
-app.post('/api/register', (req, res) => {
+app.post('/api/register', async (req, res) => {
     const { username, password } = req.body || {};
     if (!username || !password) {
         return res.status(400).json({ success: false, error: "Name und Passwort erforderlich!" });
     }
+    
+    if (firestoreDb) {
+        try {
+            const doc = await firestoreDb.collection('players').doc(username).get();
+            if (doc.exists && doc.data().password && doc.data().password !== password) {
+                return res.status(400).json({ success: false, error: "Name bereits vergeben!" });
+            }
+        } catch (e) {}
+    }
+
     if (userDB[username] && userDB[username].password && userDB[username].password !== password) {
         return res.status(400).json({ success: false, error: "Name bereits vergeben!" });
     }
-    userDB[username] = { username, password, elo: 1200, wins: 0, level: 1, xp: 0 };
+
+    userDB[username] = { username, password, elo: 1200, wins: 0, level: 1, xp: 0, created_at: new Date().toISOString() };
     saveAll();
     res.json({ success: true, name: username });
 });
 
-app.get('/api/leaderboard', (req, res) => {
+app.get('/api/leaderboard', async (req, res) => {
+    if (firestoreDb) {
+        try {
+            const snapshot = await firestoreDb.collection('players').orderBy('wins', 'desc').limit(10).get();
+            if (!snapshot.empty) {
+                const list = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    list.push({ name: doc.id || data.username, wins: data.wins || 0, elo: data.elo || 1200 });
+                });
+                return res.json({ success: true, list });
+            }
+        } catch (e) {}
+    }
+
     const sorted = Object.entries(userDB)
         .map(([name, u]) => ({ name, wins: u.wins || 0, elo: u.elo || 1200 }))
         .sort((a, b) => b.wins - a.wins)
@@ -241,11 +322,36 @@ app.get('/api/leaderboard', (req, res) => {
     res.json({ success: true, list: sorted });
 });
 
-app.post('/analyse', (req, res) => {
+app.post('/analyse', async (req, res) => {
     const data = req.body || {};
     const spieler = data.spieler || "Unbekannt";
+    const fen = data.fen || "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    const zug = data.zug || "";
     const wins = userDB[spieler] ? userDB[spieler].wins || 0 : 0;
     const estimatedElo = 1200 + wins * 25;
+
+    if (aiClient) {
+        try {
+            const response = await aiClient.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: `Du bist ein Schach-Großmeister. Analysiere kurz die Position (FEN: ${fen}, Letzter Zug: ${zug}).
+Antworte NUR mit reinem JSON im Format:
+{
+  "Basis_Werte": { "Rang": "${estimatedElo > 1500 ? 'Expert' : 'Spieler'}", "Geschätzte_Elo": ${estimatedElo} },
+  "Positions_Analyse": { "Zentrum": "Gut kontrolliert", "Entwicklung": "Solide", "Material_Vorteil": "Ausgeglichen" },
+  "Aggressivitäts_Index": { "Gesamt": 60 }
+}`
+            });
+            const text = response.text || "";
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                return res.json(JSON.parse(jsonMatch[0]));
+            }
+        } catch (e) {
+            console.warn("Gemini Analyse Warning:", e.message);
+        }
+    }
+
     res.json({
         Basis_Werte: { Rang: estimatedElo > 1500 ? "Expert" : "Spieler", Geschätzte_Elo: estimatedElo },
         Positions_Analyse: { Zentrum: "Gut", Entwicklung: "Solide", Material_Vorteil: "0" },
@@ -559,6 +665,34 @@ async function loadProfilesFromDB() {
     }
 }
 
+async function loadFirestoreProfiles() {
+    if (!firestoreDb) return;
+    try {
+        const snapshot = await firestoreDb.collection('players').get();
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            const uname = doc.id || data.username;
+            if (uname) {
+                userDB[uname] = {
+                    username: uname,
+                    password: data.password || "",
+                    elo: data.elo || 1200,
+                    wins: data.wins || 0,
+                    losses: data.losses || 0,
+                    xp: data.xp || 0,
+                    level: data.level || 1,
+                    ip_address: data.ip_address || "",
+                    last_login: data.last_login || new Date().toISOString()
+                };
+                leaderboard[uname] = data.wins || 0;
+            }
+        });
+        console.log(`🔥 ${snapshot.size} Nutzer-Profile aus Firestore synchronisiert.`);
+    } catch (e) {
+        console.warn("Firestore profiles load error:", e.message);
+    }
+}
+
 function loadData() {
     if (fs.existsSync(LB_FILE)) {
         try {
@@ -585,6 +719,7 @@ function loadData() {
             console.log("Fehler beim Laden: Bans");
         }
     }
+    loadFirestoreProfiles();
 }
 loadData();
 
@@ -610,6 +745,22 @@ function saveAll() {
         fs.writeFileSync(BAN_FILE, JSON.stringify([...bannedIPs], null, 2));
     } catch (e) {
         console.log("Konnte Daten nicht speichern");
+    }
+
+    if (firestoreDb) {
+        for (const [uname, u] of Object.entries(userDB)) {
+            firestoreDb.collection('players').doc(uname).set({
+                username: uname,
+                password: u.password || "",
+                elo: u.elo || 1200,
+                wins: u.wins || 0,
+                losses: u.losses || 0,
+                xp: u.xp || 0,
+                level: u.level || 1,
+                ip_address: u.ip_address || "",
+                last_login: u.last_login || new Date().toISOString()
+            }, { merge: true }).catch(() => {});
+        }
     }
 }
 
@@ -886,12 +1037,38 @@ wss.on('connection', function(ws, req) {
                     return;
                 }
 
-                await db.insert(schema.messages).values({ username, content: content });
+                try {
+                    await db.insert(schema.messages).values({ username, content: content });
+                } catch (e) {}
+
+                if (firestoreDb) {
+                    firestoreDb.collection('messages').add({
+                        username: username,
+                        content: content,
+                        timestamp: new Date().toISOString()
+                    }).catch(() => {});
+                }
+
                 broadcastGlobalMessage({ type: 'chat', user: username, text: content });
                 return;
             }
 
             if (data.type === 'get_chat_history') {
+                if (firestoreDb) {
+                    try {
+                        const snapshot = await firestoreDb.collection('messages').orderBy('timestamp', 'desc').limit(30).get();
+                        if (!snapshot.empty) {
+                            const messages = [];
+                            snapshot.forEach(doc => {
+                                const d = doc.data();
+                                messages.unshift({ username: d.username, content: d.content, created_at: d.timestamp });
+                            });
+                            ws.send(JSON.stringify({ type: 'chat_history', messages }));
+                            return;
+                        }
+                    } catch (e) {}
+                }
+
                 const messages = await db.select().from(schema.messages).orderBy(asc(schema.messages.created_at)).limit(30);
                 ws.send(JSON.stringify({ type: 'chat_history', messages: messages || [] }));
                 return;

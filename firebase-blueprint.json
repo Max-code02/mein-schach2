@@ -1,0 +1,42 @@
+{
+  "entities": {
+    "Player": {
+      "title": "Player",
+      "description": "User profile and statistics",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "elo": { "type": "number" },
+        "wins": { "type": "number" },
+        "losses": { "type": "number" },
+        "xp": { "type": "number" },
+        "level": { "type": "number" },
+        "ip_address": { "type": "string" },
+        "created_at": { "type": "string" }
+      },
+      "required": ["username"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Chat message",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "content": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["username", "content"]
+    }
+  },
+  "firestore": {
+    "/players/{playerId}": {
+      "schema": { "$ref": "#/entities/Player" },
+      "description": "Player collection"
+    },
+    "/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Chat messages collection"
+    }
+  }
+}
