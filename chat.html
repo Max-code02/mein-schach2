@@ -213,11 +213,6 @@
     </div>
 
     <script type="module">
-        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
-        const supabaseUrl = 'https://sfbubqwnuthicpenmwye.supabase.co'
-        const supabaseKey = 'sb_publishable_H-ZV5me7vxZN_fNPdQ0ifA_--7AdGnZ'
-        const supabase = createClient(supabaseUrl, supabaseKey)
-        window.supabase = supabase;
 
         window.acceptAGB = function() {
             localStorage.setItem('agbAkzeptiert', 'true');

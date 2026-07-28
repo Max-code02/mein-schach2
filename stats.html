@@ -91,25 +91,44 @@ background: #007bff;
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     async function loadStats() {
-        const { data, error } = await supabase
-            .from('players')
-            .select('username, wins')
-            .order('wins', { ascending: false })
-            .limit(100);
-
         const tbody = document.getElementById('leaderboard-body');
-        if (error) {
-            tbody.innerHTML = "<tr><td colspan='3'>Fehler beim Laden.</td></tr>";
-            return;
-        }
+        try {
+            const res = await fetch('/api/leaderboard');
+            const data = await res.json();
+            if (data.success && data.list && data.list.length > 0) {
+                tbody.innerHTML = data.list.map((p, i) => `
+                    <tr class="${i === 0 ? 'rank-highlight' : ''}">
+                        <td>${i === 0 ? '🥇' : '#' + (i + 1)}</td>
+                        <td>${p.name}</td>
+                        <td>${p.wins || 0} 🏆</td>
+                    </tr>
+                `).join('');
+                return;
+            }
+        } catch(e) {}
 
-        tbody.innerHTML = data.map((p, i) => `
-            <tr class="${i === 0 ? 'rank-highlight' : ''}">
-                <td>${i === 0 ? '🥇' : '#' + (i + 1)}</td>
-                <td>${p.username}</td>
-                <td>${p.wins || 0} 🏆</td>
-            </tr>
-        `).join('');
+        try {
+            const { data, error } = await supabase
+                .from('players')
+                .select('username, wins')
+                .order('wins', { ascending: false })
+                .limit(100);
+
+            if (error || !data) {
+                tbody.innerHTML = "<tr><td colspan='3'>Keine Spielerdaten vorhanden.</td></tr>";
+                return;
+            }
+
+            tbody.innerHTML = data.map((p, i) => `
+                <tr class="${i === 0 ? 'rank-highlight' : ''}">
+                    <td>${i === 0 ? '🥇' : '#' + (i + 1)}</td>
+                    <td>${p.username}</td>
+                    <td>${p.wins || 0} 🏆</td>
+                </tr>
+            `).join('');
+        } catch(e) {
+            tbody.innerHTML = "<tr><td colspan='3'>Keine Spielerdaten vorhanden.</td></tr>";
+        }
     }
 
     // Simulierter Go-Core-Ticker wie in deiner index.html

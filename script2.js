@@ -1,13 +1,6 @@
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
+// script2.js - Account & Leaderboard Management
 
-// 1. Supabase Verbindung
-const supabaseUrl = 'https://sfbubqwnuthicpenmwye.supabase.co'
-const supabaseKey = 'sb_publishable_H-ZV5me7vxZN_fNPdQ0ifA_--7AdGnZ'
-const supabase = createClient(supabaseUrl, supabaseKey)
-
-window.supabase = supabase;
-
-// 2. Demo-Modus (Das automatische Schachspiel im Hintergrund)
+// 1. Demo-Modus (Das automatische Schachspiel im Hintergrund)
 const demoMoves = [
     { from: 'e2', to: 'e4' }, { from: 'e7', to: 'e5' },
     { from: 'g1', to: 'f3' }, { from: 'b8', to: 'c6' },
@@ -34,94 +27,112 @@ function startDemo() {
     }, 1800);
 }
 
-// 3. AGB & Start-Logik
+// 2. AGB & Start-Logik
 window.addEventListener('load', () => {
     if (!localStorage.getItem('agbAkzeptiert')) {
         const popup = document.getElementById('agb-popup');
-        if(popup) popup.style.display = 'flex';
-        setTimeout(startDemo, 1000); 
+        if (popup) popup.style.display = 'flex';
+        setTimeout(startDemo, 1000);
     }
 });
 
 window.acceptAGB = function() {
-    clearInterval(demoInterval); 
+    if (demoInterval) clearInterval(demoInterval);
     localStorage.setItem('agbAkzeptiert', 'true');
     const popup = document.getElementById('agb-popup');
-    if(popup) popup.style.display = 'none';
-    if (window.resetGame) window.resetGame(); 
+    if (popup) popup.style.display = 'none';
+    if (window.resetGame) window.resetGame();
 };
 
-// 4. Leaderboard laden (JETZT SICHER!)
-async function loadLeaderboard() {
-    const { data, error } = await supabase
-        .from('players')
-        .select('username, wins, level, xp') // <--- WICHTIG: Kein Passwort auswählen!
-        .order('wins', { ascending: false })
-        .limit(10);
+// 3. Account speichern / Login / Registrierung
+function handleSaveAccount() {
+    const nameEl = document.getElementById('playerName');
+    const passEl = document.getElementById('playerPass');
+    const status = document.getElementById('save-status');
 
-    const listEl = document.getElementById('leaderboard-list');
-    if (error) return;
-    
-    if (data && listEl) {
-        // Wir nutzen .map(), um aus jedem Spieler (p) ein Stück HTML zu machen
-        listEl.innerHTML = data.map((p, i) => `
-            <div style="background: rgba(255,255,255,0.05); padding: 8px; border-radius: 8px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column;">
-                
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="color: #888; font-size: 0.8em;">#${i + 1}</span>
-                        <strong style="color: white;">${p.username}</strong>
-                    </div>
-                    <span style="color: #f1c40f; font-size: 0.9em;">${p.wins || 0} 🏆</span>
-                </div>
-                
-                <div style="display: flex; gap: 12px; font-size: 10px; margin-top: 5px; padding: 0 5px; color: #00ff00; align-items: center;">
-                    <span>⭐ LVL: ${p.level || 1}</span>
-                    
-                    <button onclick="window.location.href='https://mein-schach2.onrender.com/download-contact/${p.username}'"
-                            style="background: #3498db; border: none; color: white; cursor: pointer; border-radius: 4px; padding: 3px 8px; font-size: 9px; margin-left: auto;">
-                        👤 KONTAKT +
-                    </button>
-                </div>
-            </div>
-        `).join(''); // .join('') macht aus der Liste einen langen Text für HTML
+    const name = nameEl ? nameEl.value.trim() : '';
+    const pass = passEl ? passEl.value : '';
+
+    if (!name || !pass) {
+        if (status) status.innerHTML = "<span style='color: #ff4444;'>❌ bitte Name & Passwort eingeben!</span>";
+        return;
+    }
+
+    if (status) status.innerHTML = "<span style='color: #3498db;'>⏳ Synchronisiere...</span>";
+
+    let hashedPass = pass;
+    if (typeof CryptoJS !== 'undefined' && CryptoJS.SHA256) {
+        hashedPass = CryptoJS.SHA256(pass).toString();
+    }
+
+    const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            type: 'login_attempt',
+            playerName: name,
+            password: hashedPass
+        }));
+    } else {
+        // HTTP API Fallback
+        fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: name, password: hashedPass })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                if (status) status.innerHTML = "<span style='color: #00ff00;'>✅ Profil gesichert!</span>";
+                localStorage.setItem('playerName', name);
+            } else {
+                if (status) status.innerHTML = "<span style='color: #ff4444;'>❌ " + (data.error || "Fehler") + "</span>";
+            }
+        })
+        .catch(() => {
+            if (status) status.innerHTML = "<span style='color: #ff4444;'>❌ Netzwerk-Fehler</span>";
+        });
     }
 }
 
-// 5. Account speichern (Login/Registrierung)
-const saveBtn = document.getElementById('saveAccountBtn');
-if (saveBtn) {
-    saveBtn.addEventListener('click', async () => {
-        const name = document.getElementById('playerName').value;
-        const pass = document.getElementById('playerPass').value;
-        const status = document.getElementById('save-status');
+// Attach event handlers
+window.addEventListener('load', () => {
+    const saveBtn = document.getElementById('saveAccountBtn');
+    if (saveBtn) {
+        saveBtn.onclick = handleSaveAccount;
+    }
 
-        if (!name || !pass) {
-            status.innerHTML = "<span style='color: #ff4444;'>❌ Felder leer!</span>";
-            return;
+    setTimeout(() => {
+        const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+        if (ws) {
+            ws.addEventListener('message', (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    if (data.type === 'leaderboard') {
+                        const listEl = document.getElementById('leaderboard-list');
+                        if (listEl && data.list) {
+                            listEl.innerHTML = data.list.map((p, i) => `
+                                <div style="background: rgba(255,255,255,0.05); padding: 8px; border-radius: 8px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <span style="color: #888; font-size: 0.8em;">#${i + 1}</span>
+                                            <strong style="color: white;">${p.name}</strong>
+                                        </div>
+                                        <span style="color: #f1c40f; font-size: 0.9em;">${p.wins || 0} 🏆</span>
+                                    </div>
+                                </div>
+                            `).join('');
+                        }
+                    } else if (data.type === 'login_success') {
+                        const status = document.getElementById('save-status');
+                        if (status) status.innerHTML = "<span style='color: #00ff00;'>✅ Profil gesichert!</span>";
+                        localStorage.setItem('playerName', data.name);
+                    } else if (data.type === 'login_error') {
+                        const status = document.getElementById('save-status');
+                        if (status) status.innerHTML = "<span style='color: #ff4444;'>❌ " + (data.text || "Fehler") + "</span>";
+                    }
+                } catch(err) {}
+            });
         }
-
-        status.innerText = "⏳ Synchronisiere...";
-        
-        // Passwort hashen (Verschlüsseln), bevor es in die Datenbank geht
-        const hashedPass = CryptoJS.SHA256(pass).toString();
-
-        const { error } = await supabase
-            .from('players')
-            .upsert([{ username: name, password: hashedPass, elo: 1500 }], { onConflict: 'username' });
-
-        if (error) {
-            status.innerHTML = "<span style='color: #ff4444;'>❌ Fehler</span>";
-        } else {
-            status.innerHTML = "<span style='color: #00ff00;'>✅ Profil gesichert!</span>";
-            loadLeaderboard();
-        }
-    });
-}
-
-// Ruby Social Funktionen (Dummy)
-window.addToRubySocial = function(n) { console.log("Ruby Add:", n); };
-
-// Start
-loadLeaderboard();
-setInterval(loadLeaderboard, 30000);
+    }, 500);
+});
