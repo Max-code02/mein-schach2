@@ -3,7 +3,7 @@
 // ==========================================
 
 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const wsHost = window.location.host.includes('github.io') ? 'mein-schach2.onrender.com' : window.location.host;
+const wsHost = window.location.host;
 const socket = new WebSocket(`${wsProtocol}//${wsHost}`);
 const adminPass = "Admina111"; 
 

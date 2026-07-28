@@ -8,6 +8,8 @@ const http = require('http');
 const fs = require('fs');
 const WebSocket = require('ws');
 let bannedIPs = new Set();
+let bannedPlayers = new Set();
+const ADMIN_PASSWORDS_LIST = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi', '222'];
 const userMessageLog = new Map();
 const SPAM_THRESHOLD = 5;
 const SPAM_INTERVAL = 3000;
@@ -886,7 +888,6 @@ wss.on('connection', function(ws, req) {
                 }
             }
 
-            const ADMIN_PASSWORDS_LIST = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi', '222'];
             const textStr = (data.text || "").trim();
             const containsAdminPw = typeof data.text === 'string' && ADMIN_PASSWORDS_LIST.some(pw => data.text.includes(pw));
             const isCmd = typeof data.text === 'string' && (textStr.startsWith('/') || textStr.startsWith('!') || textStr.startsWith('?'));

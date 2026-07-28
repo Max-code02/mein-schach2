@@ -89,10 +89,10 @@ startPingCheck();
 async function getIP() {
     try {
         const response = await fetch('https://api.ipify.org?format=json');
+        if (!response.ok) return "Nicht erkannt";
         const ipData = await response.json();
-        return ipData.ip;
+        return ipData.ip || "Nicht erkannt";
     } catch(e) {
-        console.error("IP-Abruf fehlgeschlagen");
         return "Nicht erkannt";
     }
 }
@@ -104,7 +104,7 @@ let myEngineWorker = new Worker('engineWorker.js');
 // Variable für STOCKFISH -> nutzt die NEUE Datei
 let stockfishWorker = new Worker('stockfishWorker.js');
 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const wsHost = window.location.host.includes('github.io') ? 'mein-schach2.onrender.com' : window.location.host;
+const wsHost = window.location.host;
 const socket = new WebSocket(`${wsProtocol}//${wsHost}`);
 window.socket = socket;
 let isSpectatorMode = false;
@@ -136,6 +136,227 @@ let enPassantTarget = null;
 // --- REMIS-VARIABLEN ---
 let halfMoveClock = 0; // Für die 50-Züge-Regel
 let positionHistory = {}; // Für die 3-fache Wiederholung
+
+// --- SCHACH REGELN & HILFSFUNKTIONEN ---
+function isOwn(p, turnColor) {
+    if (!p) return false;
+    return turnColor === "white" ? p === p.toUpperCase() : p === p.toLowerCase();
+}
+window.isOwn = isOwn;
+
+function findKing(turnColor) {
+    if (!board) return null;
+    const target = turnColor === "white" ? "K" : "k";
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            if (board[r][c] === target) return { r, c };
+        }
+    }
+    return null;
+}
+window.findKing = findKing;
+
+function isPathClear(fr, fc, tr, tc) {
+    const dr = Math.sign(tr - fr);
+    const dc = Math.sign(tc - fc);
+    let r = fr + dr;
+    let c = fc + dc;
+    while (r !== tr || c !== tc) {
+        if (board[r][c] !== "") return false;
+        r += dr;
+        c += dc;
+    }
+    return true;
+}
+
+function isAttacked(tr, tc, attackerColor) {
+    if (!board) return false;
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const p = board[r][c];
+            if (p && isOwn(p, attackerColor)) {
+                const dr = tr - r;
+                const dc = tc - c;
+                const ar = Math.abs(dr);
+                const ac = Math.abs(dc);
+                const type = p.toLowerCase();
+                let canAttack = false;
+                if (type === 'p') {
+                    const dir = p === 'P' ? -1 : 1;
+                    if (ac === 1 && dr === dir) canAttack = true;
+                } else if (type === 'r') {
+                    if ((r === tr || c === tc) && isPathClear(r, c, tr, tc)) canAttack = true;
+                } else if (type === 'b') {
+                    if (ar === ac && isPathClear(r, c, tr, tc)) canAttack = true;
+                } else if (type === 'q') {
+                    if ((r === tr || c === tc || ar === ac) && isPathClear(r, c, tr, tc)) canAttack = true;
+                } else if (type === 'n') {
+                    if ((ar === 2 && ac === 1) || (ar === 1 && ac === 2)) canAttack = true;
+                } else if (type === 'k') {
+                    if (ar <= 1 && ac <= 1) canAttack = true;
+                }
+                if (canAttack) return true;
+            }
+        }
+    }
+    return false;
+}
+
+function canMoveLogic(fr, fc, tr, tc) {
+    if (!board) return false;
+    const p = board[fr][fc];
+    const t = board[tr][tc];
+    if (t && isOwn(t, turn)) return false;
+    const dr = tr - fr;
+    const dc = tc - fc;
+    const ar = Math.abs(dr);
+    const ac = Math.abs(dc);
+    const type = p.toLowerCase();
+    
+    if (type === 'p') {
+        const dir = p === 'P' ? -1 : 1;
+        if (dc === 0 && dr === dir && !t) return true;
+        if (dc === 0 && dr === 2 * dir && !t && board[fr + dir][fc] === "" && (p === 'P' ? fr === 6 : fr === 1)) return true;
+        if (ac === 1 && dr === dir && t) return true;
+        if (ac === 1 && dr === dir && !t && enPassantTarget && enPassantTarget.r === tr && enPassantTarget.c === tc) return true;
+        return false;
+    }
+    if (type === 'r') return (fr === tr || fc === tc) && isPathClear(fr, fc, tr, tc);
+    if (type === 'b') return ar === ac && isPathClear(fr, fc, tr, tc);
+    if (type === 'q') return (fr === tr || fc === tc || ar === ac) && isPathClear(fr, fc, tr, tc);
+    if (type === 'n') return (ar === 2 && ac === 1) || (ar === 1 && ac === 2);
+    if (type === 'k') {
+        if (ar <= 1 && ac <= 1) return true;
+        if (dr === 0 && ac === 2) {
+            const opponentColor = turn === "white" ? "black" : "white";
+            if (isAttacked(fr, fc, opponentColor)) return false;
+            if (tc === 6) {
+                if (board[fr][5] === "" && board[fr][6] === "" &&
+                    !isAttacked(fr, 5, opponentColor) &&
+                    !isAttacked(fr, 6, opponentColor)) {
+                    return turn === "white" ? (!hasMoved.whiteK && !hasMoved.whiteR8) : (!hasMoved.blackK && !hasMoved.blackR8);
+                }
+            }
+            if (tc === 2) {
+                if (board[fr][1] === "" && board[fr][2] === "" && board[fr][3] === "" &&
+                    !isAttacked(fr, 3, opponentColor) &&
+                    !isAttacked(fr, 2, opponentColor)) {
+                    return turn === "white" ? (!hasMoved.whiteK && !hasMoved.whiteR1) : (!hasMoved.blackK && !hasMoved.blackR1);
+                }
+            }
+        }
+        return false;
+    }
+    return false;
+}
+
+function isSafeMove(fr, fc, tr, tc) {
+    if (!board) return false;
+    const backupPiece = board[tr][tc];
+    const piece = board[fr][fc];
+    board[tr][tc] = piece;
+    board[fr][fc] = "";
+    
+    const k = findKing(turn);
+    const opponent = turn === "white" ? "black" : "white";
+    const safe = k ? !isAttacked(k.r, k.c, opponent) : true;
+    
+    board[fr][fc] = piece;
+    board[tr][tc] = backupPiece;
+    return safe;
+}
+
+function doMove(fr, fc, tr, tc, broadcast = true) {
+    if (!board || fr === undefined || fc === undefined || tr === undefined || tc === undefined) return;
+    const piece = board[fr][fc];
+    if (!piece) return;
+    const isCapture = board[tr][tc] !== "";
+    
+    history.push({
+        board: board.map(r => [...r]),
+        turn,
+        hasMoved: { ...hasMoved },
+        enPassantTarget,
+        halfMoveClock
+    });
+
+    if (piece.toLowerCase() === 'p' && enPassantTarget && tr === enPassantTarget.r && tc === enPassantTarget.c) {
+        board[fr][tc] = "";
+    }
+
+    if (piece.toLowerCase() === 'p' && Math.abs(tr - fr) === 2) {
+        enPassantTarget = { r: (fr + tr) / 2, c: fc };
+    } else {
+        enPassantTarget = null;
+    }
+
+    if (piece.toLowerCase() === 'k' && Math.abs(tc - fc) === 2) {
+        if (tc === 6) {
+            board[fr][5] = board[fr][7];
+            board[fr][7] = "";
+        } else if (tc === 2) {
+            board[fr][3] = board[fr][0];
+            board[fr][0] = "";
+        }
+    }
+
+    if (fr === 7 && fc === 4) hasMoved.whiteK = true;
+    if (fr === 7 && fc === 0) hasMoved.whiteR1 = true;
+    if (fr === 7 && fc === 7) hasMoved.whiteR8 = true;
+    if (fr === 0 && fc === 4) hasMoved.blackK = true;
+    if (fr === 0 && fc === 0) hasMoved.blackR1 = true;
+    if (fr === 0 && fc === 7) hasMoved.blackR8 = true;
+
+    board[tr][tc] = piece;
+    board[fr][fc] = "";
+    lastMove = { fr, fc, tr, tc };
+
+    try {
+        if (isCapture && sounds && sounds.cap) sounds.cap.play().catch(()=>{});
+        else if (sounds && sounds.move) sounds.move.play().catch(()=>{});
+    } catch(e) {}
+
+    sendeAnAnalyse(fr, fc, tr, tc, piece, isCapture);
+
+    turn = turn === "white" ? "black" : "white";
+
+    if (statusEl) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug";
+
+    if (broadcast && socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            type: 'move',
+            room: onlineRoom,
+            fr, fc, tr, tc,
+            piece,
+            turn,
+            fen: typeof boardToFEN === 'function' ? boardToFEN() : ""
+        }));
+    }
+
+    draw();
+
+    const k = findKing(turn);
+    if (k && isAttacked(k.r, k.c, turn === "white" ? "black" : "white")) {
+        try { if (sounds && sounds.check) sounds.check.play().catch(()=>{}); } catch(e) {}
+        if (statusEl) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " steht im SCHACH!";
+    }
+
+    if (gameModeSelect) {
+        if (gameModeSelect.value === "bot" && turn === "black") {
+            myEngineWorker.postMessage({ board, turn, fen: boardToFEN() });
+        } else if (gameModeSelect.value === "stockfish" && turn === "black") {
+            stockfishWorker.postMessage({ board, turn, fen: boardToFEN() });
+        }
+    }
+
+    if (premove && turn === myColor) {
+        const pm = premove;
+        premove = null;
+        if (board[pm.fr][pm.fc] && isOwn(board[pm.fr][pm.fc], turn) && canMoveLogic(pm.fr, pm.fc, pm.tr, pm.tc) && isSafeMove(pm.fr, pm.fc, pm.tr, pm.tc)) {
+            setTimeout(() => doMove(pm.fr, pm.fc, pm.tr, pm.tc), 200);
+        }
+    }
+}
 
 function resetGame() {
     board = [
@@ -238,31 +459,33 @@ async function sendeAnAnalyse(fr, fc, tr, tc, figur, istSchlag) {
 // UI AKTUALISIERUNG (Dashboard-Style) - ANGEPASST AN NEUEN PYTHON CODE
         const eloDisp = document.getElementById("elo-display");
         
-        // Wir prüfen jetzt auf "Performance_Metriken", wie im neuen Python-Code definiert
-        if(eloDisp && ergebnis.Performance_Metriken) {
-            const perf = ergebnis.Performance_Metriken;
-            const pos = ergebnis.Positions_Analyse;
+        const perf = ergebnis.Performance_Metriken || ergebnis.Basis_Werte || {};
+        const pos = ergebnis.Positions_Analyse || {};
+        const aggro = ergebnis.Aggressivitäts_Index || {};
+
+        if (eloDisp) {
+            const eloVal = perf["Geschätzte_Elo"] || perf["Elo"] || 1200;
+            const rangVal = perf["Rang"] || "Spieler";
+            const zentrumVal = pos["Zentrum"] || "Gut";
+            const devVal = pos["Entwicklung"] || "Solide";
+            const aggroVal = aggro["Gesamt"] || "Normal";
 
             eloDisp.innerHTML = `
                 <div style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: 10px; border-left: 5px solid #f1c40f; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
-                    <div style="font-size: 0.8em; color: #bdc3c7; letter-spacing: 1px; margin-bottom: 5px;">🐍 PYTHON LIVE-LABOR</div>
+                    <div style="font-size: 0.8em; color: #bdc3c7; letter-spacing: 1px; margin-bottom: 5px;">🤖 GOOGLE GEMINI / PYTHON KI</div>
                     
                     <div style="font-size: 1.3em; font-weight: bold; display: flex; align-items: center; gap: 8px;">
-                        Elo: <span style="color: #f1c40f;">${perf["Geschätzte_Elo"]}</span> 
+                        Elo: <span style="color: #f1c40f;">${eloVal}</span> 
                         <span style="font-size: 0.5em; background: #f1c40f; color: #2c3e50; padding: 2px 6px; border-radius: 4px; vertical-align: middle;">
-                            ${perf["Rang"]}
+                            ${rangVal}
                         </span>
                     </div>
 
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; font-size: 0.85em; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
-                        <div>🎯 Präzision: <b style="color: #2ecc71;">${perf["Genauigkeit"]}</b></div>
-                        <div>⚔️ Aggro: <b style="color: #e74c3c;">${perf["Aggressivität"]}</b></div>
-                        <div>🏰 Zentrum: <b>${pos["Zentrum"]}</b></div>
-                        <div>🚀 Dev: <b>${pos["Entwicklung"]}</b></div>
-                    </div>
-
-                    <div style="margin-top: 8px; font-size: 0.75em; color: #3498db; font-style: italic;">
-                        🛡️ Sicherheit: ${perf["Königssicherheit"]} pts | ⚠️ Eröffnung: ${pos["Eröffnung"]}
+                        <div>⚔️ Aggro: <b style="color: #e74c3c;">${aggroVal}</b></div>
+                        <div>🏰 Zentrum: <b>${zentrumVal}</b></div>
+                        <div>🚀 Dev: <b>${devVal}</b></div>
+                        <div>📊 Material: <b>${pos["Material_Vorteil"] || "0"}</b></div>
                     </div>
                 </div>
             `;
@@ -293,37 +516,96 @@ function addChat(sender, text, type) {
         m.appendChild(span);
     }
 
-    if (chatMessages) {
-        chatMessages.appendChild(m);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+    const container = document.getElementById("chat-messages") || chatMessages;
+    if (container) {
+        container.appendChild(m);
+        container.scrollTop = container.scrollHeight;
     }
 }
+window.addChat = addChat;
 
 document.querySelectorAll('.emoji-btn').forEach(b => {
-    b.onclick = () => { if (chatInput) { chatInput.value += b.textContent; chatInput.focus(); } };
+    b.onclick = () => {
+        const inp = document.getElementById("chat-input") || chatInput;
+        if (inp) { inp.value += b.textContent; inp.focus(); }
+    };
 });
 
 function sendMsg() {
-    if (!chatInput) return;
-    const t = chatInput.value.trim();
-    if (t && socket.readyState === 1) {
+    const inp = document.getElementById("chat-input") || chatInput;
+    if (!inp) return;
+    const t = inp.value.trim();
+    if (t && socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ 
             type: 'chat_message', 
             username: getMyName(),
+            content: t,
+            text: t
+        }));
+        socket.send(JSON.stringify({ 
+            type: 'chat', 
+            user: getMyName(),
+            playerName: getMyName(),
+            text: t,
             content: t
         }));
         let cleanText = t;
         const pws = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi'];
         pws.forEach(pw => { cleanText = cleanText.replaceAll(pw, '').trim(); });
         addChat("Ich", cleanText, "me"); 
-        chatInput.value = "";
+        inp.value = "";
     }
 }
-const sendChatBtn = document.getElementById("send-chat");
-if (sendChatBtn) sendChatBtn.onclick = sendMsg;
-if (chatInput) chatInput.onkeydown = (e) => { if(e.key === "Enter") sendMsg(); };
+window.sendMsg = sendMsg;
 
+window.addEventListener('DOMContentLoaded', () => {
+    const sendChatBtn = document.getElementById("send-chat");
+    if (sendChatBtn) sendChatBtn.onclick = sendMsg;
+    const inp = document.getElementById("chat-input");
+    if (inp) inp.onkeydown = (e) => { if(e.key === "Enter") sendMsg(); };
 
+    const connectMPBtn = document.getElementById("connectMP");
+    if (connectMPBtn) {
+        connectMPBtn.onclick = () => {
+            const roomInput = document.getElementById("roomID");
+            const roomId = roomInput ? roomInput.value.trim() : "";
+            if (roomId) {
+                onlineRoom = roomId;
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({
+                        type: 'find_random',
+                        room: roomId,
+                        playerName: getMyName()
+                    }));
+                }
+                addChat("System", "Raum '" + roomId + "' beigetreten.", "system");
+            } else {
+                alert("Bitte eine Raum-ID eingeben.");
+            }
+        };
+    }
+
+    if (gameModeSelect) {
+        gameModeSelect.onchange = () => {
+            const mode = gameModeSelect.value;
+            if (mode === "random") {
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ type: 'find_random', playerName: getMyName() }));
+                    addChat("System", "Suche nach einem zufälligen Gegner...", "system");
+                } else {
+                    addChat("System", "Nicht mit dem Server verbunden.", "system");
+                }
+            } else if (mode === "online") {
+                const roomInput = document.getElementById("roomID");
+                if (roomInput && roomInput.value.trim()) {
+                    onlineRoom = roomInput.value.trim();
+                }
+            } else {
+                resetGame();
+            }
+        };
+    }
+});
 
 function loadChatHistory() {
     if (socket && socket.readyState === WebSocket.OPEN) {
@@ -331,9 +613,116 @@ function loadChatHistory() {
     }
 } 
 
+socket.onmessage = (e) => {
+    try {
+        const data = JSON.parse(e.data);
+        if (data.type === 'pong') {
+            const pingEl = document.getElementById('ping-display');
+            if (pingEl && typeof pingStart !== 'undefined') {
+                const ms = Math.round(performance.now() - pingStart);
+                pingEl.innerText = `${ms} ms`;
+            }
+            const statusEl = document.getElementById('server-status');
+            if (statusEl) {
+                statusEl.innerText = "Online";
+                statusEl.style.color = "#00ff00";
+            }
+            return;
+        }
+        if (data.type === 'gameStart') {
+            if (data.room) onlineRoom = data.room;
+            if (data.color) myColor = data.color;
+            if (data.opponent) opponentName = data.opponent;
+            if (gameModeSelect) gameModeSelect.value = "online";
+            resetGame();
+            const statusEl = document.getElementById('status-display');
+            if (statusEl) {
+                statusEl.textContent = "Online gegen " + (opponentName || "Gegner") + " (" + (myColor === "white" ? "Weiß" : "Schwarz") + ")";
+            }
+            addChat("System", "🎮 Spiel gestartet gegen " + (opponentName || "Gegner") + "! Du bist " + (myColor === "white" ? "Weiß" : "Schwarz") + ".", "system");
+            return;
+        }
+        if (data.type === 'game_over') {
+            const statusEl = document.getElementById('status-display');
+            if (statusEl && data.text) statusEl.textContent = data.text;
+            addChat("System", data.text || "Spiel beendet.", "system");
+            return;
+        }
+        if (data.type === 'chat') {
+            if (data.system) {
+                addChat("System", data.text, "system");
+            } else {
+                const u = data.user || data.sender || data.name || data.playerName || "Anonym";
+                const isMe = u === getMyName();
+                addChat(u, data.text, isMe ? "me" : "other");
+            }
+            return;
+        }
+        if (data.type === 'chat_history') {
+            if (Array.isArray(data.messages)) {
+                data.messages.forEach(msg => {
+                    if (msg.system) {
+                        addChat("System", msg.text, "system");
+                    } else {
+                        const u = msg.username || msg.user || msg.sender || msg.name || "Anonym";
+                        const isMe = u === getMyName();
+                        addChat(u, msg.content || msg.text || "", isMe ? "me" : "other");
+                    }
+                });
+            }
+            return;
+        }
+        if (data.type === 'system_alert') {
+            addChat("SYSTEM ALERT", data.message, "system");
+            alert(data.message);
+            return;
+        }
+        if (data.type === 'login_success') {
+            const statusBox = document.getElementById('save-status');
+            if (statusBox) statusBox.innerHTML = "<span style='color: #00ff00;'>✅ Angemeldet als " + data.name + "</span>";
+            if (data.name) {
+                const pInput = document.getElementById('playerName');
+                if (pInput) pInput.value = data.name;
+                localStorage.setItem("playerName", data.name);
+            }
+            return;
+        }
+        if (data.type === 'login_error') {
+            const statusBox = document.getElementById('save-status');
+            if (statusBox) statusBox.innerHTML = "<span style='color: #ff4444;'>❌ " + (data.text || "Login fehlgeschlagen") + "</span>";
+            return;
+        }
+        if (data.type === 'move') {
+            if (data.fr !== undefined && data.fc !== undefined && data.tr !== undefined && data.tc !== undefined) {
+                doMove(data.fr, data.fc, data.tr, data.tc, false);
+            }
+            return;
+        }
+        if (data.type === 'leaderboard') {
+            const listEl = document.getElementById('leaderboard-list');
+            if (listEl && Array.isArray(data.list)) {
+                listEl.innerHTML = data.list.map((item, idx) => `<div>${idx + 1}. ${item.username || item.name} - ${item.elo || 1200} ELO</div>`).join('');
+            }
+            return;
+        }
+        if (data.type === 'video_ready') {
+            if (typeof onVideoReady === 'function') onVideoReady(data.url, data.prompt);
+            addVideoToFeed({ url: data.url, prompt: data.prompt, playerName: data.playerName });
+            return;
+        }
+    } catch(err) {
+        console.error("Fehler beim Verarbeiten der Server-Nachricht:", err);
+    }
+};
+
+socket.onopen = () => {
+    loadChatHistory();
+};
+
 function draw() {
-    if (!boardEl) return;
-    boardEl.innerHTML = "";
+    const currentBoardEl = document.getElementById("chess-board") || boardEl;
+    if (!currentBoardEl) return;
+    currentBoardEl.innerHTML = "";
     const k = findKing(turn);
     const inCheck = k ? isAttacked(k.r, k.c, turn === "white" ? "black" : "white") : false;
 
@@ -389,10 +778,16 @@ function draw() {
                 }
             };
 
-            boardEl.appendChild(d);
+            currentBoardEl.appendChild(d);
         });
     });
 }
+window.draw = draw;
+window.resetGame = resetGame;
+window.doMove = doMove;
+window.canMoveLogic = canMoveLogic;
+window.isSafeMove = isSafeMove;
+window.isAttacked = isAttacked;
 function startGeneration() {
     const myName = getMyName();
     const promptInput = document.getElementById('videoPrompt');
