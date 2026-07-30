@@ -220,8 +220,8 @@ async function getIP() {
 // Variable für DEINEN Bot -> nutzt DEINE Datei
 let myEngineWorker = new Worker('engineWorker.js'); 
 
-// Variable für STOCKFISH -> nutzt die NEUE Datei
-let stockfishWorker = new Worker('stockfishWorker.js');
+// Variable für STOCKFISH -> nutzt die NEUE Datei mit Cache-Buster, um alte fehlerhafte Versionen zu umgehen
+let stockfishWorker = new Worker('stockfishWorker.js?v=10.0.2');
 stockfishWorker.postMessage('uci');
 stockfishWorker.postMessage('setoption name Skill Level value 20');
 stockfishWorker.postMessage('setoption name Hash value 32');

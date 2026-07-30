@@ -229,9 +229,9 @@ app.use((req, res, next) => {
 });
 
 // Serve Static Frontend Files & Root Route (1. Root-Route / & 2. Statische Dateien)
-app.use(express.static(__dirname, { maxAge: '30d' }));
+app.use(express.static(__dirname, { maxAge: 0 }));
 if (fs.existsSync(path.join(__dirname, 'public'))) {
-    app.use(express.static(path.join(__dirname, 'public'), { maxAge: '30d' }));
+    app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0 }));
 }
 
 app.get('/', (req, res) => {
