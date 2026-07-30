@@ -213,6 +213,10 @@ let myEngineWorker = new Worker('engineWorker.js');
 
 // Variable für STOCKFISH -> nutzt die NEUE Datei
 let stockfishWorker = new Worker('stockfishWorker.js');
+stockfishWorker.postMessage('uci');
+stockfishWorker.postMessage('setoption name Skill Level value 20');
+stockfishWorker.postMessage('setoption name Hash value 32');
+stockfishWorker.postMessage('isready');
 const RENDER_SERVER = 'mein-schach2.onrender.com';
 const isGitHubPages = typeof window !== 'undefined' && window.location.hostname.includes('github.io');
 
@@ -470,7 +474,11 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
         if (gameModeSelect.value === "bot" && turn === "black") {
             myEngineWorker.postMessage({ board, turn, fen: boardToFEN() });
         } else if (gameModeSelect.value === "stockfish" && turn === "black") {
-            stockfishWorker.postMessage({ board, turn, fen: boardToFEN() });
+            const fen = typeof boardToFEN === 'function' ? boardToFEN() : "";
+            if (fen) {
+                stockfishWorker.postMessage(`position fen ${fen}`);
+                stockfishWorker.postMessage("go depth 15");
+            }
         }
     }
 
@@ -1024,16 +1032,35 @@ if (resignBtn) {
 
 myEngineWorker.onmessage = (e) => {
     if(e.data && turn === "black" && gameModeSelect && gameModeSelect.value === "bot") {
-        setTimeout(() => doMove(e.data.fr, e.data.fc, e.data.tr, e.data.tc, false), 600);
+        const { fr, fc, tr, tc } = e.data;
+        setTimeout(() => {
+            if (board[fr][fc]) {
+                const p = board[fr][fc];
+                if (p.toLowerCase() === 'p' && (tr === 0 || tr === 7)) {
+                    board[fr][fc] = p === 'P' ? 'Q' : 'q';
+                }
+            }
+            doMove(fr, fc, tr, tc, false);
+        }, 600);
     }
 };
 
 stockfishWorker.onmessage = (e) => {
-    const move = e.data;
-    if(move && turn === "black" && gameModeSelect && gameModeSelect.value === "stockfish") {
-        if (move.fr !== undefined && move.fc !== undefined) {
+    const line = e.data;
+    if (typeof line === 'string' && line.includes("bestmove")) {
+        const match = line.match(/bestmove\s([a-h][1-8])([a-h][1-8])(q|r|b|n)?/);
+        if (match && turn === "black" && gameModeSelect && gameModeSelect.value === "stockfish") {
+            const cols = "abcdefgh";
+            const fr = 8 - parseInt(match[1][1]);
+            const fc = cols.indexOf(match[1][0]);
+            const tr = 8 - parseInt(match[2][1]);
+            const tc = cols.indexOf(match[2][0]);
+            const prom = match[3];
             setTimeout(() => {
-                doMove(move.fr, move.fc, move.tr, move.tc, false);
+                if (prom && board[fr][fc]) {
+                    board[fr][fc] = board[fr][fc] === 'P' ? prom.toUpperCase() : prom.toLowerCase();
+                }
+                doMove(fr, fc, tr, tc, false);
             }, 600);
         }
     }
