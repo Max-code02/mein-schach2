@@ -106,7 +106,7 @@ app.get('/download-contact/:playerName', (req, res) => {
 // DB setup
 const { db } = require('./src/db/index.js');
 const schema = require('./src/db/schema.js');
-const { eq, asc } = require('drizzle-orm');
+const { eq, asc, desc } = require('drizzle-orm');
 
 // Google Firebase Firestore & Google Gemini AI Setup
 const admin = require('firebase-admin');
@@ -252,7 +252,17 @@ app.post('/api/login', async (req, res) => {
 
     let user = userDB[username];
 
-    // Try fetching from Firestore if missing locally
+    if (!user) {
+        try {
+            const data = await db.select().from(schema.players).where(eq(schema.players.username, username)).limit(1);
+            if (data && data.length > 0) {
+                user = data[0];
+                userDB[username] = user;
+            }
+        } catch (e) {}
+    }
+
+    // Try fetching from Firestore if missing locally (fallback)
     if (!user && firestoreDb) {
         try {
             const doc = await firestoreDb.collection('players').doc(username).get();
@@ -268,14 +278,14 @@ app.post('/api/login', async (req, res) => {
     }
 
     if (!userDB[username]) {
-        userDB[username] = { username, password, elo: 1200, wins: 0, level: 1, xp: 0 };
+        userDB[username] = { username, password, elo: 1200, wins: 0, level: 1, xp: 0, role: 'Gast' };
     } else {
         userDB[username].password = password;
         userDB[username].last_login = new Date().toISOString();
     }
 
     saveAll();
-    res.json({ success: true, name: username, elo: userDB[username].elo || 1200, wins: userDB[username].wins || 0 });
+    res.json({ success: true, name: username, elo: userDB[username].elo || 1200, wins: userDB[username].wins || 0, level: userDB[username].level || 1, xp: userDB[username].xp || 0, role: userDB[username].role || 'Gast' });
 });
 
 app.post('/api/register', async (req, res) => {
@@ -284,6 +294,13 @@ app.post('/api/register', async (req, res) => {
         return res.status(400).json({ success: false, error: "Name und Passwort erforderlich!" });
     }
     
+    try {
+        const data = await db.select().from(schema.players).where(eq(schema.players.username, username)).limit(1);
+        if (data && data.length > 0 && data[0].password && data[0].password !== password) {
+            return res.status(400).json({ success: false, error: "Name bereits vergeben!" });
+        }
+    } catch (e) {}
+
     if (firestoreDb) {
         try {
             const doc = await firestoreDb.collection('players').doc(username).get();
@@ -297,30 +314,27 @@ app.post('/api/register', async (req, res) => {
         return res.status(400).json({ success: false, error: "Name bereits vergeben!" });
     }
 
-    userDB[username] = { username, password, elo: 1200, wins: 0, level: 1, xp: 0, created_at: new Date().toISOString() };
+    userDB[username] = { username, password, elo: 1200, wins: 0, level: 1, xp: 0, role: 'Gast', created_at: new Date().toISOString() };
     saveAll();
     res.json({ success: true, name: username });
 });
 
 app.get('/api/leaderboard', async (req, res) => {
-    if (firestoreDb) {
-        try {
-            const snapshot = await firestoreDb.collection('players').orderBy('wins', 'desc').limit(10).get();
-            if (!snapshot.empty) {
-                const list = [];
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    list.push({ 
-                        name: doc.id || data.username, 
-                        wins: data.wins || 0, 
-                        elo: data.elo || 1200,
-                        level: data.level || 1,
-                        xp: data.xp || 0 
-                    });
-                });
-                return res.json({ success: true, list });
-            }
-        } catch (e) {}
+    try {
+        const data = await db.select().from(schema.players).orderBy(desc(schema.players.wins)).limit(10);
+        if (data && data.length > 0) {
+            const list = data.map(p => ({
+                name: p.username,
+                wins: p.wins || 0,
+                elo: p.elo || 1200,
+                level: p.level || 1,
+                xp: p.xp || 0,
+                role: p.role || 'Gast'
+            }));
+            return res.json({ success: true, list });
+        }
+    } catch (err) {
+        console.error("SQL Leaderboard Fetch Error:", err);
     }
 
     const sorted = Object.entries(userDB)
@@ -329,7 +343,8 @@ app.get('/api/leaderboard', async (req, res) => {
             wins: u.wins || 0, 
             elo: u.elo || 1200,
             level: u.level || 1,
-            xp: u.xp || 0
+            xp: u.xp || 0,
+            role: u.role || 'Gast'
         }))
         .sort((a, b) => b.wins - a.wins)
         .slice(0, 10);
@@ -346,15 +361,36 @@ app.post('/analyse', async (req, res) => {
 
     if (aiClient) {
         try {
+            const promptText = `Du bist die weltbeste Schach-KI und ein Großmeister-Analyst. 
+Analysiere die folgende Schach-Position (FEN: "${fen}") nach dem Zug: "${zug}".
+Erstelle eine tiefgehende, präzise Analyse des letzten Zuges und der Gesamtstruktur.
+
+Antworte AUSSCHLIESSLICH mit einem validen JSON-Objekt. Verwende genau diese Struktur und keine zusätzliche Formatierung oder Erklärungen außerhalb des JSONs:
+{
+  "Basis_Werte": {
+    "Rang": "${estimatedElo > 1500 ? 'Meister' : 'Fortgeschrittener'}",
+    "Geschätzte_Elo": ${estimatedElo},
+    "Genauigkeit": 85,
+    "Klassifizierung": "Guter Zug"
+  },
+  "Positions_Analyse": {
+    "Zentrum": "Kontrolliert",
+    "Entwicklung": "Aktiv",
+    "Material_Vorteil": "Ausgeglichen",
+    "Bester_Zug": "e2-e4"
+  },
+  "Aggressivitäts_Index": {
+    "Gesamt": 65,
+    "Level": "Offensiv"
+  },
+  "Erklaerung": "Ein solider Entwicklungszug, der das Zentrum stärkt und Druck aufbaut."
+}
+
+Berechne die Genauigkeit (0 bis 100), Aggressivitätsgesamtindex (0 bis 100) und die Klassifizierung (wie 'Brillant 💎', 'Großartiger Zug ⭐', 'Buchzug 📚', 'Ungenauigkeit ⚠️', 'Fehler ❌', 'Patzer 🔴') passend zum analysierten Zug "${zug}" und der FEN-Struktur "${fen}".`;
+
             const response = await aiClient.models.generateContent({
                 model: 'gemini-2.5-flash',
-                contents: `Du bist ein Schach-Großmeister. Analysiere kurz die Position (FEN: ${fen}, Letzter Zug: ${zug}).
-Antworte NUR mit reinem JSON im Format:
-{
-  "Basis_Werte": { "Rang": "${estimatedElo > 1500 ? 'Expert' : 'Spieler'}", "Geschätzte_Elo": ${estimatedElo} },
-  "Positions_Analyse": { "Zentrum": "Gut kontrolliert", "Entwicklung": "Solide", "Material_Vorteil": "Ausgeglichen" },
-  "Aggressivitäts_Index": { "Gesamt": 60 }
-}`
+                contents: promptText
             });
             const text = response.text || "";
             const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -367,9 +403,10 @@ Antworte NUR mit reinem JSON im Format:
     }
 
     res.json({
-        Basis_Werte: { Rang: estimatedElo > 1500 ? "Expert" : "Spieler", Geschätzte_Elo: estimatedElo },
-        Positions_Analyse: { Zentrum: "Gut", Entwicklung: "Solide", Material_Vorteil: "0" },
-        Aggressivitäts_Index: { Gesamt: 55 }
+        Basis_Werte: { Rang: estimatedElo > 1500 ? "Meister" : "Fortgeschrittener", Geschätzte_Elo: estimatedElo, Genauigkeit: 75, Klassifizierung: "Guter Zug" },
+        Positions_Analyse: { Zentrum: "Solide", Entwicklung: "Normal", Material_Vorteil: "0", Bester_Zug: "e2-e4" },
+        Aggressivitäts_Index: { Gesamt: 55, Level: "Normal" },
+        Erklaerung: "Ein guter Entwicklungszug unter den gegebenen Umständen."
     });
 });
 
@@ -423,43 +460,22 @@ let blockedIPs = new Map();
 const activeRoomStates = new Map();
 const SERVER_INSTANCE_ID = Math.random().toString(36).substring(2, 9);
 
-// Supabase Realtime Message Broker for cross-server & cross-client messaging
-let realTimeChannel = null;
-
-function broadcastGlobalMessage(msgObj, publishToRealtime = true) {
+function broadcastGlobalMessage(msgObj) {
     const msgStr = JSON.stringify(msgObj);
     wss.clients.forEach(client => {
         if (client.readyState === 1) {
             client.send(msgStr);
         }
     });
-
-    if (publishToRealtime && realTimeChannel) {
-        realTimeChannel.send({
-            type: 'broadcast',
-            event: 'message',
-            payload: { ...msgObj, _origin: SERVER_INSTANCE_ID }
-        }).catch(() => {});
-    }
 }
 
-function broadcastRoomMessage(msgObj, roomID, publishToRealtime = true, senderWs = null) {
+function broadcastRoomMessage(msgObj, roomID, senderWs = null) {
     const msgStr = JSON.stringify(msgObj);
     wss.clients.forEach(client => {
         if (client !== senderWs && client.readyState === 1 && (client.room === roomID || roomID === 'global')) {
             client.send(msgStr);
         }
     });
-    
-    // Spectators get the message separately via broadcastToSpectators logic
-    
-    if (publishToRealtime && realTimeChannel) {
-        realTimeChannel.send({
-            type: 'broadcast',
-            event: 'message',
-            payload: { ...msgObj, _origin: SERVER_INSTANCE_ID, _targetRoom: roomID, _ignoreSelf: !!senderWs }
-        }).catch(() => {});
-    }
 }
 
 let serverLocked = false; 
@@ -601,33 +617,21 @@ function createPlayerProfile(name) {
 }
 
 function sendLeaderboardUpdate(target) {
-    const sorted = Object.entries(leaderboard)
-        .sort((a, b) => {
-            const winsA = typeof a[1] === 'object' ? a[1].wins : a[1];
-            const winsB = typeof b[1] === 'object' ? b[1].wins : b[1];
-            return winsB - winsA;
-        })
+    const sorted = Object.entries(userDB)
+        .map(([name, u]) => ({
+            name: name,
+            wins: u.wins || 0,
+            elo: u.elo || 1200,
+            level: u.level || 1,
+            xp: u.xp || 0,
+            role: u.role || 'Gast'
+        }))
+        .sort((a, b) => b.wins - a.wins)
         .slice(0, 10);
 
     const msg = JSON.stringify({ 
         type: 'leaderboard', 
-        list: sorted.map(e => {
-            const data = typeof e[1] === 'object' ? e[1] : { 
-                wins: e[1], 
-                level: 1, 
-                xp: 0, 
-                joined: new Date().toLocaleDateString('de-DE') 
-            };
-            const userProfile = userDB[e[0]] || {};
-            return { 
-                name: e[0], 
-                wins: data.wins, 
-                level: userProfile.level || data.level || 1, 
-                elo: userProfile.elo || 1200,
-                xp: userProfile.xp || data.xp || 0,
-                joined: data.joined 
-            };
-        }) 
+        list: sorted 
     });
 
     if (target) {
@@ -668,9 +672,12 @@ async function loadProfilesFromDB() {
         data.forEach(p => {
             userDB[p.username] = {
                 password: p.password || "",
+                elo: p.elo || 1200,
                 wins: p.wins || 0,
+                losses: p.losses || 0,
                 xp: p.xp || 0,
                 level: p.level || 1,
+                role: p.role || 'Gast',
                 ip_ban: p.ip_ban || false,
                 is_banned: p.is_banned || false
             };
@@ -754,13 +761,49 @@ async function loadBannedIPs() {
 
 loadBannedIPs();
 
-function saveAll() {
+async function saveAll() {
     try {
         fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2));
         fs.writeFileSync(USER_FILE, JSON.stringify(userDB, null, 2));
         fs.writeFileSync(BAN_FILE, JSON.stringify([...bannedIPs], null, 2));
     } catch (e) {
         console.log("Konnte Daten nicht speichern");
+    }
+
+    try {
+        const sqlOps = [];
+        for (const [uname, u] of Object.entries(userDB)) {
+            sqlOps.push(
+                db.insert(schema.players).values({
+                    username: uname,
+                    password: u.password || "",
+                    elo: u.elo || 1200,
+                    wins: u.wins || 0,
+                    losses: u.losses || 0,
+                    xp: u.xp || 0,
+                    level: u.level || 1,
+                    role: u.role || 'Gast',
+                    ip_address: u.ip_address || "",
+                    last_login: u.last_login ? new Date(u.last_login) : new Date()
+                }).onConflictDoUpdate({
+                    target: schema.players.username,
+                    set: {
+                        password: u.password || "",
+                        elo: u.elo || 1200,
+                        wins: u.wins || 0,
+                        losses: u.losses || 0,
+                        xp: u.xp || 0,
+                        level: u.level || 1,
+                        role: u.role || 'Gast',
+                        ip_address: u.ip_address || "",
+                        last_login: u.last_login ? new Date(u.last_login) : new Date()
+                    }
+                })
+            );
+        }
+        await Promise.all(sqlOps);
+    } catch(err) {
+        console.error("SQL Save Error:", err);
     }
 
     if (firestoreDb) {
@@ -773,6 +816,7 @@ function saveAll() {
                 losses: u.losses || 0,
                 xp: u.xp || 0,
                 level: u.level || 1,
+                role: u.role || 'Gast',
                 ip_address: u.ip_address || "",
                 last_login: u.last_login || new Date().toISOString()
             }, { merge: true }).catch(() => {});
@@ -987,6 +1031,7 @@ wss.on('connection', function(ws, req) {
                         wins: 0,
                         xp: 0,
                         level: 1,
+                        role: 'Gast',
                         ip_address: clientIP,
                         created_at: new Date()
                     };
@@ -1099,6 +1144,10 @@ wss.on('connection', function(ws, req) {
                     const roomID = "room_" + Math.random().toString(36).substr(2, 9);
                     ws.room = roomID;
                     waitingPlayer.room = roomID;
+                    ws.color = 'black';
+                    waitingPlayer.color = 'white';
+                    ws.opponentName = waitingPlayer.playerName || "Spieler 1";
+                    waitingPlayer.opponentName = ws.playerName || "Spieler 2";
                     
                     activeRoomStates.set(roomID, {
                         board: null,
@@ -1111,13 +1160,13 @@ wss.on('connection', function(ws, req) {
                         type: 'gameStart', 
                         room: roomID, 
                         color: 'black', 
-                        opponent: waitingPlayer.playerName || "Spieler 1" 
+                        opponent: ws.opponentName
                     }));
                     waitingPlayer.send(JSON.stringify({ 
                         type: 'gameStart', 
                         room: roomID, 
                         color: 'white', 
-                        opponent: ws.playerName || "Spieler 2" 
+                        opponent: waitingPlayer.opponentName
                     }));
                     
                     waitingPlayer = null; 
@@ -1164,6 +1213,7 @@ wss.on('connection', function(ws, req) {
             if (data.type === 'resign') {
                 const room = data.room || "global";
                 const loser = currentName;
+                const winner = ws.opponentName || null;
 
                 const resignMsg = JSON.stringify({
                     type: 'game_over',
@@ -1173,10 +1223,37 @@ wss.on('connection', function(ws, req) {
                 });
 
                 wss.clients.forEach(client => {
-                    if (client.readyState === WebSocket.OPEN) {
+                    if (client.readyState === WebSocket.OPEN && client.room === room) {
                         client.send(resignMsg);
                     }
                 });
+
+                if (winner && userDB[winner]) {
+                    userDB[winner].wins += 1;
+                    userDB[winner].xp += 50;
+                    
+                    if (userDB[winner].xp >= userDB[winner].level * 100) {
+                        userDB[winner].xp -= userDB[winner].level * 100;
+                        userDB[winner].level += 1;
+                    }
+                    
+                    if (userDB[winner].level >= 10 && userDB[winner].role === 'Gast') userDB[winner].role = 'Meister';
+                    if (userDB[winner].level >= 30 && userDB[winner].role === 'Meister') userDB[winner].role = 'Großmeister';
+                    
+                    if (userDB[loser]) {
+                        const winnerElo = userDB[winner].elo || 1200;
+                        const loserElo = userDB[loser].elo || 1200;
+                        const expectedWinner = 1 / (1 + Math.pow(10, (loserElo - winnerElo) / 400));
+                        const expectedLoser = 1 / (1 + Math.pow(10, (winnerElo - loserElo) / 400));
+                        
+                        const k = 32;
+                        userDB[winner].elo = Math.round(winnerElo + k * (1 - expectedWinner));
+                        userDB[loser].elo = Math.round(loserElo + k * (0 - expectedLoser));
+                        userDB[loser].losses = (userDB[loser].losses || 0) + 1;
+                    }
+                    saveAll();
+                    sendLeaderboardUpdate();
+                }
 
                 console.log(`[GAME] ${loser} hat in Raum ${room} aufgegeben.`);
                 return; 
@@ -1260,7 +1337,7 @@ wss.on('connection', function(ws, req) {
 
                     data.whitePlayer = roomState.whitePlayer;
                     data.blackPlayer = roomState.blackPlayer;
-                    broadcastRoomMessage(data, targetRoom, true, ws);
+                    broadcastRoomMessage(data, targetRoom, ws);
 
                     if (ws.isBotMatch) {
                         const currentBotName = ws.opponentName || "Grandmaster_Ghost";
@@ -1276,11 +1353,44 @@ wss.on('connection', function(ws, req) {
 
             if (data.type === 'win') {
                 const name = data.name || ws.playerName || "Anonym";
+                const oppName = ws.opponentName || null;
+                
                 if (!userDB[name]) {
-                    userDB[name] = { level: 1, xp: 0, wins: 0 };
+                    userDB[name] = { level: 1, xp: 0, wins: 0, elo: 1200, role: 'Gast' };
                 }
                 userDB[name].wins += 1;
                 userDB[name].xp += 50;
+
+                // Level up
+                if (userDB[name].xp >= userDB[name].level * 100) {
+                    userDB[name].xp -= userDB[name].level * 100;
+                    userDB[name].level += 1;
+                }
+                
+                // Roles update
+                if (userDB[name].level >= 10 && userDB[name].role === 'Gast') userDB[name].role = 'Meister';
+                if (userDB[name].level >= 30 && userDB[name].role === 'Meister') userDB[name].role = 'Großmeister';
+
+                // Elo Calculation
+                if (oppName && userDB[oppName]) {
+                    const winnerElo = userDB[name].elo || 1200;
+                    const loserElo = userDB[oppName].elo || 1200;
+                    const expectedWinner = 1 / (1 + Math.pow(10, (loserElo - winnerElo) / 400));
+                    const expectedLoser = 1 / (1 + Math.pow(10, (winnerElo - loserElo) / 400));
+                    
+                    const k = 32;
+                    userDB[name].elo = Math.round(winnerElo + k * (1 - expectedWinner));
+                    userDB[oppName].elo = Math.round(loserElo + k * (0 - expectedLoser));
+                    userDB[oppName].losses = (userDB[oppName].losses || 0) + 1;
+                } else if (ws.isBotMatch) {
+                    // Win against bot gives smaller elo boost
+                    const winnerElo = userDB[name].elo || 1200;
+                    const loserElo = 1500; // Assume ghost bot is 1500
+                    const expectedWinner = 1 / (1 + Math.pow(10, (loserElo - winnerElo) / 400));
+                    const k = 16;
+                    userDB[name].elo = Math.round(winnerElo + k * (1 - expectedWinner));
+                }
+
                 saveAll();
                 sendLeaderboardUpdate();
             }
@@ -1288,6 +1398,48 @@ wss.on('connection', function(ws, req) {
             if (data.type === 'game_over') {
                 const targetRoom = data.room || ws.room || "global";
                 generateGameVideo(targetRoom, ws);
+
+                if (firestoreDb) {
+                    try {
+                        const roomState = activeRoomStates.get(targetRoom);
+                        const finalBoard = roomState ? roomState.board : ws.lastBoardState;
+                        const whiteP = roomState ? roomState.whitePlayer : (ws.color === 'white' ? ws.playerName : ws.opponentName) || 'Weiß';
+                        const blackP = roomState ? roomState.blackPlayer : (ws.color === 'black' ? ws.playerName : ws.opponentName) || 'Schwarz';
+                        const winnerName = data.winner || (data.text && data.text.includes('Weiß') ? whiteP : data.text && data.text.includes('Schwarz') ? blackP : 'Remis');
+
+                        if (finalBoard && createCanvas) {
+                            const canvas = createCanvas(400, 400);
+                            const ctx = canvas.getContext('2d');
+                            for (let r = 0; r < 8; r++) {
+                                for (let c = 0; c < 8; c++) {
+                                    ctx.fillStyle = (r + c) % 2 === 0 ? '#eeeed2' : '#769656';
+                                    ctx.fillRect(c * 50, r * 50, 50, 50);
+                                }
+                            }
+                            finalBoard.forEach((row, r) => {
+                                row.forEach((pieceCode, c) => {
+                                    if (pieceCode && loadedPieceImages[pieceCode]) {
+                                        ctx.drawImage(loadedPieceImages[pieceCode], c * 50 + 5, r * 50 + 5, 40, 40);
+                                    }
+                                });
+                            });
+                            const base64Snapshot = canvas.toDataURL("image/png");
+
+                            await firestoreDb.collection('games').add({
+                                room_id: targetRoom,
+                                white_player: whiteP,
+                                black_player: blackP,
+                                winner: winnerName,
+                                reason: data.text || data.reason || 'Spiel beendet',
+                                snapshot: base64Snapshot,
+                                timestamp: new Date().toISOString()
+                            });
+                            console.log(`📸 FOTO-SNAPSHOT: Erfolgreich in Google Firebase unter 'games' gespeichert für Raum ${targetRoom}!`);
+                        }
+                    } catch (snapErr) {
+                        console.error("Fehler beim Erstellen/Speichern des Spiel-Snapshots:", snapErr);
+                    }
+                }
             }
 
         } catch (e) {

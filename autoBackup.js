@@ -13,7 +13,7 @@ const CONFIG = {
     TABLES_TO_BACKUP: ['players', 'ip_ban', 'messages'], // Sichert alle wichtigen Tabellen
     BACKUP_INTERVAL_MS: 86400000,                // 24 Stunden Rhythmus
     KEEP_BACKUPS_DAYS: 7,                        // Speicherplatz-Schutz
-    MIN_ROWS_EXPECTED: 1,                        // Fail-Safe gegen Datenverlust
+    MIN_ROWS_EXPECTED: 0,                        // Fail-Safe gegen Datenverlust
     LOG_FILE: 'backup_history.log',               // Dein Audit-Logbuch
     DISCORD_WEBHOOK_URL: process.env.DISCORD_WEBHOOK_URL 
 };

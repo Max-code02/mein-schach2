@@ -145,6 +145,15 @@ function handleTimeout(color) {
     if (timerInterval) clearInterval(timerInterval);
     const winner = color === 'Weiß' ? 'Schwarz' : 'Weiß';
     showCheckmateModal(winner, `${color} hat keine Zeit mehr!`);
+    
+    const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'game_over', reason: 'timeout', text: `${color} hat keine Zeit mehr! ${winner} gewinnt.` }));
+        if ((myColor === "white" && winner === "Weiß") || (myColor === "black" && winner === "Schwarz")) {
+            const pName = localStorage.getItem('playerName');
+            if (pName) ws.send(JSON.stringify({ type: 'win', name: pName }));
+        }
+    }
 }
 
 function showCheckmateModal(winnerName, reason = "Schachmatt!") {
@@ -236,6 +245,7 @@ const sounds = {
 };
 
 let board, turn = "white", selected = null, history = [];
+let moveHistoryLog = [];
 
 // --- SPEZIALZUG VARIABLEN ---
 let hasMoved = {
@@ -435,6 +445,7 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
     } catch(e) {}
 
     sendeAnAnalyse(fr, fc, tr, tc, piece, isCapture);
+    addMoveToSidebar(fr, fc, tr, tc, piece, isCapture);
 
     turn = turn === "white" ? "black" : "white";
 
@@ -467,6 +478,10 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
         showCheckmateModal(winner, "Schachmatt!");
         if (broadcast && socket && socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({ type: 'game_over', reason: 'checkmate', text: `Schachmatt! ${winner} gewinnt.` }));
+            if ((myColor === "white" && winner === "Weiß") || (myColor === "black" && winner === "Schwarz")) {
+                const pName = localStorage.getItem('playerName');
+                if (pName) socket.send(JSON.stringify({ type: 'win', name: pName }));
+            }
         }
     }
 
@@ -519,6 +534,10 @@ function resetGame() {
     blackTime = 600;
     updateTimerUI();
     startTimer();
+
+    moveHistoryLog = [];
+    const listEl = document.getElementById('move-history-list');
+    if (listEl) listEl.innerHTML = '';
 
     if (typeof statusEl !== 'undefined' && statusEl) statusEl.textContent = "Weiß am Zug";
     if (typeof draw === "function") draw();
@@ -595,36 +614,60 @@ async function sendeAnAnalyse(fr, fc, tr, tc, figur, istSchlag) {
 
         const ergebnis = await response.json();
 
-// UI AKTUALISIERUNG (Dashboard-Style) - ANGEPASST AN NEUEN PYTHON CODE
+        // UI AKTUALISIERUNG (Dashboard-Style) - ANGEPASST AN NEUEN PYTHON CODE
         const eloDisp = document.getElementById("elo-display");
         
-        const perf = ergebnis.Performance_Metriken || ergebnis.Basis_Werte || {};
+        const perf = ergebnis.Basis_Werte || ergebnis.Performance_Metriken || {};
         const pos = ergebnis.Positions_Analyse || {};
         const aggro = ergebnis.Aggressivitäts_Index || {};
 
         if (eloDisp) {
             const eloVal = perf["Geschätzte_Elo"] || perf["Elo"] || 1200;
             const rangVal = perf["Rang"] || "Spieler";
-            const zentrumVal = pos["Zentrum"] || "Gut";
-            const devVal = pos["Entwicklung"] || "Solide";
-            const aggroVal = aggro["Gesamt"] || "Normal";
+            const accuracyVal = perf["Genauigkeit"] || 75;
+            const classVal = perf["Klassifizierung"] || "Guter Zug";
+            const zentrumVal = pos["Zentrum"] || "Solide";
+            const devVal = pos["Entwicklung"] || "Normal";
+            const materialVal = pos["Material_Vorteil"] || "0";
+            const bestMoveVal = pos["Bester_Zug"] || "-";
+            const aggroVal = aggro["Gesamt"] || 50;
+            const aggroLevel = aggro["Level"] || "Normal";
+            const explanation = ergebnis.Erklaerung || "Ein solider Zug im Partie-Verlauf.";
 
             eloDisp.innerHTML = `
-                <div style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: 10px; border-left: 5px solid #f1c40f; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
-                    <div style="font-size: 0.8em; color: #bdc3c7; letter-spacing: 1px; margin-bottom: 5px;">🤖 GOOGLE GEMINI / PYTHON KI</div>
+                <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 12px; border-left: 5px solid #2ecc71; box-shadow: 0 4px 20px rgba(0,0,0,0.4); font-family: sans-serif;">
+                    <div style="font-size: 0.8em; color: #95a5a6; letter-spacing: 1.5px; font-weight: bold; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+                        <span>🐍 KI-ANALYSE (PYTHON-LABOR)</span>
+                        <span style="background: #2196f3; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8em;">ONLINE</span>
+                    </div>
                     
-                    <div style="font-size: 1.3em; font-weight: bold; display: flex; align-items: center; gap: 8px;">
-                        Elo: <span style="color: #f1c40f;">${eloVal}</span> 
-                        <span style="font-size: 0.5em; background: #f1c40f; color: #2c3e50; padding: 2px 6px; border-radius: 4px; vertical-align: middle;">
-                            ${rangVal}
-                        </span>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                        <div>
+                            <div style="font-size: 0.8em; color: #bdc3c7;">Geschätzte Elo:</div>
+                            <div style="font-size: 1.4em; font-weight: bold; color: #f1c40f;">${eloVal} <span style="font-size: 0.6em; color: #fff; background: #e67e22; padding: 1px 4px; border-radius: 3px; font-weight: normal; margin-left: 3px;">${rangVal}</span></div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.8em; color: #bdc3c7;">Genauigkeit:</div>
+                            <div style="font-size: 1.4em; font-weight: bold; color: #2ecc71;">${accuracyVal}%</div>
+                        </div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; font-size: 0.85em; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
-                        <div>⚔️ Aggro: <b style="color: #e74c3c;">${aggroVal}</b></div>
-                        <div>🏰 Zentrum: <b>${zentrumVal}</b></div>
-                        <div>🚀 Dev: <b>${devVal}</b></div>
-                        <div>📊 Material: <b>${pos["Material_Vorteil"] || "0"}</b></div>
+                    <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; margin-bottom: 12px; border-left: 3px solid #e74c3c;">
+                        <div style="font-size: 0.85em; font-weight: bold; color: #fff; display: flex; justify-content: space-between;">
+                            <span>Letzter Zug: <span style="color: #3498db;">${von}-${nach}</span></span>
+                            <span style="color: #f1c40f;">${classVal}</span>
+                        </div>
+                        <div style="font-size: 0.85em; color: #ecf0f1; margin-top: 4px; line-height: 1.4;">${explanation}</div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.85em; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                        <div>💥 Aggro: <b style="color: #e74c3c;">${aggroVal}% (${aggroLevel})</b></div>
+                        <div>🏰 Zentrum: <b style="color: #f1c40f;">${zentrumVal}</b></div>
+                        <div>🚀 Entwicklung: <b style="color: #3498db;">${devVal}</b></div>
+                        <div>⚖️ Material: <b style="color: #2ecc71;">${materialVal}</b></div>
+                        <div style="grid-column: span 2; border-top: 1px dashed rgba(255,255,255,0.05); padding-top: 5px; margin-top: 5px;">
+                            💡 Empfohlener Zug: <b style="color: #2ecc71; font-family: monospace; font-size: 1.1em;">${bestMoveVal}</b>
+                        </div>
                     </div>
                 </div>
             `;
@@ -636,6 +679,62 @@ async function sendeAnAnalyse(fr, fc, tr, tc, figur, istSchlag) {
         console.error("Python-API Fehler:", e);
         const eloDisp = document.getElementById("elo-display");
         if(eloDisp) eloDisp.innerHTML = `<div style="color: #e67e22; font-size: 0.8em;">🐍 Labor berechnet... (Server-Wakeup)</div>`;
+    }
+}
+
+function getAlgebraicNotation(fr, fc, tr, tc, piece, isCapture) {
+    const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+    const ranks = ['8', '7', '6', '5', '4', '3', '2', '1'];
+    
+    let pChar = '';
+    const type = piece.toLowerCase();
+    if (type === 'k') pChar = 'K';
+    else if (type === 'q') pChar = 'D'; // Dame (D)
+    else if (type === 'r') pChar = 'T'; // Turm (T)
+    else if (type === 'b') pChar = 'L'; // Läufer (L)
+    else if (type === 'n') pChar = 'S'; // Springer (S)
+    
+    const toSquare = files[tc] + ranks[tr];
+    
+    if (type === 'p') {
+        if (isCapture) {
+            const fromFile = files[fc];
+            return fromFile + 'x' + toSquare;
+        } else {
+            return toSquare;
+        }
+    } else {
+        // Check for castling
+        if (type === 'k' && Math.abs(tc - fc) === 2) {
+            if (tc === 6) return "O-O";
+            if (tc === 2) return "O-O-O";
+        }
+        return pChar + (isCapture ? 'x' : '') + toSquare;
+    }
+}
+
+function addMoveToSidebar(fr, fc, tr, tc, piece, isCapture) {
+    const notation = getAlgebraicNotation(fr, fc, tr, tc, piece, isCapture);
+    moveHistoryLog.push(notation);
+    
+    const listEl = document.getElementById('move-history-list');
+    if (listEl) {
+        listEl.innerHTML = '';
+        let rowHtml = '';
+        for (let i = 0; i < moveHistoryLog.length; i += 2) {
+            const moveNum = Math.floor(i / 2) + 1;
+            const whiteMove = moveHistoryLog[i];
+            const blackMove = moveHistoryLog[i + 1] || '';
+            rowHtml += `
+                <div style="display: flex; justify-content: space-between; padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <span style="color: #7f8fa6; width: 30px;">${moveNum}.</span>
+                    <span style="color: #f1c40f; flex-grow: 1; font-weight: bold; text-align: left;">${whiteMove}</span>
+                    <span style="color: #ecf0f1; flex-grow: 1; text-align: left;">${blackMove}</span>
+                </div>
+            `;
+        }
+        listEl.innerHTML = rowHtml;
+        listEl.scrollTop = listEl.scrollHeight;
     }
 }
 // --- 2. CHAT & SYSTEM ---
@@ -882,6 +981,37 @@ function draw() {
         row.forEach((p, c) => {
             const d = document.createElement("div");
             d.className = `square ${(r + c) % 2 ? "black-sq" : "white-sq"}`;
+            d.style.position = "relative";
+            
+            // Add Rank labels (8-1) on the left-most column
+            if (c === 0) {
+                const rankLabel = document.createElement("span");
+                rankLabel.className = "board-label";
+                rankLabel.innerText = 8 - r;
+                rankLabel.style.position = "absolute";
+                rankLabel.style.top = "2px";
+                rankLabel.style.left = "4px";
+                rankLabel.style.fontSize = "10px";
+                rankLabel.style.fontWeight = "bold";
+                rankLabel.style.pointerEvents = "none";
+                rankLabel.style.color = (r + c) % 2 ? "#f0d9b5" : "#b58863";
+                d.appendChild(rankLabel);
+            }
+
+            // Add File labels (a-h) on the bottom-most row
+            if (r === 7) {
+                const fileLabel = document.createElement("span");
+                fileLabel.className = "board-label";
+                fileLabel.innerText = String.fromCharCode(97 + c);
+                fileLabel.style.position = "absolute";
+                fileLabel.style.bottom = "2px";
+                fileLabel.style.right = "4px";
+                fileLabel.style.fontSize = "10px";
+                fileLabel.style.fontWeight = "bold";
+                fileLabel.style.pointerEvents = "none";
+                fileLabel.style.color = (r + c) % 2 ? "#f0d9b5" : "#b58863";
+                d.appendChild(fileLabel);
+            }
             
             if (typeof lastMove !== 'undefined' && lastMove && 
                 ((r === lastMove.fr && c === lastMove.fc) || (r === lastMove.tr && c === lastMove.tc))) {

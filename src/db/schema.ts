@@ -1,13 +1,13 @@
-const { pgTable, text, timestamp, integer, boolean, serial } = require('drizzle-orm/pg-core');
+import { pgTable, text, timestamp, integer, boolean, serial } from 'drizzle-orm/pg-core';
 
-const ipBan = pgTable('ip_ban', {
+export const ipBan = pgTable('ip_ban', {
   id: serial('id').primaryKey(),
   ip_address: text('ip_address').notNull(),
   reason: text('reason'),
   created_at: timestamp('created_at').defaultNow().notNull(),
 });
 
-const players = pgTable('players', {
+export const players = pgTable('players', {
   username: text('username').primaryKey(),
   password: text('password'),
   ip_address: text('ip_address'),
@@ -24,11 +24,10 @@ const players = pgTable('players', {
   created_at: timestamp('created_at').defaultNow().notNull(),
 });
 
-const messages = pgTable('messages', {
+export const messages = pgTable('messages', {
   id: serial('id').primaryKey(),
   username: text('username').notNull(),
   content: text('content').notNull(),
   created_at: timestamp('created_at').defaultNow().notNull(),
 });
 
-module.exports = { ipBan, players, messages };

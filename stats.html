@@ -99,7 +99,7 @@ background: #007bff;
                     <tr style="background: ${bg}; transition: 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='${bg}'">
                         <td style="font-size: 1.5em; font-weight: bold; color: ${color}; text-align: center;">${badge || `#${i + 1}`}</td>
                         <td>
-                            <div style="font-weight: bold; color: white; font-size: 1.1em;">${p.name}</div>
+                            <div style="font-weight: bold; color: white; font-size: 1.1em;">${p.name} <span style="font-size: 0.6em; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; margin-left: 5px;">${p.role || 'Gast'}</span></div>
                             <div style="color: #95a5a6; font-size: 0.8em;">Lvl ${p.level || 1} • Elo: ${p.elo || 1200}</div>
                         </td>
                         <td style="font-size: 1.2em; font-weight: bold; color: #f1c40f;">${p.wins || 0} 🏆</td>

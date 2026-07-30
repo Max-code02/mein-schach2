@@ -102,3 +102,12 @@ button:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); 
 }
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+.board-label {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    pointer-events: none;
+    user-select: none;
+    opacity: 0.85;
+}

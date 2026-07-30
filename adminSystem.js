@@ -17,39 +17,64 @@ function parseArgsWithQuotes(text) {
 async function handleAdminCommand(ws, text, context) {
     const { wss, db, runBackup, banPlayer, unbanPlayer, bannedIPs, bannedPlayers, profiles, addSpectator, removeSpectator, roomStates } = context;
 
-    let rawText = text.trim();
+    const originalText = text.trim();
+    let rawText = originalText;
     let hasAdminPass = false;
+    let hasHelperPass = false;
 
-    // Check for admin passwords in text or ws object
-    for (const pw of ADMIN_PASSWORDS) {
-        if (rawText.includes(pw) || (ws.password && ws.password === pw)) {
+    // Admin passwords check and cleaning
+    const adminPWs = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', '222'];
+    for (const pw of adminPWs) {
+        const regex = new RegExp(pw, 'gi');
+        if (regex.test(rawText) || (ws.password && ws.password === pw)) {
             hasAdminPass = true;
-            // Clean the password out of the command text
-            rawText = rawText.replaceAll(pw, '').trim();
+            rawText = rawText.replace(regex, '').trim();
+        }
+    }
+
+    // Helper passwords check and cleaning
+    const helperPWs = ['Maxi', 'maxi'];
+    for (const pw of helperPWs) {
+        const regex = new RegExp(pw, 'gi');
+        if (regex.test(rawText) || (ws.password && ws.password === pw)) {
+            hasHelperPass = true;
+            rawText = rawText.replace(regex, '').trim();
         }
     }
 
     const tokens = parseArgsWithQuotes(rawText);
     if (tokens.length === 0) return true;
 
+    const firstChar = originalText.charAt(0);
     const cmd = tokens[0].replace(/^[\/!\?]/, '').toLowerCase();
     const targetName = tokens[1] || '';
 
     const PUBLIC_COMMANDS = ['watch', 'spectate', 'unwatch', 'leave', 'help', 'befehle', 'befhel', '?'];
+    const HELPER_COMMANDS = ['kick', 'mute', 'info', 'list'];
 
+    // Tiered Authorization check
     if (!PUBLIC_COMMANDS.includes(cmd)) {
-        const isAuthorized = ADMINS.includes(ws.playerName) || hasAdminPass;
+        const isHelperCmd = HELPER_COMMANDS.includes(cmd);
+        const isAdminUser = ADMINS.includes(ws.playerName) || hasAdminPass;
+        const isHelperUser = hasHelperPass;
+
+        let isAuthorized = isAdminUser;
+        if (isHelperCmd && isHelperUser) {
+            isAuthorized = true;
+        }
+
         if (!isAuthorized) {
             ws.send(JSON.stringify({ 
                 type: 'chat', 
-                text: '⚙️ ❌ Passwort falsch oder gefehlt! (Nutze: /befehl "Name" Admina111)', 
+                text: '⚙️ ❌ Zugriff verweigert! Passwort falsch oder unzureichende Rechte.', 
                 system: true 
             }));
             return true;
         }
     }
 
-    console.log(`[COMMAND] ${ws.playerName || 'Gast'} nutzt Befehl: /${cmd} Target: ${targetName}`);
+    console.log(`[COMMAND] ${ws.playerName || 'Gast'} nutzt Befehl: ${firstChar}${cmd} Target: ${targetName}`);
+
 
     switch (cmd) {
         // --- PARDON / UNBAN ---
@@ -232,30 +257,45 @@ async function handleAdminCommand(ws, text, context) {
         case 'befehle':
         case 'befhel':
         case '?':
-            if (hasAdminPass || ADMINS.includes(ws.playerName)) {
+            if (firstChar === '/' && hasAdminPass) {
                 ws.send(JSON.stringify({ 
                     type: 'chat', 
-                    text: '🛠️ **ADMIN BEFEHLE (PW: Admina111):**\n' +
-                          '• `/pardon "Name" Admina111` - Spieler/IP entsperren\n' +
-                          '• `/ban "Name" Admina111 [Grund]` - Spieler bannen\n' +
-                          '• `/kick "Name" Admina111` - Spieler kicken\n' +
-                          '• `/mute "Name" Admina111` - Spieler stummschalten\n' +
-                          '• `/setwin "Name" <Anzahl> Admina111` - Siege anpassen\n' +
-                          '• `/clear Admina111` - Chat leeren\n' +
-                          '• `/announce <Text> Admina111` - Durchsage machen\n' +
-                          '• `!watch <Name/Raum>` - Spiel zuschauen\n' +
-                          '• `!unwatch` - Zuschauen beenden\n' +
-                          '• `!list` - Online-Spieler anzeigen', 
+                    text: '🛠️ **ADMIN BEFEHLE:**\n' +
+                          '• `/pardon <Spieler/IP>` - Begnadigt einen Spieler oder eine gesperrte IP-Adresse\n' +
+                          '• `/ban <Spieler> [Grund]` - Bannt einen Spieler permanent\n' +
+                          '• `/kick <Spieler>` - Kickt einen Spieler vom Server\n' +
+                          '• `/mute <Spieler>` - Stummschaltung umschalten (stummschalten/freischalten)\n' +
+                          '• `/setwin <Spieler> <Anzahl>` - Passt die Siege eines Spielers an\n' +
+                          '• `/clear` - Leert den Chatverlauf komplett\n' +
+                          '• `/announce <Nachricht>` - Sendet eine globale System-Durchsage\n' +
+                          '• `/wartung` - Schaltet den Wartungsmodus ein/aus\n' +
+                          '• `/backup` - Erstellt ein manuelles Backup der Datenbank\n' +
+                          '• `/info <Spieler>` - Zeigt IP und Raum eines Spielers an', 
+                    system: true 
+                }));
+            } else if (firstChar === '?' && hasHelperPass) {
+                ws.send(JSON.stringify({ 
+                    type: 'chat', 
+                    text: '🛡️ **SUPPORTER/HELFER BEFEHLE:**\n' +
+                          '• `/kick <Spieler>` - Kickt einen störenden Spieler\n' +
+                          '• `/mute <Spieler>` - Schaltet einen Spieler stumm\n' +
+                          '• `/info <Spieler>` - Zeigt Status und IP eines Spielers an\n' +
+                          '• `!list` - Zeigt alle angemeldeten Online-Spieler an', 
+                    system: true 
+                }));
+            } else if (firstChar === '!') {
+                ws.send(JSON.stringify({ 
+                    type: 'chat', 
+                    text: '💬 **SCHACH BEFEHLE:**\n' +
+                          '• `!watch <Spieler>` - Schaut einer aktiven Partie oder einem Spieler zu\n' +
+                          '• `!unwatch` - Verlässt den Zuschauermodus\n' +
+                          '• `!help` - Zeigt diese Liste normaler Befehle an', 
                     system: true 
                 }));
             } else {
                 ws.send(JSON.stringify({ 
                     type: 'chat', 
-                    text: '💬 **SCHACH BEFEHLE:**\n' +
-                          '• `!watch <Spieler/Raum>` oder `/watch <Spieler/Raum>` - Spiel zuschauen\n' +
-                          '• `!unwatch` oder `/unwatch` - Zuschauen beenden\n' +
-                          '• `!help`, `!befehle` oder `!befhel` - Befehle & Hilfe anzeigen\n' +
-                          '• Admin-Befehle nutzen: `/befehl "Name" Admina111` (z.B. `/pardon "Spieler" Admina111`)', 
+                    text: '💡 Tipp: Nutze `!help` für normale Schach-Befehle.', 
                     system: true 
                 }));
             }

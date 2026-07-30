@@ -27,6 +27,21 @@
         "timestamp": { "type": "string" }
       },
       "required": ["username", "content"]
+    },
+    "GameHistory": {
+      "title": "GameHistory",
+      "description": "Historical logs of finished games with visual snapshots",
+      "type": "object",
+      "properties": {
+        "room_id": { "type": "string" },
+        "white_player": { "type": "string" },
+        "black_player": { "type": "string" },
+        "winner": { "type": "string" },
+        "reason": { "type": "string" },
+        "snapshot": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["white_player", "black_player"]
     }
   },
   "firestore": {
@@ -37,6 +52,10 @@
     "/messages/{messageId}": {
       "schema": { "$ref": "#/entities/Message" },
       "description": "Chat messages collection"
+    },
+    "/games/{gameId}": {
+      "schema": { "$ref": "#/entities/GameHistory" },
+      "description": "Game history collection with visual snapshots"
     }
   }
 }
