@@ -150,7 +150,7 @@ function handleTimeout(color) {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'game_over', reason: 'timeout', text: `${color} hat keine Zeit mehr! ${winner} gewinnt.` }));
         if ((myColor === "white" && winner === "Weiß") || (myColor === "black" && winner === "Schwarz")) {
-            const pName = localStorage.getItem('playerName');
+            const pName = getMyName();
             if (pName) ws.send(JSON.stringify({ type: 'win', name: pName }));
         }
     }
@@ -439,6 +439,29 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
     board[fr][fc] = "";
     lastMove = { fr, fc, tr, tc };
 
+    // --- DAILY TACTICAL PUZZLE CHECKER ---
+    if (window.activePuzzle) {
+        const ap = window.activePuzzle;
+        if (fr === ap.solution.fr && fc === ap.solution.fc && tr === ap.solution.tr && tc === ap.solution.tc) {
+            document.getElementById("puzzle-status").innerText = "🎉 RICHTIG! Berechne Belohnung...";
+            document.getElementById("puzzle-status").style.color = "#2ecc71";
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'solve_puzzle', playerName: getMyName() }));
+            }
+            window.activePuzzle = null;
+        } else {
+            document.getElementById("puzzle-status").innerText = "❌ Falscher Zug! Versuche es noch einmal.";
+            document.getElementById("puzzle-status").style.color = "#e74c3c";
+            setTimeout(() => {
+                if (typeof loadFEN === 'function') {
+                    loadFEN(ap.fen);
+                }
+            }, 800);
+            draw();
+            return;
+        }
+    }
+
     try {
         if (isCapture && sounds && sounds.cap) sounds.cap.play().catch(()=>{});
         else if (sounds && sounds.move) sounds.move.play().catch(()=>{});
@@ -479,7 +502,7 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
         if (broadcast && socket && socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({ type: 'game_over', reason: 'checkmate', text: `Schachmatt! ${winner} gewinnt.` }));
             if ((myColor === "white" && winner === "Weiß") || (myColor === "black" && winner === "Schwarz")) {
-                const pName = localStorage.getItem('playerName');
+                const pName = getMyName();
                 if (pName) socket.send(JSON.stringify({ type: 'win', name: pName }));
             }
         }
@@ -927,6 +950,51 @@ socket.onmessage = (e) => {
             }
             return;
         }
+        if (data.type === 'daily_puzzle') {
+            const p = data.puzzle;
+            window.activePuzzle = p;
+            
+            document.getElementById("puzzle-title").innerText = p.title;
+            document.getElementById("puzzle-desc").innerText = p.description + " (Deine Farbe: " + (p.color === "white" ? "Weiß" : "Schwarz") + ")";
+            
+            const statusEl = document.getElementById("puzzle-status");
+            if (data.alreadySolved) {
+                statusEl.innerText = "✅ Heute bereits gelöst!";
+                statusEl.style.color = "#2ecc71";
+                document.getElementById("loadPuzzleBtn").innerText = "Geklärt (Heute gelöst)";
+                document.getElementById("loadPuzzleBtn").disabled = true;
+                document.getElementById("loadPuzzleBtn").style.opacity = "0.6";
+            } else {
+                statusEl.innerText = "Bereit zum Lösen!";
+                statusEl.style.color = "#f1c40f";
+                document.getElementById("loadPuzzleBtn").innerText = "Rätsel starten";
+                document.getElementById("loadPuzzleBtn").disabled = false;
+                document.getElementById("loadPuzzleBtn").style.opacity = "1";
+            }
+            return;
+        }
+        
+        if (data.type === 'puzzle_success') {
+            const statusEl = document.getElementById("puzzle-status");
+            statusEl.innerText = data.text;
+            statusEl.style.color = "#2ecc71";
+            alert(data.text);
+            
+            // Re-fetch puzzle state to update solved indicator
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'get_daily_puzzle' }));
+            }
+            return;
+        }
+
+        if (data.type === 'puzzle_info') {
+            const statusEl = document.getElementById("puzzle-status");
+            statusEl.innerText = data.text;
+            statusEl.style.color = "#f1c40f";
+            alert(data.text);
+            return;
+        }
+
         if (data.type === 'login_error') {
             const statusBox = document.getElementById('save-status');
             if (statusBox) statusBox.innerHTML = "<span style='color: #ff4444;'>❌ " + (data.text || "Login fehlgeschlagen") + "</span>";
@@ -1283,3 +1351,119 @@ if (emoteMenuBtn && emotePopup) {
     });
 }
 resetGame();
+
+// --- NEW: FEN PARSER / LOADER ---
+function loadFEN(fen) {
+    if (!fen) return;
+    const parts = fen.split(" ");
+    const boardPart = parts[0];
+    const rows = boardPart.split("/");
+    
+    board = [];
+    for (let r = 0; r < 8; r++) {
+        const row = [];
+        const fenRow = rows[r];
+        if (!fenRow) continue;
+        for (let i = 0; i < fenRow.length; i++) {
+            const char = fenRow[i];
+            if (/\d/.test(char)) {
+                const num = parseInt(char);
+                for (let j = 0; j < num; j++) {
+                    row.push("");
+                }
+            } else {
+                row.push(char);
+            }
+        }
+        board.push(row);
+    }
+    
+    turn = (parts[1] === "b") ? "black" : "white";
+    selected = null;
+    history = [];
+    lastMove = null;
+    premove = null;
+    
+    if (typeof draw === "function") draw();
+}
+window.loadFEN = loadFEN;
+
+// --- INITIALIZE PUZZLE ---
+function initPuzzleControls() {
+    const loadPuzzleBtn = document.getElementById("loadPuzzleBtn");
+    const resetPuzzleBtn = document.getElementById("resetPuzzleBtn");
+    
+    if (loadPuzzleBtn) {
+        loadPuzzleBtn.addEventListener("click", () => {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                // Request the daily puzzle
+                socket.send(JSON.stringify({ type: 'get_daily_puzzle' }));
+                
+                // Show status feedback
+                document.getElementById("puzzle-status").innerText = "Lade Position...";
+                document.getElementById("puzzle-status").style.color = "#bdc3c7";
+                
+                // Activate puzzle load delay
+                setTimeout(() => {
+                    if (window.activePuzzle) {
+                        loadFEN(window.activePuzzle.fen);
+                        myColor = window.activePuzzle.color;
+                        
+                        document.getElementById("puzzle-status").innerText = "Rätsel aktiv! Mache deinen Zug.";
+                        document.getElementById("puzzle-status").style.color = "#f1c40f";
+                        
+                        if (resetPuzzleBtn) resetPuzzleBtn.style.display = "block";
+                    }
+                }, 600);
+            } else {
+                alert("Verbindung zum Server wird benötigt, um das Tägliche Rätsel zu laden.");
+            }
+        });
+    }
+    
+    if (resetPuzzleBtn) {
+        resetPuzzleBtn.addEventListener("click", () => {
+            if (window.activePuzzle) {
+                loadFEN(window.activePuzzle.fen);
+                document.getElementById("puzzle-status").innerText = "Position zurückgesetzt.";
+                document.getElementById("puzzle-status").style.color = "#f1c40f";
+            }
+        });
+    }
+}
+
+// --- FULLSCREEN CONTROLS ---
+function initFullscreenControls() {
+    const fullscreenBtn = document.getElementById("fullscreenBtn");
+    if (fullscreenBtn) {
+        fullscreenBtn.addEventListener("click", () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen()
+                    .then(() => {
+                        fullscreenBtn.innerText = "📺 Fenster";
+                    })
+                    .catch(err => {
+                        console.error(`Fehler beim Aktivieren des Vollbildmodus: ${err.message}`);
+                    });
+            } else {
+                document.exitFullscreen()
+                    .then(() => {
+                        fullscreenBtn.innerText = "📺 Vollbild";
+                    });
+            }
+        });
+    }
+}
+
+// Fetch puzzle status on startup
+setTimeout(() => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'get_daily_puzzle' }));
+    }
+}, 1000);
+
+// Initialize all controls on DOM load
+window.addEventListener('DOMContentLoaded', () => {
+    initPuzzleControls();
+    initFullscreenControls();
+});

@@ -282,6 +282,7 @@
                 <button id="undoBtn">↩️ Rückgängig</button>
                 <button id="resetBtn">🆕 Neues Spiel</button>
                 <button id="resignBtn">🚩 Aufgeben</button>
+                <button id="fullscreenBtn">📺 Vollbild</button>
             </div>
             <div id="videoFeed" class="video-container">
     </div>
@@ -364,6 +365,19 @@
                 <div class="room-controls">
                     <input type="text" id="roomID" placeholder="Raum ID eingeben">
                     <button id="connectMP">Beitreten</button>
+                </div>
+            </div>
+
+            <div class="glass-panel" id="tactical-puzzle-panel" style="display: flex; flex-direction: column; gap: 8px;">
+                <span>🧩 <strong>Tägliches Taktik-Rätsel</strong></span>
+                <div id="puzzle-details" style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                    <div id="puzzle-title" style="font-weight: bold; color: #f1c40f; font-size: 1em;">Lade Taktik-Rätsel...</div>
+                    <div id="puzzle-desc" style="font-size: 0.85em; color: #bdc3c7; margin-top: 4px;">Finde den besten Zug, um +100 ELO & XP zu ergattern.</div>
+                    <div id="puzzle-status" style="font-size: 0.8em; color: #2ecc71; margin-top: 5px; font-weight: bold;"></div>
+                    <div style="display: flex; gap: 5px; margin-top: 10px;">
+                        <button id="loadPuzzleBtn" style="flex: 1; padding: 6px; background: #9b59b6; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold;">Rätsel starten</button>
+                        <button id="resetPuzzleBtn" style="padding: 6px; background: #e74c3c; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold; display: none;">Reset</button>
+                    </div>
                 </div>
             </div>
 

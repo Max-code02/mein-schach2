@@ -129,6 +129,7 @@ try {
             } else {
                 firestoreDb = getFirestore();
             }
+            global.firestoreDb = firestoreDb;
             console.log("🔥 Google Firestore (Firebase) verknüpft für SchachLive!");
         }
     }
@@ -818,7 +819,8 @@ async function saveAll() {
                 level: u.level || 1,
                 role: u.role || 'Gast',
                 ip_address: u.ip_address || "",
-                last_login: u.last_login || new Date().toISOString()
+                last_login: u.last_login || new Date().toISOString(),
+                last_puzzle_solved: u.last_puzzle_solved || ""
             }, { merge: true }).catch(() => {});
         }
     }
@@ -1349,6 +1351,93 @@ wss.on('connection', function(ws, req) {
                     }
                     return;
                 }
+            }
+
+            // --- DAILY TACTICAL PUZZLES BACKEND ---
+            const TACTICAL_PUZZLES = [
+                {
+                    id: 1,
+                    title: "Grundreihenmatt (Back-Rank Mate)",
+                    description: "Nutze die Schwäche der gegnerischen Grundreihe aus!",
+                    fen: "6k1/5ppp/8/8/8/8/8/3R2K1 w - - 0 1",
+                    color: "white",
+                    solution: { fr: 7, fc: 3, tr: 0, tc: 3 } // d1d8
+                },
+                {
+                    id: 2,
+                    title: "Ersticktes Matt (Smothered Mate)",
+                    description: "Der gegnerische König ist von eigenen Figuren blockiert. Finde das Matt!",
+                    fen: "6rk/6pp/5N2/8/8/8/8/6K1 w - - 0 1",
+                    color: "white",
+                    solution: { fr: 2, fc: 5, tr: 1, tc: 5 } // f6f7
+                },
+                {
+                    id: 3,
+                    title: "Schäfermatt Finale (Scholar's Mate)",
+                    description: "Nutze die ungeschützte Schwachstelle f7!",
+                    fen: "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5Q2/PPPP1PPP/RNB1K1NR w KQkq - 0 1",
+                    color: "white",
+                    solution: { fr: 2, fc: 5, tr: 1, tc: 5 } // f3f7
+                }
+            ];
+
+            if (data.type === 'get_daily_puzzle') {
+                const dayIndex = new Date().getDate() % TACTICAL_PUZZLES.length;
+                const puzzle = TACTICAL_PUZZLES[dayIndex];
+                const uname = ws.playerName || "Gast";
+                const user = userDB[uname];
+                const todayStr = new Date().toISOString().split('T')[0];
+                const alreadySolved = !!(user && user.last_puzzle_solved === todayStr);
+
+                ws.send(JSON.stringify({
+                    type: 'daily_puzzle',
+                    puzzle: {
+                        id: puzzle.id,
+                        title: puzzle.title,
+                        description: puzzle.description,
+                        fen: puzzle.fen,
+                        color: puzzle.color,
+                        solution: puzzle.solution
+                    },
+                    alreadySolved: alreadySolved
+                }));
+                return;
+            }
+
+            if (data.type === 'solve_puzzle') {
+                const uname = data.playerName || ws.playerName || "Gast";
+                const todayStr = new Date().toISOString().split('T')[0];
+                
+                if (!userDB[uname]) {
+                    userDB[uname] = { level: 1, xp: 0, wins: 0, elo: 1200, role: 'Gast' };
+                }
+                
+                const user = userDB[uname];
+                if (user.last_puzzle_solved !== todayStr) {
+                    user.last_puzzle_solved = todayStr;
+                    user.elo = (user.elo || 1200) + 100;
+                    user.xp = (user.xp || 0) + 100;
+                    if (user.xp >= user.level * 100) {
+                        user.xp -= user.level * 100;
+                        user.level += 1;
+                    }
+                    saveAll();
+                    sendLeaderboardUpdate();
+                    
+                    ws.send(JSON.stringify({
+                        type: 'puzzle_success',
+                        text: `🎉 Richtig gelöst! Du hast +100 ELO und +100 XP erhalten!`,
+                        newElo: user.elo,
+                        newLevel: user.level,
+                        newXp: user.xp
+                    }));
+                } else {
+                    ws.send(JSON.stringify({
+                        type: 'puzzle_info',
+                        text: `ℹ️ Du hast das heutige Rätsel bereits gelöst!`
+                    }));
+                }
+                return;
             }
 
             if (data.type === 'win') {

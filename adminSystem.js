@@ -83,7 +83,7 @@ async function handleAdminCommand(ws, text, context) {
         case 'unbanip':
         case 'p':
             if (!targetName) {
-                ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /pardon "Name" Admina111', system: true }));
+                ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /pardon "Name" [Passwort]', system: true }));
                 return true;
             }
             
@@ -120,7 +120,7 @@ async function handleAdminCommand(ws, text, context) {
         case 'k': // Kick
         case 'kick':
             if (!targetName) {
-                ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /kick "Name" Admina111', system: true }));
+                ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /kick "Name" [Passwort]', system: true }));
                 return true;
             }
             let kickedCount = 0;
@@ -137,7 +137,7 @@ async function handleAdminCommand(ws, text, context) {
         case 'b': // Ban
         case 'ban':
             if (!targetName) {
-                ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /ban "Name" Admina111 [Grund]', system: true }));
+                ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /ban "Name" [Passwort] [Grund]', system: true }));
                 return true;
             }
             const reason = tokens.slice(2).join(' ') || 'Admin-Entscheidung';
@@ -248,7 +248,7 @@ async function handleAdminCommand(ws, text, context) {
                 }
                 ws.send(JSON.stringify({ type: 'chat', text: `⭐ ${targetName} hat jetzt ${amount} Siege.`, system: true }));
             } else {
-                ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /setwin "Name" 100 Admina111', system: true }));
+                ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /setwin "Name" 100 [Passwort]', system: true }));
             }
             break;
 
