@@ -90,17 +90,25 @@ background: #007bff;
             const res = await fetch(`${apiBaseUrl}/api/leaderboard`);
             const data = await res.json();
             if (data.success && data.list && data.list.length > 0) {
-                tbody.innerHTML = data.list.map((p, i) => `
-                    <tr class="${i === 0 ? 'rank-highlight' : ''}">
-                        <td>${i === 0 ? '🥇' : '#' + (i + 1)}</td>
-                        <td>${p.name}</td>
-                        <td>${p.wins || 0} 🏆</td>
+                tbody.innerHTML = data.list.map((p, i) => {
+                    let badge = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
+                    let color = i === 0 ? '#f1c40f' : i === 1 ? '#bdc3c7' : i === 2 ? '#cd7f32' : 'rgba(255,255,255,0.7)';
+                    let bg = i === 0 ? 'linear-gradient(90deg, rgba(241,196,15,0.15) 0%, rgba(0,0,0,0) 100%)' : 'rgba(255,255,255,0.02)';
+                    
+                    return `
+                    <tr style="background: ${bg}; transition: 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='${bg}'">
+                        <td style="font-size: 1.5em; font-weight: bold; color: ${color}; text-align: center;">${badge || `#${i + 1}`}</td>
+                        <td>
+                            <div style="font-weight: bold; color: white; font-size: 1.1em;">${p.name}</div>
+                            <div style="color: #95a5a6; font-size: 0.8em;">Lvl ${p.level || 1} • Elo: ${p.elo || 1200}</div>
+                        </td>
+                        <td style="font-size: 1.2em; font-weight: bold; color: #f1c40f;">${p.wins || 0} 🏆</td>
                     </tr>
-                `).join('');
+                `}).join('');
                 return;
             }
         } catch(e) {
-            tbody.innerHTML = "<tr><td colspan='3'>Keine Spielerdaten vorhanden.</td></tr>";
+            tbody.innerHTML = "<tr><td colspan='3' style='text-align: center;'>Keine Spielerdaten vorhanden.</td></tr>";
         }
     }
 

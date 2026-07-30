@@ -100,7 +100,7 @@ function validateSecurity(data, ws, bannedIPs, triggerUltraBan) {
         if (ws.isSpectator) return executeBan("Spectator-Move-Hack");
 
         // 8. Koordinaten-Manipulation
-        const { fr, fc, tr, tc } = data.move || {};
+        const { fr, fc, tr, tc } = data;
         if ([fr, fc, tr, tc].some(v => typeof v !== 'number' || v < 0 || v > 7)) {
             return executeBan("Illegale Board-Koordinaten (Out of Bounds)");
         }
@@ -126,7 +126,7 @@ function validateSecurity(data, ws, bannedIPs, triggerUltraBan) {
     }
 
     // 13. Room-Hijacking (Versuch in andere Räume zu senden)
-    if (ws.roomID && data.roomID && ws.roomID !== data.roomID) {
+    if (ws.room && data.room && ws.room !== data.room) {
         return executeBan("Cross-Room-Injection (Fremder Raumzugriff)");
     }
 

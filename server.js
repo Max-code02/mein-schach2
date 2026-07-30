@@ -310,7 +310,13 @@ app.get('/api/leaderboard', async (req, res) => {
                 const list = [];
                 snapshot.forEach(doc => {
                     const data = doc.data();
-                    list.push({ name: doc.id || data.username, wins: data.wins || 0, elo: data.elo || 1200 });
+                    list.push({ 
+                        name: doc.id || data.username, 
+                        wins: data.wins || 0, 
+                        elo: data.elo || 1200,
+                        level: data.level || 1,
+                        xp: data.xp || 0 
+                    });
                 });
                 return res.json({ success: true, list });
             }
@@ -318,7 +324,13 @@ app.get('/api/leaderboard', async (req, res) => {
     }
 
     const sorted = Object.entries(userDB)
-        .map(([name, u]) => ({ name, wins: u.wins || 0, elo: u.elo || 1200 }))
+        .map(([name, u]) => ({ 
+            name, 
+            wins: u.wins || 0, 
+            elo: u.elo || 1200,
+            level: u.level || 1,
+            xp: u.xp || 0
+        }))
         .sort((a, b) => b.wins - a.wins)
         .slice(0, 10);
     res.json({ success: true, list: sorted });
@@ -606,11 +618,13 @@ function sendLeaderboardUpdate(target) {
                 xp: 0, 
                 joined: new Date().toLocaleDateString('de-DE') 
             };
+            const userProfile = userDB[e[0]] || {};
             return { 
                 name: e[0], 
                 wins: data.wins, 
-                level: data.level, 
-                xp: data.xp,
+                level: userProfile.level || data.level || 1, 
+                elo: userProfile.elo || 1200,
+                xp: userProfile.xp || data.xp || 0,
                 joined: data.joined 
             };
         }) 
