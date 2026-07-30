@@ -44,21 +44,27 @@ window.acceptAGB = function() {
     if (window.resetGame) window.resetGame();
 };
 
-// 3. Account speichern / Login / Registrierung
-function handleSaveAccount() {
-    const nameEl = document.getElementById('playerName');
-    const passEl = document.getElementById('playerPass');
-    const status = document.getElementById('save-status');
+// 3. Auth Modal Logic
+let authMode = 'login';
+window.switchAuthTab = function(mode) {
+    authMode = mode;
+    document.getElementById('tab-login').classList.remove('active');
+    document.getElementById('tab-register').classList.remove('active');
+    document.getElementById('tab-' + mode).classList.add('active');
+    document.getElementById('auth-submit-btn').innerText = mode === 'login' ? 'Einloggen' : 'Registrieren';
+    document.getElementById('auth-status').innerHTML = '';
+};
 
-    const name = nameEl ? nameEl.value.trim() : '';
-    const pass = passEl ? passEl.value : '';
+window.submitAuth = function() {
+    const name = document.getElementById('auth-username').value.trim();
+    const pass = document.getElementById('auth-password').value;
+    const status = document.getElementById('auth-status');
 
     if (!name || !pass) {
-        if (status) status.innerHTML = "<span style='color: #ff4444;'>❌ bitte Name & Passwort eingeben!</span>";
+        status.innerHTML = "<span style='color: #e74c3c;'>❌ Bitte fülle alle Felder aus!</span>";
         return;
     }
-
-    if (status) status.innerHTML = "<span style='color: #3498db;'>⏳ Synchronisiere...</span>";
+    status.innerHTML = "<span style='color: #3498db;'>⏳ Verbinde mit Server...</span>";
 
     let hashedPass = pass;
     if (typeof CryptoJS !== 'undefined' && CryptoJS.SHA256) {
@@ -68,15 +74,17 @@ function handleSaveAccount() {
     const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
 
     if (ws && ws.readyState === WebSocket.OPEN) {
+        // Da der Server momentan nur 'login_attempt' versteht,
+        // nutzen wir das für beides, er legt den Account automatisch an wenn er nicht existiert!
         ws.send(JSON.stringify({
             type: 'login_attempt',
             playerName: name,
-            password: hashedPass
+            password: hashedPass,
+            isRegister: authMode === 'register'
         }));
     } else {
-        // HTTP API Fallback
         const apiBaseUrl = window.apiBase || (window.location.hostname.includes('github.io') ? 'https://mein-schach2.onrender.com' : '');
-        fetch(`${apiBaseUrl}/api/login`, {
+        fetch(`${apiBaseUrl}/api/${authMode}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: name, password: hashedPass })
@@ -84,23 +92,44 @@ function handleSaveAccount() {
         .then(res => res.json())
         .then(data => {
             if (data.success) {
-                if (status) status.innerHTML = "<span style='color: #00ff00;'>✅ Profil gesichert!</span>";
+                status.innerHTML = "<span style='color: #2ecc71;'>✅ Erfolgreich!</span>";
                 localStorage.setItem('playerName', name);
+                updateProfileDisplay(name, data.elo, data.wins);
+                setTimeout(() => { document.getElementById('auth-modal').style.display = 'none'; }, 1000);
             } else {
-                if (status) status.innerHTML = "<span style='color: #ff4444;'>❌ " + (data.error || "Fehler") + "</span>";
+                status.innerHTML = "<span style='color: #e74c3c;'>❌ " + (data.error || "Fehler") + "</span>";
             }
         })
         .catch(() => {
-            if (status) status.innerHTML = "<span style='color: #ff4444;'>❌ Netzwerk-Fehler</span>";
+            status.innerHTML = "<span style='color: #e74c3c;'>❌ Netzwerk-Fehler</span>";
         });
+    }
+};
+
+function updateProfileDisplay(name, elo, wins) {
+    const profileName = document.getElementById('profile-name');
+    const profileStats = document.getElementById('profile-stats');
+    if (profileName) profileName.innerText = name;
+    if (profileStats) profileStats.innerText = `Elo: ${elo || 1200} | Siege: ${wins || 0}`;
+    
+    // Auth Button verstecken, wenn eingeloggt
+    const authBtn = document.getElementById('openAuthBtn');
+    if (authBtn) {
+        authBtn.style.display = 'none';
     }
 }
 
-// Attach event handlers
 window.addEventListener('load', () => {
-    const saveBtn = document.getElementById('saveAccountBtn');
-    if (saveBtn) {
-        saveBtn.onclick = handleSaveAccount;
+    const openAuthBtn = document.getElementById('openAuthBtn');
+    if (openAuthBtn) {
+        openAuthBtn.onclick = () => {
+            document.getElementById('auth-modal').style.display = 'flex';
+        };
+    }
+
+    const savedName = localStorage.getItem('playerName');
+    if (savedName) {
+        updateProfileDisplay(savedName, 1200, 0); // Will be updated by server
     }
 
     setTimeout(() => {
@@ -125,12 +154,17 @@ window.addEventListener('load', () => {
                             `).join('');
                         }
                     } else if (data.type === 'login_success') {
-                        const status = document.getElementById('save-status');
-                        if (status) status.innerHTML = "<span style='color: #00ff00;'>✅ Profil gesichert!</span>";
+                        const status = document.getElementById('auth-status');
+                        if (status) status.innerHTML = "<span style='color: #2ecc71;'>✅ Erfolgreich!</span>";
                         localStorage.setItem('playerName', data.name);
+                        updateProfileDisplay(data.name, data.elo, data.wins);
+                        setTimeout(() => { 
+                            const modal = document.getElementById('auth-modal');
+                            if(modal) modal.style.display = 'none'; 
+                        }, 1000);
                     } else if (data.type === 'login_error') {
-                        const status = document.getElementById('save-status');
-                        if (status) status.innerHTML = "<span style='color: #ff4444;'>❌ " + (data.text || "Fehler") + "</span>";
+                        const status = document.getElementById('auth-status');
+                        if (status) status.innerHTML = "<span style='color: #e74c3c;'>❌ " + (data.text || "Fehler") + "</span>";
                     }
                 } catch(err) {}
             });

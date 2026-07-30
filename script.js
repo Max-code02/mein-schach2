@@ -90,9 +90,74 @@ let onlineRoom = ""; // Hier wird sie erstellt
 let myColor = "white"; // Hier wird sie erstellt
 let lastMove = null;
 let premove = null;
-let moveTimeLimit = 300; // 5 Minuten in Sekunden
-let currentTimerValue = moveTimeLimit;
+
+let whiteTime = 600;
+let blackTime = 600;
 let timerInterval = null;
+
+function formatTime(secs) {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+function startTimer() {
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+        if (turn === 'white') {
+            whiteTime--;
+            if (whiteTime <= 0) { whiteTime = 0; handleTimeout('Weiß'); }
+        } else {
+            blackTime--;
+            if (blackTime <= 0) { blackTime = 0; handleTimeout('Schwarz'); }
+        }
+        updateTimerUI();
+    }, 1000);
+}
+
+function updateTimerUI() {
+    const wtEl = document.getElementById('time-white');
+    const btEl = document.getElementById('time-black');
+    if (wtEl) wtEl.innerText = formatTime(whiteTime);
+    if (btEl) btEl.innerText = formatTime(blackTime);
+
+    const wClock = document.getElementById('clock-white');
+    const bClock = document.getElementById('clock-black');
+
+    if (wClock && bClock) {
+        if (turn === 'white') {
+            wClock.classList.add('active');
+            bClock.classList.remove('active');
+        } else {
+            bClock.classList.add('active');
+            wClock.classList.remove('active');
+        }
+
+        if (whiteTime < 60) wClock.classList.add('low-time');
+        else wClock.classList.remove('low-time');
+        
+        if (blackTime < 60) bClock.classList.add('low-time');
+        else bClock.classList.remove('low-time');
+    }
+}
+
+function handleTimeout(color) {
+    if (timerInterval) clearInterval(timerInterval);
+    const winner = color === 'Weiß' ? 'Schwarz' : 'Weiß';
+    showCheckmateModal(winner, `${color} hat keine Zeit mehr!`);
+}
+
+function showCheckmateModal(winnerName, reason = "Schachmatt!") {
+    const modal = document.getElementById('checkmate-modal');
+    const winnerText = document.getElementById('checkmate-winner-text');
+    const title = document.querySelector('.checkmate-title');
+    if (modal && winnerText && title) {
+        title.innerText = reason;
+        winnerText.innerText = `${winnerName} gewinnt das Spiel.`;
+        modal.style.display = 'flex';
+    }
+}
+
 let isGlobalLocked = false;
 // FÜGE ES HIER EIN:
 // 1. Einmalig beim Laden der Seite einen festen Zufallsnamen erstellen
@@ -280,6 +345,25 @@ function canMoveLogic(fr, fc, tr, tc) {
     return false;
 }
 
+function isCheckmate(color) {
+    const k = typeof findKing === 'function' ? findKing(color) : (window.findKing ? window.findKing(color) : null);
+    if (!k || !isAttacked(k.r, k.c, color === "white" ? "black" : "white")) return false;
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            if (board[r][c] && isOwn(board[r][c], color)) {
+                for (let tr = 0; tr < 8; tr++) {
+                    for (let tc = 0; tc < 8; tc++) {
+                        if (canMoveLogic(r, c, tr, tc) && isSafeMove(r, c, tr, tc)) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return true;
+}
+
 function isSafeMove(fr, fc, tr, tc) {
     if (!board) return false;
     const backupPiece = board[tr][tc];
@@ -351,6 +435,8 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
     turn = turn === "white" ? "black" : "white";
 
     if (statusEl) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug";
+    
+    updateTimerUI();
 
     if (broadcast && socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({
@@ -369,6 +455,15 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
     if (k && isAttacked(k.r, k.c, turn === "white" ? "black" : "white")) {
         try { if (sounds && sounds.check) sounds.check.play().catch(()=>{}); } catch(e) {}
         if (statusEl) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " steht im SCHACH!";
+    }
+    
+    if (isCheckmate(turn)) {
+        if (timerInterval) clearInterval(timerInterval);
+        const winner = turn === "white" ? "Schwarz" : "Weiß";
+        showCheckmateModal(winner, "Schachmatt!");
+        if (broadcast && socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: 'game_over', reason: 'checkmate', text: `Schachmatt! ${winner} gewinnt.` }));
+        }
     }
 
     if (gameModeSelect) {
@@ -411,6 +506,12 @@ function resetGame() {
     positionHistory = {};
     lastMove = null;
     premove = null;
+    
+    whiteTime = 600;
+    blackTime = 600;
+    updateTimerUI();
+    startTimer();
+
     if (typeof statusEl !== 'undefined' && statusEl) statusEl.textContent = "Weiß am Zug";
     if (typeof draw === "function") draw();
 }
@@ -676,6 +777,8 @@ socket.onmessage = (e) => {
             const statusEl = document.getElementById('status-display');
             if (statusEl && data.text) statusEl.textContent = data.text;
             addChat("System", data.text || "Spiel beendet.", "system");
+            showCheckmateModal("Gegner", data.text || "Spiel beendet!");
+            if (timerInterval) clearInterval(timerInterval);
             return;
         }
         if (data.type === 'chat') {
