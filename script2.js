@@ -208,14 +208,23 @@ window.switchAuthTab = function(mode) {
 
 window.submitAuth = async function() {
     const emailStr = document.getElementById('auth-username').value.trim();
-    // Normalize the username to avoid invalid email format (e.g. spaces, special chars)
-    const normalizedForEmail = emailStr.replace(/[^a-zA-Z0-9_.-]/g, '').toLowerCase();
-    const email = emailStr.includes('@') ? emailStr : `${normalizedForEmail}@schachlive.app`;
     const pass = document.getElementById('auth-password').value;
     const status = document.getElementById('auth-status');
 
     if (!emailStr || !pass) {
         status.innerHTML = "<span style='color: #e74c3c;'>❌ Bitte fülle alle Felder aus!</span>";
+        return;
+    }
+
+    // Normalize the username to avoid invalid email format (e.g. spaces, special chars)
+    const normalizedForEmail = emailStr.replace(/[^a-zA-Z0-9_.-]/g, '').toLowerCase();
+    // If it has an @ sign, remove any spaces. Otherwise, append a dummy domain.
+    const email = emailStr.includes('@') ? emailStr.replace(/\s+/g, '') : `${normalizedForEmail}@schachlive.app`;
+    
+    // Strict email validation regex
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        status.innerHTML = "<span style='color: #e74c3c;'>❌ Ungültige E-Mail-Adresse!</span>";
         return;
     }
     
