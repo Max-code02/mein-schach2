@@ -93,18 +93,7 @@ const boardEl = document.getElementById("chess-board");
 const statusEl = document.getElementById("status-display");
 const chatMessages = document.getElementById("chat-messages");
 const chatInput = document.getElementById("chat-input");
-// --- FARBWAHL LOGIK ---
-const cpWhite = document.getElementById("colorWhite");
-const cpBlack = document.getElementById("colorBlack");
-
-if (cpWhite && cpBlack) {
-    [cpWhite, cpBlack].forEach(cp => {
-        cp.oninput = () => {
-            document.documentElement.style.setProperty('--board-white', cpWhite.value);
-            document.documentElement.style.setProperty('--board-black', cpBlack.value);
-        };
-    });
-}
+// --- FARBWAHL LOGIK (Safe and persistent binding initialized in initCustomizationControls) ---
 // Diese Funktion wird aufgerufen, wenn der Balken bei 100% ist
 function onVideoReady(videoUrl, promptText) {
     const statusEl = document.getElementById("videoStatus"); // Das Textfeld unter dem Button
@@ -450,143 +439,228 @@ function isSafeMove(fr, fc, tr, tc) {
     return safe;
 }
 
+let isAnimating = false;
+
 function doMove(fr, fc, tr, tc, broadcast = true) {
     if (!board || fr === undefined || fc === undefined || tr === undefined || tc === undefined) return;
     const piece = board[fr][fc];
     if (!piece) return;
-    const isCapture = board[tr][tc] !== "";
     
-    history.push({
-        board: board.map(r => [...r]),
-        turn,
-        hasMoved: { ...hasMoved },
-        enPassantTarget,
-        halfMoveClock
-    });
-
-    if (piece.toLowerCase() === 'p' && enPassantTarget && tr === enPassantTarget.r && tc === enPassantTarget.c) {
-        board[fr][tc] = "";
-    }
-
-    if (piece.toLowerCase() === 'p' && Math.abs(tr - fr) === 2) {
-        enPassantTarget = { r: (fr + tr) / 2, c: fc };
-    } else {
-        enPassantTarget = null;
-    }
-
-    if (piece.toLowerCase() === 'k' && Math.abs(tc - fc) === 2) {
-        if (tc === 6) {
-            board[fr][5] = board[fr][7];
-            board[fr][7] = "";
-        } else if (tc === 2) {
-            board[fr][3] = board[fr][0];
-            board[fr][0] = "";
-        }
-    }
-
-    if (fr === 7 && fc === 4) hasMoved.whiteK = true;
-    if (fr === 7 && fc === 0) hasMoved.whiteR1 = true;
-    if (fr === 7 && fc === 7) hasMoved.whiteR8 = true;
-    if (fr === 0 && fc === 4) hasMoved.blackK = true;
-    if (fr === 0 && fc === 0) hasMoved.blackR1 = true;
-    if (fr === 0 && fc === 7) hasMoved.blackR8 = true;
-
-    board[tr][tc] = piece;
-    board[fr][fc] = "";
-    lastMove = { fr, fc, tr, tc };
-
-    // --- DAILY TACTICAL PUZZLE CHECKER ---
-    if (window.isTacticalPuzzleMode && window.activePuzzle) {
-        const ap = window.activePuzzle;
-        if (fr === ap.solution.fr && fc === ap.solution.fc && tr === ap.solution.tr && tc === ap.solution.tc) {
-            document.getElementById("puzzle-status").innerText = "🎉 RICHTIG! Berechne Belohnung...";
-            document.getElementById("puzzle-status").style.color = "#2ecc71";
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ type: 'solve_puzzle', playerName: getMyName() }));
+    // 1. Visuelle Animation auf dem aktuellen DOM starten
+    const currentBoardEl = document.getElementById("chess-board") || boardEl;
+    let animationDuration = 0;
+    
+    if (currentBoardEl && currentBoardEl.children.length >= 64) {
+        // Squares are indexed by r * 8 + c
+        const startSq = currentBoardEl.children[fr * 8 + fc];
+        const destSq = currentBoardEl.children[tr * 8 + tc];
+        const img = startSq ? startSq.querySelector("img") : null;
+        
+        if (img && destSq) {
+            isAnimating = true;
+            animationDuration = 280; // Dauer der Animation in ms
+            
+            const startRect = startSq.getBoundingClientRect();
+            const destRect = destSq.getBoundingClientRect();
+            const dx = destRect.left - startRect.left;
+            const dy = destRect.top - startRect.top;
+            
+            // Geschlagene Figur im Zielfeld ausblenden und schrumpfen
+            const destImg = destSq.querySelector("img");
+            if (destImg) {
+                destImg.style.transition = "all 200ms ease-out";
+                destImg.style.transform = "scale(0)";
+                destImg.style.opacity = "0";
             }
-            window.activePuzzle = null;
-        } else {
-            document.getElementById("puzzle-status").innerText = "❌ Falscher Zug! Versuche es noch einmal.";
-            document.getElementById("puzzle-status").style.color = "#e74c3c";
-            setTimeout(() => {
-                if (typeof loadFEN === 'function') {
-                    loadFEN(ap.fen);
+            
+            // En-Passant geschlagenen Bauern ausblenden
+            if (piece.toLowerCase() === 'p' && enPassantTarget && tr === enPassantTarget.r && tc === enPassantTarget.c) {
+                const epSq = currentBoardEl.children[fr * 8 + tc];
+                const epImg = epSq ? epSq.querySelector("img") : null;
+                if (epImg) {
+                    epImg.style.transition = "all 200ms ease-out";
+                    epImg.style.transform = "scale(0)";
+                    epImg.style.opacity = "0";
                 }
-            }, 800);
-            draw();
-            return;
+            }
+            
+            // Rochade Turm Animation
+            if (piece.toLowerCase() === 'k' && Math.abs(tc - fc) === 2) {
+                if (tc === 6) { // Königseite
+                    const rookSq = currentBoardEl.children[fr * 8 + 7];
+                    const targetRookSq = currentBoardEl.children[fr * 8 + 5];
+                    const rImg = rookSq ? rookSq.querySelector("img") : null;
+                    if (rImg && targetRookSq) {
+                        const rStartRect = rookSq.getBoundingClientRect();
+                        const rDestRect = targetRookSq.getBoundingClientRect();
+                        const rDx = rDestRect.left - rStartRect.left;
+                        rImg.style.transition = "transform 280ms cubic-bezier(0.25, 1, 0.5, 1)";
+                        rImg.style.transform = `translate(${rDx}px, 0px)`;
+                    }
+                } else if (tc === 2) { // Damenseite
+                    const rookSq = currentBoardEl.children[fr * 8 + 0];
+                    const targetRookSq = currentBoardEl.children[fr * 8 + 3];
+                    const rImg = rookSq ? rookSq.querySelector("img") : null;
+                    if (rImg && targetRookSq) {
+                        const rStartRect = rookSq.getBoundingClientRect();
+                        const rDestRect = targetRookSq.getBoundingClientRect();
+                        const rDx = rDestRect.left - rStartRect.left;
+                        rImg.style.transition = "transform 280ms cubic-bezier(0.25, 1, 0.5, 1)";
+                        rImg.style.transform = `translate(${rDx}px, 0px)`;
+                    }
+                }
+            }
+            
+            // Figur gleiten lassen
+            img.style.zIndex = "150";
+            img.style.transition = "transform 280ms cubic-bezier(0.25, 1, 0.5, 1)";
+            img.style.transform = `translate(${dx}px, ${dy}px)`;
         }
     }
-
-    try {
-        if (isCapture && sounds && sounds.cap) sounds.cap.play().catch(()=>{});
-        else if (sounds && sounds.move) sounds.move.play().catch(()=>{});
-    } catch(e) {}
-
-    sendeAnAnalyse(fr, fc, tr, tc, piece, isCapture);
-    addMoveToSidebar(fr, fc, tr, tc, piece, isCapture);
-
-    turn = turn === "white" ? "black" : "white";
-
-    if (statusEl) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug";
     
-    updateTimerUI();
-
-    if (broadcast && socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({
-            type: 'move',
-            room: onlineRoom,
-            fr, fc, tr, tc,
-            piece,
+    // 2. Zustand nach Abschluss der Animation aktualisieren
+    setTimeout(() => {
+        isAnimating = false;
+        const isCapture = board[tr][tc] !== "";
+        
+        history.push({
+            board: board.map(r => [...r]),
             turn,
-            fen: typeof boardToFEN === 'function' ? boardToFEN() : ""
-        }));
-    }
+            hasMoved: { ...hasMoved },
+            enPassantTarget,
+            halfMoveClock
+        });
 
-    draw();
+        if (piece.toLowerCase() === 'p' && enPassantTarget && tr === enPassantTarget.r && tc === enPassantTarget.c) {
+            board[fr][tc] = "";
+        }
 
-    const k = typeof findKing === 'function' ? findKing(turn) : (window.findKing ? window.findKing(turn) : null);
-    if (k && isAttacked(k.r, k.c, turn === "white" ? "black" : "white")) {
-        try { if (sounds && sounds.check) sounds.check.play().catch(()=>{}); } catch(e) {}
-        if (statusEl) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " steht im SCHACH!";
-    }
-    
-    if (isCheckmate(turn)) {
-        if (timerInterval) clearInterval(timerInterval);
-        const winner = turn === "white" ? "Schwarz" : "Weiß";
-        showCheckmateModal(winner, "Schachmatt!");
+        if (piece.toLowerCase() === 'p' && Math.abs(tr - fr) === 2) {
+            enPassantTarget = { r: (fr + tr) / 2, c: fc };
+        } else {
+            enPassantTarget = null;
+        }
+
+        if (piece.toLowerCase() === 'k' && Math.abs(tc - fc) === 2) {
+            if (tc === 6) {
+                board[fr][5] = board[fr][7];
+                board[fr][7] = "";
+            } else if (tc === 2) {
+                board[fr][3] = board[fr][0];
+                board[fr][0] = "";
+            }
+        }
+
+        if (fr === 7 && fc === 4) hasMoved.whiteK = true;
+        if (fr === 7 && fc === 0) hasMoved.whiteR1 = true;
+        if (fr === 7 && fc === 7) hasMoved.whiteR8 = true;
+        if (fr === 0 && fc === 4) hasMoved.blackK = true;
+        if (fr === 0 && fc === 0) hasMoved.blackR1 = true;
+        if (fr === 0 && fc === 7) hasMoved.blackR8 = true;
+
+        board[tr][tc] = piece;
+        board[fr][fc] = "";
+        lastMove = { fr, fc, tr, tc };
+
+        // --- DAILY TACTICAL PUZZLE CHECKER ---
+        if (window.isTacticalPuzzleMode && window.activePuzzle) {
+            const ap = window.activePuzzle;
+            if (fr === ap.solution.fr && fc === ap.solution.fc && tr === ap.solution.tr && tc === ap.solution.tc) {
+                document.getElementById("puzzle-status").innerText = "🎉 RICHTIG! Berechne Belohnung...";
+                document.getElementById("puzzle-status").style.color = "#2ecc71";
+                if (typeof triggerGoldDustCelebration === 'function') {
+                    triggerGoldDustCelebration();
+                }
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ type: 'solve_puzzle', playerName: getMyName() }));
+                }
+                window.activePuzzle = null;
+            } else {
+                document.getElementById("puzzle-status").innerText = "❌ Falscher Zug! Versuche es noch einmal.";
+                document.getElementById("puzzle-status").style.color = "#e74c3c";
+                setTimeout(() => {
+                    if (typeof loadFEN === 'function') {
+                        loadFEN(ap.fen);
+                    }
+                }, 800);
+                draw();
+                return;
+            }
+        }
+
+        try {
+            if (isCapture && sounds && sounds.cap) sounds.cap.play().catch(()=>{});
+            else if (sounds && sounds.move) sounds.move.play().catch(()=>{});
+        } catch(e) {}
+
+        sendeAnAnalyse(fr, fc, tr, tc, piece, isCapture);
+        addMoveToSidebar(fr, fc, tr, tc, piece, isCapture);
+
+        turn = turn === "white" ? "black" : "white";
+
+        if (statusEl) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug";
+        
+        updateTimerUI();
+
         if (broadcast && socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: 'game_over', reason: 'checkmate', text: `Schachmatt! ${winner} gewinnt.` }));
-            if ((myColor === "white" && winner === "Weiß") || (myColor === "black" && winner === "Schwarz")) {
-                const pName = getMyName();
-                if (pName) {
-                    const moves = typeof moveHistoryLog !== 'undefined' ? moveHistoryLog.length : 0;
-                    const mode = gameModeSelect ? gameModeSelect.value : 'local';
-                    socket.send(JSON.stringify({ type: 'win', name: pName, movesCount: moves, gameMode: mode }));
+            socket.send(JSON.stringify({
+                type: 'move',
+                room: onlineRoom,
+                fr, fc, tr, tc,
+                piece,
+                turn,
+                fen: typeof boardToFEN === 'function' ? boardToFEN() : ""
+            }));
+        }
+
+        draw();
+
+        const k = typeof findKing === 'function' ? findKing(turn) : (window.findKing ? window.findKing(turn) : null);
+        if (k && isAttacked(k.r, k.c, turn === "white" ? "black" : "white")) {
+            try { if (sounds && sounds.check) sounds.check.play().catch(()=>{}); } catch(e) {}
+            if (statusEl) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " steht im SCHACH!";
+        }
+        
+        if (isCheckmate(turn)) {
+            if (timerInterval) clearInterval(timerInterval);
+            const winner = turn === "white" ? "Schwarz" : "Weiß";
+            showCheckmateModal(winner, "Schachmatt!");
+            if (typeof triggerGoldDustCelebration === 'function') {
+                triggerGoldDustCelebration();
+            }
+            if (broadcast && socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'game_over', reason: 'checkmate', text: `Schachmatt! ${winner} gewinnt.` }));
+                if ((myColor === "white" && winner === "Weiß") || (myColor === "black" && winner === "Schwarz")) {
+                    const pName = getMyName();
+                    if (pName) {
+                        const moves = typeof moveHistoryLog !== 'undefined' ? moveHistoryLog.length : 0;
+                        const mode = gameModeSelect ? gameModeSelect.value : 'local';
+                        socket.send(JSON.stringify({ type: 'win', name: pName, movesCount: moves, gameMode: mode }));
+                    }
                 }
             }
         }
-    }
 
-    if (gameModeSelect) {
-        if (gameModeSelect.value === "bot" && turn === "black") {
-            myEngineWorker.postMessage({ board, turn, fen: boardToFEN() });
-        } else if (gameModeSelect.value === "stockfish" && turn === "black") {
-            const fen = typeof boardToFEN === 'function' ? boardToFEN() : "";
-            if (fen) {
-                stockfishWorker.postMessage(`position fen ${fen}`);
-                stockfishWorker.postMessage("go depth 15");
+        if (gameModeSelect) {
+            if (gameModeSelect.value === "bot" && turn === "black") {
+                myEngineWorker.postMessage({ board, turn, fen: boardToFEN() });
+            } else if (gameModeSelect.value === "stockfish" && turn === "black") {
+                const fen = typeof boardToFEN === 'function' ? boardToFEN() : "";
+                if (fen) {
+                    stockfishWorker.postMessage(`position fen ${fen}`);
+                    stockfishWorker.postMessage("go depth 15");
+                }
             }
         }
-    }
 
-    if (premove && turn === myColor) {
-        const pm = premove;
-        premove = null;
-        if (board[pm.fr][pm.fc] && isOwn(board[pm.fr][pm.fc], turn) && canMoveLogic(pm.fr, pm.fc, pm.tr, pm.tc) && isSafeMove(pm.fr, pm.fc, pm.tr, pm.tc)) {
-            setTimeout(() => doMove(pm.fr, pm.fc, pm.tr, pm.tc), 200);
+        if (premove && turn === myColor) {
+            const pm = premove;
+            premove = null;
+            if (board[pm.fr][pm.fc] && isOwn(board[pm.fr][pm.fc], turn) && canMoveLogic(pm.fr, pm.fc, pm.tr, pm.tc) && isSafeMove(pm.fr, pm.fc, pm.tr, pm.tc)) {
+                setTimeout(() => doMove(pm.fr, pm.fc, pm.tr, pm.tc), 200);
+            }
         }
-    }
+    }, animationDuration);
 }
 
 function resetGame() {
@@ -1269,6 +1343,10 @@ function draw() {
             if (possibleMoves.some(m => m.r === r && m.c === c)) {
                 const dot = document.createElement("div");
                 dot.className = "move-dot";
+                // Wenn sich eine Figur auf dem Feld befindet, handelt es sich um einen Schlagzug!
+                if (p) {
+                    dot.classList.add("capture-dot");
+                }
                 d.appendChild(dot);
             }
 
@@ -1294,6 +1372,38 @@ function draw() {
             currentBoardEl.appendChild(d);
         });
     });
+
+    // Letzten Zug als dezenten Leuchtpfad zeichnen (SVG Overlay)
+    if (typeof lastMove !== 'undefined' && lastMove) {
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("class", "board-overlay-svg");
+        svg.style.position = "absolute";
+        svg.style.top = "0";
+        svg.style.left = "0";
+        svg.style.width = "100%";
+        svg.style.height = "100%";
+        svg.style.pointerEvents = "none";
+        svg.style.zIndex = "10"; // Über dem Feld-Hintergrund, aber unter den Figuren
+        
+        const x1 = (lastMove.fc + 0.5) * 12.5;
+        const y1 = (lastMove.fr + 0.5) * 12.5;
+        const x2 = (lastMove.tc + 0.5) * 12.5;
+        const y2 = (lastMove.tr + 0.5) * 12.5;
+        
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", `M ${x1}% ${y1}% L ${x2}% ${y2}%`);
+        path.setAttribute("stroke", "rgba(241, 196, 15, 0.45)"); // Goldener Lichtpfad
+        path.setAttribute("stroke-width", "3");
+        path.setAttribute("stroke-linecap", "round");
+        path.setAttribute("fill", "none");
+        
+        path.style.strokeDasharray = "8, 6";
+        path.style.animation = "dash 30s linear infinite";
+        path.setAttribute("filter", "drop-shadow(0px 0px 4px rgba(241, 196, 15, 0.8))");
+        
+        svg.appendChild(path);
+        currentBoardEl.appendChild(svg);
+    }
 }
 window.draw = draw;
 window.resetGame = resetGame;
@@ -1326,7 +1436,7 @@ function startGeneration() {
     }
 }
 function handleSquareClick(r, c) {
-    if (isSpectatorMode) return;
+    if (isSpectatorMode || isAnimating) return;
     const isLocal = gameModeSelect && gameModeSelect.value === "local";
     if (!isLocal && turn !== myColor) {
         if (selected) {
@@ -1641,10 +1751,45 @@ setTimeout(() => {
 function initCustomizationControls() {
     const boardThemeSelect = document.getElementById("boardThemeSelect");
     const pieceThemeSelect = document.getElementById("pieceThemeSelect");
+    const cpWhite = document.getElementById("colorWhite");
+    const cpBlack = document.getElementById("colorBlack");
     
     // Read from localStorage on boot
     const savedBoardTheme = localStorage.getItem("board_theme") || "classic";
     const savedPieceTheme = localStorage.getItem("piece_theme") || "classic";
+    const savedColorWhite = localStorage.getItem("color_white") || "#f0d9b5";
+    const savedColorBlack = localStorage.getItem("color_black") || "#b58863";
+    
+    // Load and apply custom colors on boot
+    if (cpWhite) cpWhite.value = savedColorWhite;
+    if (cpBlack) cpBlack.value = savedColorBlack;
+    document.documentElement.style.setProperty('--board-white', savedColorWhite);
+    document.documentElement.style.setProperty('--board-black', savedColorBlack);
+    
+    // Bind event listeners for the custom color pickers safely
+    if (cpWhite && cpBlack) {
+        [cpWhite, cpBlack].forEach(cp => {
+            cp.addEventListener("input", () => {
+                const whiteVal = cpWhite.value;
+                const blackVal = cpBlack.value;
+                
+                // Save custom colors to localStorage
+                localStorage.setItem("color_white", whiteVal);
+                localStorage.setItem("color_black", blackVal);
+                
+                // Apply the changes instantly to the document stylesheet variables
+                document.documentElement.style.setProperty('--board-white', whiteVal);
+                document.documentElement.style.setProperty('--board-black', blackVal);
+                
+                // Automatically switch the theme selection to "classic" so custom colors become visible
+                if (boardThemeSelect && boardThemeSelect.value !== "classic") {
+                    boardThemeSelect.value = "classic";
+                    localStorage.setItem("board_theme", "classic");
+                    applyThemes("classic", pieceThemeSelect ? pieceThemeSelect.value : "classic");
+                }
+            });
+        });
+    }
     
     if (boardThemeSelect) {
         boardThemeSelect.value = savedBoardTheme;
@@ -1766,3 +1911,137 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     }, 1500);
 });
+
+// Pure Canvas particle physics engine for Gold Dust explosion / celebration
+function triggerGoldDustCelebration() {
+    let canvas = document.getElementById("celebration-canvas");
+    if (!canvas) {
+        canvas = document.createElement("canvas");
+        canvas.id = "celebration-canvas";
+        canvas.style.position = "fixed";
+        canvas.style.top = "0";
+        canvas.style.left = "0";
+        canvas.style.width = "100vw";
+        canvas.style.height = "100vh";
+        canvas.style.pointerEvents = "none";
+        canvas.style.zIndex = "999999";
+        document.body.appendChild(canvas);
+    }
+    
+    const ctx = canvas.getContext("2d");
+    let width = canvas.width = window.innerWidth;
+    let height = canvas.height = window.innerHeight;
+    
+    const resizeHandler = () => {
+        if (canvas) {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+    };
+    window.addEventListener("resize", resizeHandler);
+    
+    const particles = [];
+    const sourceX1 = width * 0.15;
+    const sourceX2 = width * 0.85;
+    const sourceY = height * 0.85;
+    
+    // Left Fountain
+    for (let i = 0; i < 90; i++) {
+        particles.push({
+            x: sourceX1,
+            y: sourceY,
+            vx: (Math.random() * 9 + 3), 
+            vy: -(Math.random() * 16 + 12),
+            radius: Math.random() * 4 + 2,
+            color: `hsla(${Math.random() * 12 + 42}, 100%, ${Math.random() * 20 + 50}%, ${Math.random() * 0.7 + 0.3})`,
+            gravity: 0.32,
+            drag: 0.975,
+            opacity: 1,
+            spin: Math.random() * 360,
+            spinSpeed: Math.random() * 12 - 6
+        });
+    }
+    
+    // Right Fountain
+    for (let i = 0; i < 90; i++) {
+        particles.push({
+            x: sourceX2,
+            y: sourceY,
+            vx: -(Math.random() * 9 + 3), 
+            vy: -(Math.random() * 16 + 12),
+            radius: Math.random() * 4 + 2,
+            color: `hsla(${Math.random() * 12 + 42}, 100%, ${Math.random() * 20 + 50}%, ${Math.random() * 0.7 + 0.3})`,
+            gravity: 0.32,
+            drag: 0.975,
+            opacity: 1,
+            spin: Math.random() * 360,
+            spinSpeed: Math.random() * 12 - 6
+        });
+    }
+    
+    // Center sparkly explosions
+    for (let i = 0; i < 70; i++) {
+        particles.push({
+            x: width / 2 + (Math.random() * 160 - 80),
+            y: height * 0.4 + (Math.random() * 160 - 80),
+            vx: (Math.random() * 6 - 3),
+            vy: (Math.random() * 6 - 8),
+            radius: Math.random() * 3 + 1,
+            color: `#fff`,
+            gravity: 0.12,
+            drag: 0.96,
+            opacity: 1,
+            spin: Math.random() * 360,
+            spinSpeed: Math.random() * 16 - 8
+        });
+    }
+    
+    function update() {
+        ctx.clearRect(0, 0, width, height);
+        let active = false;
+        
+        particles.forEach(p => {
+            if (p.opacity > 0) {
+                active = true;
+                p.vy += p.gravity;
+                p.vx *= p.drag;
+                p.vy *= p.drag;
+                p.x += p.vx;
+                p.y += p.vy;
+                p.spin += p.spinSpeed;
+                p.opacity -= 0.007; 
+                
+                if (p.opacity < 0) p.opacity = 0;
+                
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(p.spin * Math.PI / 180);
+                ctx.fillStyle = p.color;
+                ctx.shadowBlur = Math.random() * 8 + 4;
+                ctx.shadowColor = "rgba(212, 175, 55, 0.75)";
+                
+                // Draw sparkly diamond
+                ctx.beginPath();
+                ctx.moveTo(0, -p.radius);
+                ctx.lineTo(p.radius, 0);
+                ctx.lineTo(0, p.radius);
+                ctx.lineTo(-p.radius, 0);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+        });
+        
+        if (active) {
+            requestAnimationFrame(update);
+        } else {
+            window.removeEventListener("resize", resizeHandler);
+            if (canvas.parentNode) {
+                canvas.parentNode.removeChild(canvas);
+            }
+        }
+    }
+    
+    update();
+}
+window.triggerGoldDustCelebration = triggerGoldDustCelebration;

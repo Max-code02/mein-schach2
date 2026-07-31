@@ -35,29 +35,91 @@ body {
 .black-sq { background-color: var(--board-black); }
 
 .move-dot {
-    width: 18px;
-    height: 18px;
-    background: rgba(0, 0, 0, 0.15);
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    border: 3px solid rgba(241, 196, 15, 0.6);
     border-radius: 50%;
     position: absolute;
-    z-index: 1;
+    z-index: 10;
+    pointer-events: none;
+    transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
-.selected { background-color: rgba(255, 255, 0, 0.5) !important; box-shadow: inset 0 0 15px rgba(255, 255, 0, 0.8); }
-.in-check { background-color: rgba(255, 0, 0, 0.6) !important; animation: pulse-red 1s infinite; }
+.square:hover .move-dot {
+    transform: scale(1.35);
+    border-color: rgba(241, 196, 15, 0.95);
+    box-shadow: 0 0 10px rgba(241, 196, 15, 0.6);
+}
 
-@keyframes pulse-red { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+.move-dot.capture-dot {
+    width: 52px;
+    height: 52px;
+    border: 4px solid rgba(231, 76, 60, 0.55);
+    background: transparent;
+    box-shadow: inset 0 0 8px rgba(231, 76, 60, 0.2);
+}
+
+.square:hover .move-dot.capture-dot {
+    transform: scale(1.1);
+    border-color: rgba(231, 76, 60, 0.9);
+    box-shadow: 0 0 12px rgba(231, 76, 60, 0.5), inset 0 0 12px rgba(231, 76, 60, 0.4);
+}
+
+.selected {
+    background-color: rgba(241, 196, 15, 0.3) !important;
+    box-shadow: inset 0 0 18px rgba(241, 196, 15, 0.65), 0 0 8px rgba(241, 196, 15, 0.3) !important;
+    transition: all 0.2s ease;
+}
+
+.in-check {
+    background-color: rgba(231, 76, 60, 0.4) !important;
+    animation: pulse-red-glow 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite !important;
+}
+
+@keyframes pulse-red-glow {
+    0% {
+        box-shadow: inset 0 0 15px rgba(231, 76, 60, 0.6), 0 0 10px rgba(231, 76, 60, 0.4);
+        background-color: rgba(231, 76, 60, 0.35) !important;
+    }
+    50% {
+        box-shadow: inset 0 0 35px rgba(231, 76, 60, 0.95), 0 0 25px rgba(231, 76, 60, 0.7);
+        background-color: rgba(231, 76, 60, 0.6) !important;
+    }
+    100% {
+        box-shadow: inset 0 0 15px rgba(231, 76, 60, 0.6), 0 0 10px rgba(231, 76, 60, 0.4);
+        background-color: rgba(231, 76, 60, 0.35) !important;
+    }
+}
 
 .sidebar { width: 420px; display: flex; flex-direction: column; gap: 15px; }
 .glass-panel { 
-    background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(15px);
-    border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 15px; padding: 15px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    background: rgba(15, 12, 30, 0.25); 
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.08); 
+    border-radius: 16px; 
+    padding: 16px;
+    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255,255,255,0.1);
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.glass-panel:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 15px 45px -10px rgba(0, 0, 0, 0.65), inset 0 1px 1px rgba(255,255,255,0.15);
 }
 
 #chat-container { 
-    height: 380px; background: rgba(0,0,0,0.4); border-radius: 15px; border: 1px solid rgba(255,255,255,0.1);
-    display: flex; flex-direction: column; overflow: hidden;
+    height: 380px; 
+    background: rgba(15, 12, 30, 0.35); 
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-radius: 16px; 
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex; 
+    flex-direction: column; 
+    overflow: hidden;
+    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255,255,255,0.1);
 }
 
 #chat-messages { flex-grow: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 8px; scroll-behavior: smooth; }
@@ -309,4 +371,42 @@ button:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); 
 .spectator-game-item:hover {
     background: rgba(255, 255, 255, 0.06);
     border-color: rgba(255,255,255,0.15);
+}
+
+/* Animated last move path */
+.board-overlay-svg {
+    pointer-events: none;
+    overflow: visible !important;
+}
+
+@keyframes dash {
+    to {
+        stroke-dashoffset: -100;
+    }
+}
+
+/* Neon theme glow shedding and piece styling */
+#chess-board.theme-neon img {
+    filter: drop-shadow(0 0 5px rgba(0, 240, 255, 0.7)) drop-shadow(0 0 2px rgba(255, 0, 128, 0.4));
+    transition: filter 0.25s ease-in-out, transform 0.25s ease-in-out;
+}
+#chess-board.theme-neon img:hover {
+    filter: drop-shadow(0 0 12px rgba(0, 240, 255, 0.95)) drop-shadow(0 0 4px rgba(255, 0, 128, 0.65));
+}
+
+/* Smooth custom scrollbars for glassmorphic scroll containers */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.22);
 }
