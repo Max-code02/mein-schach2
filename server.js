@@ -107,9 +107,6 @@ app.get('/download-contact/:playerName', (req, res) => {
 });
 
 // DB setup
-const { db } = require('./src/db/index.js');
-const schema = require('./src/db/schema.js');
-const { eq, asc, desc } = require('drizzle-orm');
 
 // Google Firebase Firestore & Google Gemini AI Setup
 const admin = require('firebase-admin');
@@ -172,12 +169,7 @@ function banIPPermanently(ip, reason = "Anti-Hack Trigger") {
             else console.log(`🚫 IP ${ip} wurde permanent in .htaccess gesperrt!`);
         });
 
-        if (db) {
-            db.insert(schema.ipBan).values({ ip_address: ip, reason: reason }).then(() => {
-                console.log(`🚫 IP ${ip} permanent in DB gespeichert.`);
-            }).catch(err => console.error(err.message));
-        }
-    }
+            }
 }
 
 module.exports = { banIPPermanently };
@@ -258,8 +250,7 @@ app.post('/api/login', async (req, res) => {
 
     if (!user) {
         try {
-            const data = await db.select().from(schema.players).where(eq(schema.players.username, username)).limit(1);
-            if (data && data.length > 0) {
+                        if (data && data.length > 0) {
                 user = data[0];
                 userDB[username] = user;
             }
@@ -299,8 +290,7 @@ app.post('/api/register', async (req, res) => {
     }
     
     try {
-        const data = await db.select().from(schema.players).where(eq(schema.players.username, username)).limit(1);
-        if (data && data.length > 0 && data[0].password && data[0].password !== password) {
+                if (data && data.length > 0 && data[0].password && data[0].password !== password) {
             return res.status(400).json({ success: false, error: "Name bereits vergeben!" });
         }
     } catch (e) {}
@@ -325,8 +315,7 @@ app.post('/api/register', async (req, res) => {
 
 app.get('/api/leaderboard', async (req, res) => {
     try {
-        const data = await db.select().from(schema.players).orderBy(desc(schema.players.wins)).limit(10);
-        if (data && data.length > 0) {
+                if (data && data.length > 0) {
             const list = data.map(p => ({
                 name: p.username,
                 wins: p.wins || 0,
@@ -672,9 +661,7 @@ function escapeHTML(str) {
 
 async function loadProfilesFromDB() {
     try {
-        const schema = require('./src/db/schema.js');
-        const data = await db.select().from(schema.players);
-        data.forEach(p => {
+                        data.forEach(p => {
             userDB[p.username] = {
                 password: p.password || "",
                 elo: p.elo || 1200,
@@ -850,26 +837,11 @@ async function triggerUltraBan(targetOrReason, possibleReason = null, ws = null)
             }
         }
 
-        if (db) {
-            try {
-                const schema = require('./src/db/schema.js');
-                await db.insert(schema.ipBan).values({ ip_address: foundIP, reason: reason }).onConflictDoNothing();
-            } catch (e) {}
-        }
+                }
     }
 
     // 5. Update Postgres Player Row
-    if (db) {
-        try {
-            const schema = require('./src/db/schema.js');
-            const { eq } = require('drizzle-orm');
-            await db.update(schema.players)
-                .set({ ip_ban: true, is_banned: true })
-                .where(eq(schema.players.username, cleanTarget));
-        } catch (err) {
-            console.error("Fehler beim DB-Update:", err.message);
         }
-    }
 
     // 6. Save backup local bans.json
     try {
@@ -920,16 +892,7 @@ async function unbanPlayerHelper(targetName) {
         }
     }
 
-    if (db) {
-        try {
-            const schema = require('./src/db/schema.js');
-            const { eq } = require('drizzle-orm');
-            await db.update(schema.players).set({ is_banned: false, ip_ban: false }).where(eq(schema.players.username, cleanTarget));
-            await db.delete(schema.ipBan).where(eq(schema.ipBan.ip_address, cleanTarget));
-        } catch (e) {
-            console.error("Fehler beim DB-Unban:", e.message);
         }
-    }
 
     try {
         fs.writeFileSync(BAN_FILE, JSON.stringify([...bannedIPs], null, 2));
@@ -969,9 +932,7 @@ loadData();
 
 async function loadBannedIPs() {
     try {
-        const schema = require('./src/db/schema.js');
-        const data = await db.select().from(schema.ipBan);
-        if (data) {
+                        if (data) {
             data.forEach(row => bannedIPs.add(row.ip_address));
             console.log(`✅ ${bannedIPs.size} gesperrte IPs aus DB geladen.`);
         }
@@ -1000,67 +961,7 @@ async function saveAll(specificPlayerName = null) {
         for (const uname of playersToSave) {
             const u = userDB[uname];
             if (!u) continue;
-            sqlOps.push(
-                db.insert(schema.players).values({
-                    username: uname,
-                    password: u.password || "",
-                    elo: u.elo || 1200,
-                    wins: u.wins || 0,
-                    losses: u.losses || 0,
-                    xp: u.xp || 0,
-                    level: u.level || 1,
-                    role: u.role || 'Gast',
-                    ip_address: u.ip_address || "",
-                    last_login: u.last_login ? new Date(u.last_login) : new Date()
-                }).onConflictDoUpdate({
-                    target: schema.players.username,
-                    set: {
-                        password: u.password || "",
-                        elo: u.elo || 1200,
-                        wins: u.wins || 0,
-                        losses: u.losses || 0,
-                        xp: u.xp || 0,
-                        level: u.level || 1,
-                        role: u.role || 'Gast',
-                        ip_address: u.ip_address || "",
-                        last_login: u.last_login ? new Date(u.last_login) : new Date()
                     }
-                })
-            );
-        }
-        await Promise.all(sqlOps);
-    } catch(err) {
-        console.error("SQL Save Error:", err);
-    }
-
-    if (firestoreDb) {
-        const playersToSave = specificPlayerName ? [specificPlayerName] : Object.keys(userDB);
-        for (const uname of playersToSave) {
-            const u = userDB[uname];
-            if (!u) continue;
-            const docId = u.uid || uname;
-            firestoreDb.collection('players').doc(docId).set({
-                username: uname,
-                uid: u.uid || "",
-                password: u.password || "",
-                elo: u.elo || 1200,
-                wins: u.wins || 0,
-                losses: u.losses || 0,
-                xp: u.xp || 0,
-                level: u.level || 1,
-                role: u.role || 'user',
-                ip_address: u.ip_address || "",
-                last_login: u.last_login || new Date().toISOString(),
-                last_puzzle_solved: u.last_puzzle_solved || "",
-                board_theme: u.board_theme || "classic",
-                piece_theme: u.piece_theme || "classic",
-                achievements: u.achievements || [],
-                last_puzzle_solved_date: u.last_puzzle_solved_date || "",
-                puzzle_streak: u.puzzle_streak || 0
-            }, { merge: true }).catch((err) => {
-                console.error("Firestore Save Error for user " + uname + ":", err.message);
-            });
-        }
     }
 }
 
@@ -1180,7 +1081,7 @@ wss.on('connection', function(ws, req) {
             if (data.type === 'chat' && (isCmd || containsAdminPw)) {
                 const isHandled = await handleAdminCommand(ws, data.text, {
                     wss, 
-                    db: db, 
+                    db: firestoreDb, 
                     banPlayer: triggerUltraBan, 
                     unbanPlayer: unbanPlayerHelper,
                     bannedIPs, 
@@ -1280,21 +1181,7 @@ wss.on('connection', function(ws, req) {
                 saveAll(playerName);
 
                 // Background sync attempt to DB (non-blocking)
-                try {
-                    db.insert(schema.players).values({ 
-                        username: playerName, 
-                        password: user.password, 
-                        ip_address: clientIP,
-                        last_login: new Date()
-                    }).onConflictDoUpdate({
-                        target: schema.players.username,
-                        set: {
-                            password: user.password,
-                            ip_address: clientIP,
-                            last_login: new Date()
-                        }
-                    }).catch(() => {});
-                } catch (e) {}
+                
 
                 ws.playerName = playerName; 
                 profiles[playerName] = user; 
@@ -1323,7 +1210,7 @@ wss.on('connection', function(ws, req) {
                 if (containsPw || isCmdType) {
                     const isHandled = await handleAdminCommand(ws, content, {
                         wss, 
-                        db: db, 
+                        db: firestoreDb, 
                         banPlayer: triggerUltraBan, 
                         unbanPlayer: unbanPlayerHelper,
                         bannedIPs, 
@@ -1344,8 +1231,7 @@ wss.on('connection', function(ws, req) {
                 }
 
                 try {
-                    await db.insert(schema.messages).values({ username, content: content });
-                } catch (e) {}
+                                    } catch (e) {}
 
                 if (firestoreDb) {
                     firestoreDb.collection('messages').add({
@@ -1375,8 +1261,7 @@ wss.on('connection', function(ws, req) {
                     } catch (e) {}
                 }
 
-                const messages = await db.select().from(schema.messages).orderBy(asc(schema.messages.created_at)).limit(30);
-                ws.send(JSON.stringify({ type: 'chat_history', messages: messages || [] }));
+                                ws.send(JSON.stringify({ type: 'chat_history', messages: messages || [] }));
                 return;
             }
 
@@ -1904,7 +1789,7 @@ server.listen(PORT, '0.0.0.0', async function() {
     }
 
     if (typeof startBackupScheduler === 'function') {
-        startBackupScheduler(db);
+        startBackupScheduler(firestoreDb);
     }
     if (typeof startAutoMessages === 'function') {
         startAutoMessages(wss); 

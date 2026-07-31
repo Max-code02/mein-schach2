@@ -178,9 +178,7 @@ async function handleAdminCommand(ws, text, context) {
             // 3. Postgres DB unban if configured
             if (db) {
                 try {
-                    const schema = require('./src/db/schema.js');
-                    const { eq } = require('drizzle-orm');
-                    await db.update(schema.players).set({ is_banned: false, ip_ban: false }).where(eq(schema.players.username, targetName));
+                    await db.collection("players").doc(targetName).update({ is_banned: false, ip_ban: false });
                 } catch(e) {
                     console.error("DB Unban Error:", e);
                 }
@@ -329,9 +327,7 @@ async function handleAdminCommand(ws, text, context) {
                 }
                 if (db) {
                     try {
-                        const schema = require('./src/db/schema.js');
-                        const { eq } = require('drizzle-orm');
-                        await db.update(schema.players).set({ wins: amount }).where(eq(schema.players.username, targetName));
+                        await db.collection("players").doc(targetName).update({ wins: amount });
                     } catch(e){}
                 }
                 if (global.firestoreDb) {
@@ -365,10 +361,8 @@ async function handleAdminCommand(ws, text, context) {
                 }
                 if (db) {
                     try {
-                        const schema = require('./src/db/schema.js');
-                        const { eq } = require('drizzle-orm');
-                        // Optional fallback if SQLite schema has role column
-                        // await db.update(schema.players).set({ role: role }).where(eq(schema.players.username, targetName));
+                        
+                        await db.collection("players").doc(targetName).update({ role: role });
                     } catch(e){}
                 }
                 if (global.firestoreDb) {
