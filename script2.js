@@ -46,8 +46,8 @@ window.acceptAGB = function() {
 
 // 3. Auth Modal Logic
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, updateProfile } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 
 let firebaseConfig = null;
 let fbApp = null;
@@ -68,25 +68,78 @@ async function initFirebase() {
                 fbDb = getFirestore(fbApp);
             }
 
+            let userUnsubscribe = null;
+            let adminUnsubscribe = null;
+
             onAuthStateChanged(fbAuth, async (user) => {
+                if (userUnsubscribe) userUnsubscribe();
+                if (adminUnsubscribe) adminUnsubscribe();
+                
                 if (user) {
                     const pName = user.displayName || user.email.split('@')[0];
-                    let data = { wins: 0, losses: 0, elo: 1200, level: 1, xp: 0, achievements: [] };
+                    const userDoc = doc(fbDb, 'players', user.uid);
                     
-                    try {
-                        const userDoc = doc(fbDb, 'players', user.uid);
-                        const snapshot = await getDoc(userDoc);
+                    // Listen for real-time changes (e.g. role updates, elo changes)
+                    userUnsubscribe = onSnapshot(userDoc, (snapshot) => {
                         if (snapshot.exists()) {
-                            data = snapshot.data();
+                            const data = snapshot.data();
+                            updateProfileDisplay(pName, data.elo || 1200, data.wins || 0, data.losses || 0, data.level || 1, data.xp || 0, data.achievements || []);
+                            
+                            // Check admin role
+                            const isAdmin = (data.role === 'admin' || data.role === 'moderator'); // Let's just make both see it for now, or just admin
+                            const adminPanel = document.getElementById('admin-panel');
+                            if (adminPanel) {
+                                adminPanel.style.display = data.role === 'admin' ? 'block' : 'none';
+                            }
+                            
+                            if (data.role === 'admin') {
+                                // Load all users for admin console
+                                adminUnsubscribe = onSnapshot(collection(fbDb, 'players'), (usersSnap) => {
+                                    const listEl = document.getElementById('admin-user-list');
+                                    if (!listEl) return;
+                                    listEl.innerHTML = '';
+                                    usersSnap.forEach(uDoc => {
+                                        const u = uDoc.data();
+                                        const uName = u.username || uDoc.id;
+                                        const uRole = u.role || 'user';
+                                        
+                                        const div = document.createElement('div');
+                                        div.style.display = 'flex';
+                                        div.style.justifyContent = 'space-between';
+                                        div.style.alignItems = 'center';
+                                        div.style.background = 'rgba(0,0,0,0.3)';
+                                        div.style.padding = '8px';
+                                        div.style.borderRadius = '5px';
+                                        
+                                        let roleColor = '#aaa';
+                                        if (uRole === 'admin') roleColor = '#e74c3c';
+                                        if (uRole === 'moderator') roleColor = '#2ecc71';
+                                        
+                                        div.innerHTML = `
+                                            <div>
+                                                <span style="color: #fff; font-weight: bold;">${uName}</span>
+                                                <span style="font-size: 0.8em; color: ${roleColor}; margin-left: 5px;">[${uRole}]</span>
+                                            </div>
+                                            <div style="display: flex; gap: 5px;">
+                                                <button onclick="window.setRole('${uDoc.id}', 'admin')" style="background: #e74c3c; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8em;">Admin</button>
+                                                <button onclick="window.setRole('${uDoc.id}', 'moderator')" style="background: #2ecc71; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8em;">Mod</button>
+                                                <button onclick="window.setRole('${uDoc.id}', 'user')" style="background: #7f8c8d; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8em;">User</button>
+                                            </div>
+                                        `;
+                                        listEl.appendChild(div);
+                                    });
+                                });
+                            }
                         }
-                    } catch(e) {
-                        console.error("Firestore read error", e);
-                    }
-                    
-                    updateProfileDisplay(pName, data.elo || 1200, data.wins || 0, data.losses || 0, data.level || 1, data.xp || 0, data.achievements || []);
+                    });
                     
                     localStorage.setItem('playerName', pName);
                     localStorage.setItem('firebaseUid', user.uid);
+                    
+                    const openAuthBtn = document.getElementById('openAuthBtn');
+                    const logoutBtn = document.getElementById('logoutBtn');
+                    if (openAuthBtn) openAuthBtn.style.display = 'none';
+                    if (logoutBtn) logoutBtn.style.display = 'block';
                     
                     const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
                     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -102,8 +155,40 @@ async function initFirebase() {
                     updateProfileDisplay("Gastspieler", 1200, 0, 0, 1, 0, []);
                     localStorage.removeItem('playerName');
                     localStorage.removeItem('firebaseUid');
+                    
+                    const adminPanel = document.getElementById('admin-panel');
+                    if (adminPanel) adminPanel.style.display = 'none';
+                    
+                    const openAuthBtn = document.getElementById('openAuthBtn');
+                    const logoutBtn = document.getElementById('logoutBtn');
+                    if (openAuthBtn) openAuthBtn.style.display = 'block';
+                    if (logoutBtn) logoutBtn.style.display = 'none';
                 }
             });
+            
+            window.setRole = async function(uid, role) {
+                if (!fbDb) return;
+                try {
+                    await setDoc(doc(fbDb, 'players', uid), { role: role }, { merge: true });
+                } catch(e) {
+                    console.error("Fehler beim Ändern der Rolle", e);
+                }
+            };
+            
+            window.logout = async function() {
+                if (fbAuth) {
+                    try {
+                        await signOut(fbAuth);
+                        alert("Du wurdest erfolgreich abgemeldet.");
+                        window.location.reload();
+                    } catch(e) {
+                        console.error("Fehler beim Abmelden", e);
+                    }
+                }
+            };
+            
+            const lBtn = document.getElementById('logoutBtn');
+            if (lBtn) lBtn.addEventListener('click', window.logout);
         }
     } catch (e) {
         console.warn("Firebase Init Fehler (Frontend):", e);
@@ -150,6 +235,7 @@ window.submitAuth = async function() {
             await setDoc(userDoc, {
                 username: pName,
                 uid: userCred.user.uid,
+                role: 'user',
                 elo: 1200,
                 wins: 0,
                 losses: 0,
@@ -164,6 +250,18 @@ window.submitAuth = async function() {
         
         localStorage.setItem('playerName', pName);
         localStorage.setItem('firebaseUid', userCred.user.uid);
+        
+        // Ensure WebSocket is updated immediately
+        const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'login_attempt',
+                playerName: pName,
+                uid: userCred.user.uid,
+                password: 'firebase-auth-token',
+                isRegister: authMode === 'register'
+            }));
+        }
         
         setTimeout(() => { document.getElementById('auth-modal').style.display = 'none'; }, 1000);
     } catch (error) {

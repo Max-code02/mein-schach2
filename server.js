@@ -622,13 +622,14 @@ function createPlayerProfile(name) {
 
 function sendLeaderboardUpdate(target) {
     const sorted = Object.entries(userDB)
+        .filter(([name, u]) => !name.startsWith('Spieler_'))
         .map(([name, u]) => ({
             name: name,
             wins: u.wins || 0,
             elo: u.elo || 1200,
             level: u.level || 1,
             xp: u.xp || 0,
-            role: u.role || 'Gast'
+            role: u.role || 'user'
         }))
         .sort((a, b) => b.wins - a.wins)
         .slice(0, 10);
@@ -702,6 +703,8 @@ async function loadFirestoreProfiles() {
             if (uname) {
                 userDB[uname] = {
                     username: uname,
+                    uid: data.uid || "",
+                    role: data.role || "user",
                     password: data.password || "",
                     elo: data.elo || 1200,
                     wins: data.wins || 0,
@@ -1045,7 +1048,7 @@ async function saveAll(specificPlayerName = null) {
                 losses: u.losses || 0,
                 xp: u.xp || 0,
                 level: u.level || 1,
-                role: u.role || 'Gast',
+                role: u.role || 'user',
                 ip_address: u.ip_address || "",
                 last_login: u.last_login || new Date().toISOString(),
                 last_puzzle_solved: u.last_puzzle_solved || "",
@@ -1261,6 +1264,7 @@ wss.on('connection', function(ws, req) {
                     user = {
                         username: playerName,
                         uid: uid || "",
+                        role: 'user',
                         password: password === 'firebase-auth-token' ? '' : password,
                         elo: 1200,
                         wins: 0,

@@ -351,11 +351,7 @@ function getMyName() {
     if (savedName && savedName.trim() !== "") {
         return savedName.trim();
     }
-    // 2. Wenn ein Name im Feld steht, nimm den
-    if (nameInput && nameInput.value.trim() !== "") {
-        return nameInput.value.trim();
-    }
-    // 3. Wenn NICHTS im Feld steht, nimm IMMER den festen Namen von oben
+    // 2. Ansonsten gib den festen Gastnamen für diese Session zurück
     return fixedRandomName; 
 }
 

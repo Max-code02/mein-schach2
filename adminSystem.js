@@ -1,7 +1,7 @@
 // adminSystem.js - EXCLUSIVE ADMIN PANEL (POWER-VERSION)
 const fs = require('fs');
 
-const ADMINS = ['Max', '222', 'Admin'];
+const ADMINS = []; // Gelöscht: ['Max', '222', 'Admin']
 const ADMIN_PASSWORDS = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi', '222'];
 
 function parseArgsWithQuotes(text) {
@@ -118,8 +118,24 @@ async function handleAdminCommand(ws, text, context) {
     // Tiered Authorization check
     if (!PUBLIC_COMMANDS.includes(cmd)) {
         const isHelperCmd = HELPER_COMMANDS.includes(cmd);
-        const isAdminUser = ADMINS.includes(ws.playerName) || hasAdminPass;
-        const isHelperUser = hasHelperPass;
+        
+        let hasAdminRole = false;
+        let hasHelperRole = false;
+        if (profiles) {
+            let myProfile = null;
+            if (typeof profiles.get === 'function') {
+                myProfile = profiles.get(ws.playerName);
+            } else {
+                myProfile = profiles[ws.playerName];
+            }
+            if (myProfile) {
+                if (myProfile.role === 'admin') hasAdminRole = true;
+                if (myProfile.role === 'helper' || myProfile.role === 'moderator') hasHelperRole = true;
+            }
+        }
+        
+        const isAdminUser = ADMINS.includes(ws.playerName) || hasAdminPass || hasAdminRole;
+        const isHelperUser = hasHelperPass || hasHelperRole;
 
         let isAuthorized = isAdminUser;
         if (isHelperCmd && isHelperUser) {
@@ -320,13 +336,56 @@ async function handleAdminCommand(ws, text, context) {
                 }
                 if (global.firestoreDb) {
                     try {
-                        await global.firestoreDb.collection('players').doc(targetName).set({ wins: amount }, { merge: true });
+                        let docId = targetName;
+                        if (profiles && profiles[targetName] && profiles[targetName].uid) {
+                             docId = profiles[targetName].uid;
+                        } else if (typeof profiles.has === 'function' && profiles.has(targetName)) {
+                             docId = profiles.get(targetName).uid || targetName;
+                        }
+                        await global.firestoreDb.collection('players').doc(docId).set({ wins: amount }, { merge: true });
                         console.log(`🔥 Admin command updated Firestore for ${targetName}: wins=${amount}`);
                     } catch(e) { console.error("Firestore Admin Update Error:", e); }
                 }
                 ws.send(JSON.stringify({ type: 'chat', text: `⭐ ${targetName} hat jetzt ${amount} Siege.`, system: true }));
             } else {
                 ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /setwin "Name" 100 [Passwort]', system: true }));
+            }
+            break;
+
+        case 'setrole':
+            const role = resolvedArgs.rest.toLowerCase().trim();
+            if (role && targetName) {
+                if (profiles) {
+                    if (typeof profiles.has === 'function' && profiles.has(targetName)) {
+                        const profile = profiles.get(targetName);
+                        profile.role = role;
+                    } else if (profiles[targetName]) {
+                        profiles[targetName].role = role;
+                    }
+                }
+                if (db) {
+                    try {
+                        const schema = require('./src/db/schema.js');
+                        const { eq } = require('drizzle-orm');
+                        // Optional fallback if SQLite schema has role column
+                        // await db.update(schema.players).set({ role: role }).where(eq(schema.players.username, targetName));
+                    } catch(e){}
+                }
+                if (global.firestoreDb) {
+                    try {
+                        let docId = targetName;
+                        if (profiles && profiles[targetName] && profiles[targetName].uid) {
+                             docId = profiles[targetName].uid;
+                        } else if (typeof profiles.has === 'function' && profiles.has(targetName)) {
+                             docId = profiles.get(targetName).uid || targetName;
+                        }
+                        await global.firestoreDb.collection('players').doc(docId).set({ role: role }, { merge: true });
+                        console.log(`🔥 Admin command updated Firestore for ${targetName}: role=${role}`);
+                    } catch(e) { console.error("Firestore Admin Update Error:", e); }
+                }
+                ws.send(JSON.stringify({ type: 'chat', text: `⭐ ${targetName} hat nun die Rolle '${role}'.`, system: true }));
+            } else {
+                ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /setrole "Name" admin [Passwort]', system: true }));
             }
             break;
 
@@ -344,6 +403,7 @@ async function handleAdminCommand(ws, text, context) {
                           '• `/kick <Spieler>` - Kickt einen Spieler vom Server\n' +
                           '• `/mute <Spieler>` - Stummschaltung umschalten (stummschalten/freischalten)\n' +
                           '• `/setwin <Spieler> <Anzahl>` - Passt die Siege eines Spielers an\n' +
+                          '• `/setrole <Spieler> <Rolle>` - Ändert die Rolle eines Spielers (z.B. admin)\n' +
                           '• `/clear` - Leert den Chatverlauf komplett\n' +
                           '• `/announce <Nachricht>` - Sendet eine globale System-Durchsage\n' +
                           '• `/wartung` - Schaltet den Wartungsmodus ein/aus\n' +

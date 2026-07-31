@@ -373,9 +373,21 @@
                         <button id="openAuthBtn" style="background: #3498db; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s; margin-top: 5px;">
                             🔐 Einloggen / Registrieren
                         </button>
+                        <button id="logoutBtn" style="display: none; background: #e74c3c; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s; margin-top: 5px;">
+                            🚪 Abmelden
+                        </button>
                     </div>
                 </div>
                 <div id="user-counter">Online: 1 ● Live</div>
+            </div>
+            
+            <div class="glass-panel" id="admin-panel" style="display: none;">
+                <span>🛡️ <strong>Benutzerverwaltung</strong> (Admin)</span>
+                <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin-top: 10px; max-height: 250px; overflow-y: auto;">
+                    <div id="admin-user-list" style="display: flex; flex-direction: column; gap: 8px;">
+                        <div style="color: #aaa; font-style: italic; text-align: center; font-size: 0.85em; padding: 10px 0;">Lädt Benutzer...</div>
+                    </div>
+                </div>
             </div>
 
             <div class="glass-panel">
