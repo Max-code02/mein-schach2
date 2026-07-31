@@ -285,7 +285,7 @@ app.post('/api/login', async (req, res) => {
         userDB[username].last_login = new Date().toISOString();
     }
 
-    saveAll();
+    saveAll(username);
     res.json({ success: true, name: username, elo: userDB[username].elo || 1200, wins: userDB[username].wins || 0, level: userDB[username].level || 1, xp: userDB[username].xp || 0, role: userDB[username].role || 'Gast' });
 });
 
@@ -316,7 +316,7 @@ app.post('/api/register', async (req, res) => {
     }
 
     userDB[username] = { username, password, elo: 1200, wins: 0, level: 1, xp: 0, role: 'Gast', created_at: new Date().toISOString() };
-    saveAll();
+    saveAll(username);
     res.json({ success: true, name: username });
 });
 
@@ -762,8 +762,11 @@ async function loadBannedIPs() {
 
 loadBannedIPs();
 
-async function saveAll() {
+async function saveAll(specificPlayerName = null) {
     try {
+        if (specificPlayerName && userDB[specificPlayerName]) {
+            leaderboard[specificPlayerName] = userDB[specificPlayerName].wins || 0;
+        }
         fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2));
         fs.writeFileSync(USER_FILE, JSON.stringify(userDB, null, 2));
         fs.writeFileSync(BAN_FILE, JSON.stringify([...bannedIPs], null, 2));
@@ -773,7 +776,10 @@ async function saveAll() {
 
     try {
         const sqlOps = [];
-        for (const [uname, u] of Object.entries(userDB)) {
+        const playersToSave = specificPlayerName ? [specificPlayerName] : Object.keys(userDB);
+        for (const uname of playersToSave) {
+            const u = userDB[uname];
+            if (!u) continue;
             sqlOps.push(
                 db.insert(schema.players).values({
                     username: uname,
@@ -808,7 +814,10 @@ async function saveAll() {
     }
 
     if (firestoreDb) {
-        for (const [uname, u] of Object.entries(userDB)) {
+        const playersToSave = specificPlayerName ? [specificPlayerName] : Object.keys(userDB);
+        for (const uname of playersToSave) {
+            const u = userDB[uname];
+            if (!u) continue;
             firestoreDb.collection('players').doc(uname).set({
                 username: uname,
                 password: u.password || "",
@@ -821,7 +830,9 @@ async function saveAll() {
                 ip_address: u.ip_address || "",
                 last_login: u.last_login || new Date().toISOString(),
                 last_puzzle_solved: u.last_puzzle_solved || ""
-            }, { merge: true }).catch(() => {});
+            }, { merge: true }).catch((err) => {
+                console.error("Firestore Save Error for user " + uname + ":", err.message);
+            });
         }
     }
 }
@@ -1040,7 +1051,7 @@ wss.on('connection', function(ws, req) {
                     userDB[playerName] = user;
                 }
 
-                saveAll();
+                saveAll(playerName);
 
                 // Background sync attempt to DB (non-blocking)
                 try {
@@ -1253,7 +1264,8 @@ wss.on('connection', function(ws, req) {
                         userDB[loser].elo = Math.round(loserElo + k * (0 - expectedLoser));
                         userDB[loser].losses = (userDB[loser].losses || 0) + 1;
                     }
-                    saveAll();
+                    saveAll(winner);
+                    if (userDB[loser]) saveAll(loser);
                     sendLeaderboardUpdate();
                 }
 
@@ -1369,7 +1381,7 @@ wss.on('connection', function(ws, req) {
                     description: "Der gegnerische König ist von eigenen Figuren blockiert. Finde das Matt!",
                     fen: "6rk/6pp/5N2/8/8/8/8/6K1 w - - 0 1",
                     color: "white",
-                    solution: { fr: 2, fc: 5, tr: 1, tc: 5 } // f6f7
+                    solution: { fr: 2, fc: 5, tr: 1, tc: 7 } // f6h7
                 },
                 {
                     id: 3,
@@ -1377,7 +1389,7 @@ wss.on('connection', function(ws, req) {
                     description: "Nutze die ungeschützte Schwachstelle f7!",
                     fen: "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5Q2/PPPP1PPP/RNB1K1NR w KQkq - 0 1",
                     color: "white",
-                    solution: { fr: 2, fc: 5, tr: 1, tc: 5 } // f3f7
+                    solution: { fr: 5, fc: 5, tr: 1, tc: 5 } // f3f7
                 }
             ];
 
@@ -1421,7 +1433,7 @@ wss.on('connection', function(ws, req) {
                         user.xp -= user.level * 100;
                         user.level += 1;
                     }
-                    saveAll();
+                    saveAll(uname);
                     sendLeaderboardUpdate();
                     
                     ws.send(JSON.stringify({
@@ -1480,7 +1492,10 @@ wss.on('connection', function(ws, req) {
                     userDB[name].elo = Math.round(winnerElo + k * (1 - expectedWinner));
                 }
 
-                saveAll();
+                saveAll(name);
+                if (oppName && userDB[oppName]) {
+                    saveAll(oppName);
+                }
                 sendLeaderboardUpdate();
             }
 

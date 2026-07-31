@@ -88,6 +88,7 @@ let illegalMoveCount = 0;
 let opponentName = "Unbekannt"; // Diese Zeile neu einfügen
 let onlineRoom = ""; // Hier wird sie erstellt
 let myColor = "white"; // Hier wird sie erstellt
+window.isTacticalPuzzleMode = false;
 let lastMove = null;
 let premove = null;
 
@@ -445,7 +446,7 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
     lastMove = { fr, fc, tr, tc };
 
     // --- DAILY TACTICAL PUZZLE CHECKER ---
-    if (window.activePuzzle) {
+    if (window.isTacticalPuzzleMode && window.activePuzzle) {
         const ap = window.activePuzzle;
         if (fr === ap.solution.fr && fc === ap.solution.fc && tr === ap.solution.tr && tc === ap.solution.tc) {
             document.getElementById("puzzle-status").innerText = "🎉 RICHTIG! Berechne Belohnung...";
@@ -535,6 +536,11 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
 }
 
 function resetGame() {
+    window.isTacticalPuzzleMode = false;
+    const resetPuzzleBtn = document.getElementById("resetPuzzleBtn");
+    if (resetPuzzleBtn) resetPuzzleBtn.style.display = "none";
+    const puzzleStatus = document.getElementById("puzzle-status");
+    if (puzzleStatus) puzzleStatus.innerText = "";
     board = [
         ['r','n','b','q','k','b','n','r'],
         ['p','p','p','p','p','p','p','p'],
@@ -808,17 +814,6 @@ function sendMsg() {
             content: t,
             text: t
         }));
-        socket.send(JSON.stringify({ 
-            type: 'chat', 
-            user: getMyName(),
-            playerName: getMyName(),
-            text: t,
-            content: t
-        }));
-        let cleanText = t;
-        const pws = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi'];
-        pws.forEach(pw => { cleanText = cleanText.replaceAll(pw, '').trim(); });
-        addChat("Ich", cleanText, "me"); 
         inp.value = "";
     }
 }
@@ -853,6 +848,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (gameModeSelect) {
         gameModeSelect.onchange = () => {
+            window.isTacticalPuzzleMode = false;
+            const resetPuzzleBtn = document.getElementById("resetPuzzleBtn");
+            if (resetPuzzleBtn) resetPuzzleBtn.style.display = "none";
+            const puzzleStatus = document.getElementById("puzzle-status");
+            if (puzzleStatus) puzzleStatus.innerText = "";
             const mode = gameModeSelect.value;
             if (mode === "random") {
                 if (socket && socket.readyState === WebSocket.OPEN) {
@@ -952,6 +952,27 @@ socket.onmessage = (e) => {
                 const pInput = document.getElementById('playerName');
                 if (pInput) pInput.value = data.name;
                 localStorage.setItem("playerName", data.name);
+                const tempPw = localStorage.getItem('tempPasswordHash');
+                if (tempPw) {
+                    localStorage.setItem('playerPasswordHash', tempPw);
+                    localStorage.removeItem('tempPasswordHash');
+                }
+                
+                // Profile display update
+                const profileName = document.getElementById('profile-name');
+                const profileStats = document.getElementById('profile-stats');
+                if (profileName) profileName.innerText = data.name;
+                if (profileStats) profileStats.innerText = `Elo: ${data.elo || 1200} | Siege: ${data.wins || 0}`;
+                
+                const authBtn = document.getElementById('openAuthBtn');
+                if (authBtn) {
+                    authBtn.style.display = 'none';
+                }
+                
+                const modal = document.getElementById('auth-modal');
+                if (modal) {
+                    modal.style.display = 'none';
+                }
             }
             return;
         }
@@ -1423,6 +1444,7 @@ function initPuzzleControls() {
                 // Activate puzzle load delay
                 setTimeout(() => {
                     if (window.activePuzzle) {
+                        window.isTacticalPuzzleMode = true;
                         loadFEN(window.activePuzzle.fen);
                         myColor = window.activePuzzle.color;
                         
