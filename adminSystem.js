@@ -14,6 +14,66 @@ function parseArgsWithQuotes(text) {
     return tokens;
 }
 
+function resolveTargetNameAndRest(tokens, wss, profiles) {
+    if (tokens.length <= 1) {
+        return { target: '', rest: '' };
+    }
+    const fullArgs = tokens.slice(1).join(' ');
+    
+    // Check online players
+    if (wss && wss.clients) {
+        for (const c of wss.clients) {
+            if (c.playerName) {
+                const name = c.playerName;
+                if (fullArgs.toLowerCase().startsWith(name.toLowerCase() + ' ')) {
+                    return {
+                        target: name,
+                        rest: fullArgs.slice(name.length).trim()
+                    };
+                }
+                if (fullArgs.toLowerCase() === name.toLowerCase()) {
+                    return { target: name, rest: '' };
+                }
+            }
+        }
+    }
+    
+    if (profiles) {
+        let keys = [];
+        if (typeof profiles.keys === 'function') {
+            keys = Array.from(profiles.keys());
+        } else {
+            keys = Object.keys(profiles);
+        }
+        for (const name of keys) {
+            if (fullArgs.toLowerCase().startsWith(name.toLowerCase() + ' ')) {
+                return {
+                    target: name,
+                    rest: fullArgs.slice(name.length).trim()
+                };
+            }
+            if (fullArgs.toLowerCase() === name.toLowerCase()) {
+                return { target: name, rest: '' };
+            }
+        }
+    }
+    
+    // Fallback: If the last token is a number, the target is everything except the last token
+    const lastToken = tokens[tokens.length - 1];
+    if (tokens.length > 2 && !isNaN(parseInt(lastToken))) {
+        return {
+            target: tokens.slice(1, tokens.length - 1).join(' '),
+            rest: lastToken
+        };
+    }
+    
+    // Default fallback: target is the first token, rest is the rest
+    return {
+        target: tokens[1] || '',
+        rest: tokens.slice(2).join(' ')
+    };
+}
+
 async function handleAdminCommand(ws, text, context) {
     const { wss, db, runBackup, banPlayer, unbanPlayer, bannedIPs, bannedPlayers, profiles, addSpectator, removeSpectator, roomStates } = context;
 
@@ -47,7 +107,10 @@ async function handleAdminCommand(ws, text, context) {
 
     const firstChar = originalText.charAt(0);
     const cmd = tokens[0].replace(/^[\/!\?]/, '').toLowerCase();
-    const targetName = tokens[1] || '';
+    
+    // Resolve target and remaining arguments using our ultra-robust parser
+    const resolvedArgs = resolveTargetNameAndRest(tokens, wss, profiles);
+    const targetName = resolvedArgs.target;
 
     const PUBLIC_COMMANDS = ['watch', 'spectate', 'unwatch', 'leave', 'help', 'befehle', 'befhel', '?'];
     const HELPER_COMMANDS = ['kick', 'mute', 'info', 'list'];
@@ -145,7 +208,7 @@ async function handleAdminCommand(ws, text, context) {
                 ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /ban "Name" [Passwort] [Grund]', system: true }));
                 return true;
             }
-            const reason = tokens.slice(2).join(' ') || 'Admin-Entscheidung';
+            const reason = resolvedArgs.rest || 'Admin-Entscheidung';
             if (bannedPlayers) bannedPlayers.add(targetName);
             if (typeof banPlayer === 'function') await banPlayer(targetName, reason);
             
@@ -238,11 +301,15 @@ async function handleAdminCommand(ws, text, context) {
             break;
 
         case 'setwin':
-            const amount = parseInt(tokens[2]);
+            const amount = parseInt(resolvedArgs.rest);
             if (!isNaN(amount) && targetName) {
-                if (profiles && profiles.has(targetName)) {
-                    const profile = profiles.get(targetName);
-                    profile.wins = amount;
+                if (profiles) {
+                    if (typeof profiles.has === 'function' && profiles.has(targetName)) {
+                        const profile = profiles.get(targetName);
+                        profile.wins = amount;
+                    } else if (profiles[targetName]) {
+                        profiles[targetName].wins = amount;
+                    }
                 }
                 if (db) {
                     try {
@@ -250,6 +317,12 @@ async function handleAdminCommand(ws, text, context) {
                         const { eq } = require('drizzle-orm');
                         await db.update(schema.players).set({ wins: amount }).where(eq(schema.players.username, targetName));
                     } catch(e){}
+                }
+                if (global.firestoreDb) {
+                    try {
+                        await global.firestoreDb.collection('players').doc(targetName).set({ wins: amount }, { merge: true });
+                        console.log(`🔥 Admin command updated Firestore for ${targetName}: wins=${amount}`);
+                    } catch(e) { console.error("Firestore Admin Update Error:", e); }
                 }
                 ws.send(JSON.stringify({ type: 'chat', text: `⭐ ${targetName} hat jetzt ${amount} Siege.`, system: true }));
             } else {

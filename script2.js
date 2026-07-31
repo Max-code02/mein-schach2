@@ -45,6 +45,72 @@ window.acceptAGB = function() {
 };
 
 // 3. Auth Modal Logic
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, updateProfile } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+
+let firebaseConfig = null;
+let fbApp = null;
+let fbAuth = null;
+let fbDb = null;
+
+async function initFirebase() {
+    try {
+        const res = await fetch('/firebase-applet-config.json');
+        if (res.ok) {
+            firebaseConfig = await res.json();
+            fbApp = initializeApp(firebaseConfig);
+            fbAuth = getAuth(fbApp);
+            
+            if (firebaseConfig.firestoreDatabaseId) {
+                fbDb = getFirestore(fbApp, firebaseConfig.firestoreDatabaseId);
+            } else {
+                fbDb = getFirestore(fbApp);
+            }
+
+            onAuthStateChanged(fbAuth, async (user) => {
+                if (user) {
+                    const pName = user.displayName || user.email.split('@')[0];
+                    let data = { wins: 0, losses: 0, elo: 1200, level: 1, xp: 0, achievements: [] };
+                    
+                    try {
+                        const userDoc = doc(fbDb, 'players', user.uid);
+                        const snapshot = await getDoc(userDoc);
+                        if (snapshot.exists()) {
+                            data = snapshot.data();
+                        }
+                    } catch(e) {
+                        console.error("Firestore read error", e);
+                    }
+                    
+                    updateProfileDisplay(pName, data.elo || 1200, data.wins || 0, data.losses || 0, data.level || 1, data.xp || 0, data.achievements || []);
+                    
+                    localStorage.setItem('playerName', pName);
+                    localStorage.setItem('firebaseUid', user.uid);
+                    
+                    const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'login_attempt',
+                            playerName: pName,
+                            uid: user.uid,
+                            password: 'firebase-auth-token',
+                            isRegister: false
+                        }));
+                    }
+                } else {
+                    updateProfileDisplay("Gastspieler", 1200, 0, 0, 1, 0, []);
+                    localStorage.removeItem('playerName');
+                    localStorage.removeItem('firebaseUid');
+                }
+            });
+        }
+    } catch (e) {
+        console.warn("Firebase Init Fehler (Frontend):", e);
+    }
+}
+initFirebase();
+
 let authMode = 'login';
 window.switchAuthTab = function(mode) {
     authMode = mode;
@@ -55,56 +121,53 @@ window.switchAuthTab = function(mode) {
     document.getElementById('auth-status').innerHTML = '';
 };
 
-window.submitAuth = function() {
-    const name = document.getElementById('auth-username').value.trim();
+window.submitAuth = async function() {
+    const emailStr = document.getElementById('auth-username').value.trim();
+    const email = emailStr.includes('@') ? emailStr : `${emailStr}@schachlive.test`;
     const pass = document.getElementById('auth-password').value;
     const status = document.getElementById('auth-status');
 
-    if (!name || !pass) {
+    if (!emailStr || !pass) {
         status.innerHTML = "<span style='color: #e74c3c;'>❌ Bitte fülle alle Felder aus!</span>";
         return;
     }
-    status.innerHTML = "<span style='color: #3498db;'>⏳ Verbinde mit Server...</span>";
-
-    let hashedPass = pass;
-    if (typeof CryptoJS !== 'undefined' && CryptoJS.SHA256) {
-        hashedPass = CryptoJS.SHA256(pass).toString();
+    
+    if (!fbAuth) {
+        status.innerHTML = "<span style='color: #e74c3c;'>❌ Firebase Auth nicht verfügbar!</span>";
+        return;
     }
+    
+    status.innerHTML = "<span style='color: #3498db;'>⏳ Verbinde...</span>";
 
-    const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
-
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        // Da der Server momentan nur 'login_attempt' versteht,
-        // nutzen wir das für beides, er legt den Account automatisch an wenn er nicht existiert!
-        localStorage.setItem('tempPasswordHash', hashedPass);
-        ws.send(JSON.stringify({
-            type: 'login_attempt',
-            playerName: name,
-            password: hashedPass,
-            isRegister: authMode === 'register'
-        }));
-    } else {
-        const apiBaseUrl = window.apiBase || (window.location.hostname.includes('github.io') ? 'https://mein-schach2.onrender.com' : '');
-        fetch(`${apiBaseUrl}/api/${authMode}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: name, password: hashedPass })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                status.innerHTML = "<span style='color: #2ecc71;'>✅ Erfolgreich!</span>";
-                localStorage.setItem('playerName', name);
-                localStorage.setItem('playerPasswordHash', hashedPass);
-                updateProfileDisplay(name, data.elo, data.wins);
-                setTimeout(() => { document.getElementById('auth-modal').style.display = 'none'; }, 1000);
-            } else {
-                status.innerHTML = "<span style='color: #e74c3c;'>❌ " + (data.error || "Fehler") + "</span>";
-            }
-        })
-        .catch(() => {
-            status.innerHTML = "<span style='color: #e74c3c;'>❌ Netzwerk-Fehler</span>";
-        });
+    try {
+        let userCred;
+        const pName = emailStr.split('@')[0];
+        if (authMode === 'register') {
+            userCred = await createUserWithEmailAndPassword(fbAuth, email, pass);
+            await updateProfile(userCred.user, { displayName: pName });
+            
+            const userDoc = doc(fbDb, 'players', userCred.user.uid);
+            await setDoc(userDoc, {
+                username: pName,
+                uid: userCred.user.uid,
+                elo: 1200,
+                wins: 0,
+                losses: 0,
+                level: 1,
+                xp: 0
+            });
+            status.innerHTML = "<span style='color: #2ecc71;'>✅ Erfolgreich registriert!</span>";
+        } else {
+            userCred = await signInWithEmailAndPassword(fbAuth, email, pass);
+            status.innerHTML = "<span style='color: #2ecc71;'>✅ Erfolgreich eingeloggt!</span>";
+        }
+        
+        localStorage.setItem('playerName', pName);
+        localStorage.setItem('firebaseUid', userCred.user.uid);
+        
+        setTimeout(() => { document.getElementById('auth-modal').style.display = 'none'; }, 1000);
+    } catch (error) {
+        status.innerHTML = "<span style='color: #e74c3c;'>❌ " + error.message + "</span>";
     }
 };
 

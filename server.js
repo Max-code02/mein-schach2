@@ -1035,8 +1035,10 @@ async function saveAll(specificPlayerName = null) {
         for (const uname of playersToSave) {
             const u = userDB[uname];
             if (!u) continue;
-            firestoreDb.collection('players').doc(uname).set({
+            const docId = u.uid || uname;
+            firestoreDb.collection('players').doc(docId).set({
                 username: uname,
+                uid: u.uid || "",
                 password: u.password || "",
                 elo: u.elo || 1200,
                 wins: u.wins || 0,
@@ -1230,7 +1232,7 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'login_attempt') {
-                const { playerName, password, clientIP } = data;
+                const { playerName, password, clientIP, uid } = data;
                 if (!playerName || !password) {
                     return ws.send(JSON.stringify({ type: 'login_error', text: 'Bitte Name & Passwort eingeben!' }));
                 }
@@ -1249,15 +1251,17 @@ wss.on('connection', function(ws, req) {
                 }
 
                 if (user) {
-                    if (user.password && user.password !== password) {
+                    if (password !== 'firebase-auth-token' && user.password && user.password !== password) {
                         return ws.send(JSON.stringify({ type: 'login_error', text: 'Falsches Passwort für diesen Namen!' }));
                     }
                     user.last_login = new Date();
-                    user.password = password;
+                    if (password !== 'firebase-auth-token') user.password = password;
+                    if (uid) user.uid = uid;
                 } else {
                     user = {
                         username: playerName,
-                        password: password,
+                        uid: uid || "",
+                        password: password === 'firebase-auth-token' ? '' : password,
                         elo: 1200,
                         wins: 0,
                         xp: 0,
@@ -1275,13 +1279,13 @@ wss.on('connection', function(ws, req) {
                 try {
                     db.insert(schema.players).values({ 
                         username: playerName, 
-                        password: password, 
+                        password: user.password, 
                         ip_address: clientIP,
                         last_login: new Date()
                     }).onConflictDoUpdate({
                         target: schema.players.username,
                         set: {
-                            password: password,
+                            password: user.password,
                             ip_address: clientIP,
                             last_login: new Date()
                         }

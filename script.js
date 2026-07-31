@@ -1404,8 +1404,18 @@ socket.onopen = () => {
     
     // Auto-Login, falls bereits eingeloggt
     const savedName = localStorage.getItem('playerName');
+    const savedUid = localStorage.getItem('firebaseUid');
     const savedHash = localStorage.getItem('playerPasswordHash');
-    if (savedName && savedHash) {
+    
+    if (savedName && savedUid) {
+        console.log("Automatischer Firebase-Login für " + savedName);
+        socket.send(JSON.stringify({
+            type: 'login_attempt',
+            playerName: savedName,
+            uid: savedUid,
+            password: 'firebase-auth-token'
+        }));
+    } else if (savedName && savedHash) {
         console.log("Automatischer Hintergrund-Login für " + savedName);
         socket.send(JSON.stringify({
             type: 'login_attempt',
@@ -1423,7 +1433,11 @@ function draw() {
     const inCheck = k ? isAttacked(k.r, k.c, turn === "white" ? "black" : "white") : false;
 
     let possibleMoves = [];
-    if (selected) {
+    if (selected && board[selected.r] && board[selected.r][selected.c]) {
+        const originalTurn = turn;
+        const selectedPiece = board[selected.r][selected.c];
+        const selectedPieceColor = isOwn(selectedPiece, "white") ? "white" : "black";
+        turn = selectedPieceColor; // Temporarily evaluate using piece owner color
         for (let r = 0; r < 8; r++) {
             for (let c = 0; c < 8; c++) {
                 if (canMoveLogic(selected.r, selected.c, r, c) && isSafeMove(selected.r, selected.c, r, c)) {
@@ -1431,6 +1445,7 @@ function draw() {
                 }
             }
         }
+        turn = originalTurn; // Restore original turn
     }
 
     board.forEach((row, r) => {
@@ -1895,19 +1910,31 @@ function initCustomizationControls() {
     const pieceThemeSelect = document.getElementById("pieceThemeSelect");
     const cpWhite = document.getElementById("colorWhite");
     const cpBlack = document.getElementById("colorBlack");
+    const cpMoveDot = document.getElementById("colorMoveDot");
     
     // Read from localStorage on boot
     const savedBoardTheme = localStorage.getItem("board_theme") || "classic";
     const savedPieceTheme = localStorage.getItem("piece_theme") || "classic";
     const savedColorWhite = localStorage.getItem("color_white") || "#f0d9b5";
     const savedColorBlack = localStorage.getItem("color_black") || "#b58863";
+    const savedColorMoveDot = localStorage.getItem("color_move_dot") || "#f1c40f";
     
     // Load and apply custom colors on boot
     if (cpWhite) cpWhite.value = savedColorWhite;
     if (cpBlack) cpBlack.value = savedColorBlack;
+    if (cpMoveDot) cpMoveDot.value = savedColorMoveDot;
     document.documentElement.style.setProperty('--board-white', savedColorWhite);
     document.documentElement.style.setProperty('--board-black', savedColorBlack);
+    document.documentElement.style.setProperty('--move-dot-color', savedColorMoveDot);
     
+    if (cpMoveDot) {
+        cpMoveDot.addEventListener("input", () => {
+            const moveDotVal = cpMoveDot.value;
+            localStorage.setItem("color_move_dot", moveDotVal);
+            document.documentElement.style.setProperty('--move-dot-color', moveDotVal);
+        });
+    }
+
     // Bind event listeners for the custom color pickers safely
     if (cpWhite && cpBlack) {
         [cpWhite, cpBlack].forEach(cp => {
@@ -2187,3 +2214,73 @@ function triggerGoldDustCelebration() {
     update();
 }
 window.triggerGoldDustCelebration = triggerGoldDustCelebration;
+
+function downloadReplay() {
+    if (!moveHistoryLog || moveHistoryLog.length === 0) {
+        alert("Keine Züge zum Herunterladen vorhanden!");
+        return;
+    }
+    
+    let pName = "Gast";
+    if (typeof getMyName === 'function') {
+        pName = getMyName();
+    }
+    
+    let oppName = "Gegner";
+    if (typeof opponentName !== 'undefined' && opponentName) {
+        oppName = opponentName;
+    }
+    
+    const whiteName = (typeof myColor !== 'undefined' && myColor === "white") ? pName : oppName;
+    const blackName = (typeof myColor !== 'undefined' && myColor === "black") ? pName : oppName;
+    
+    // Result determination
+    let result = "*";
+    const modalTextEl = document.getElementById('checkmate-winner-text');
+    if (modalTextEl) {
+        const modalText = modalTextEl.innerText || "";
+        if (modalText.includes("Weiß gewinnt")) {
+            result = "1-0";
+        } else if (modalText.includes("Schwarz gewinnt")) {
+            result = "0-1";
+        } else if (modalText.includes("Unentschieden") || modalText.includes("Remis")) {
+            result = "1/2-1/2";
+        }
+    }
+    
+    const today = new Date();
+    const dateStr = today.getFullYear() + "." + String(today.getMonth() + 1).padStart(2, '0') + "." + String(today.getDate()).padStart(2, '0');
+    
+    let pgn = `[Event "Online Match"]\n`;
+    pgn += `[Site "Schach Live App"]\n`;
+    pgn += `[Date "${dateStr}"]\n`;
+    pgn += `[Round "1"]\n`;
+    pgn += `[White "${whiteName}"]\n`;
+    pgn += `[Black "${blackName}"]\n`;
+    pgn += `[Result "${result}"]\n\n`;
+    
+    let movePairs = [];
+    for (let i = 0; i < moveHistoryLog.length; i += 2) {
+        const moveNum = Math.floor(i / 2) + 1;
+        const whiteMove = moveHistoryLog[i];
+        const blackMove = moveHistoryLog[i + 1] || "";
+        movePairs.push(`${moveNum}. ${whiteMove} ${blackMove}`.trim());
+    }
+    pgn += movePairs.join(" ") + ` ${result}`;
+    
+    try {
+        const blob = new Blob([pgn], { type: "application/x-chess-pgn;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `Schach_Replay_${whiteName}_vs_${blackName}.pgn`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    } catch(e) {
+        console.error("Fehler beim Herunterladen des Replays:", e);
+        alert("Es gab einen Fehler beim Herunterladen des Replays.");
+    }
+}
+window.downloadReplay = downloadReplay;

@@ -255,6 +255,7 @@
             <div class="checkmate-title">Schachmatt!</div>
             <div class="checkmate-winner" id="checkmate-winner-text">Weiß gewinnt das Spiel.</div>
             <button class="checkmate-btn" onclick="document.getElementById('checkmate-modal').style.display='none'; resetGame();">Neue Partie starten</button>
+            <button class="checkmate-btn" style="background: #3498db; margin-top: 10px;" onclick="downloadReplay();">📥 Replay (PGN) herunterladen</button>
         </div>
     </div>
 
@@ -401,11 +402,13 @@
                     </div>
                     <div id="customColorPickers" style="display: flex; gap: 10px; align-items: center; justify-content: space-between; font-size: 0.8em; margin-top: 4px;">
                         <span style="color: #aaa;">Eigene Farben:</span>
-                        <div style="display: flex; gap: 8px; align-items: center;">
+                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                             <label>Hell:</label>
                             <input type="color" id="colorWhite" value="#f0d9b5" style="width: 25px; height: 25px; border: none; border-radius: 4px; cursor: pointer; padding: 2px;">
                             <label>Dunkel:</label>
                             <input type="color" id="colorBlack" value="#b58863" style="width: 25px; height: 25px; border: none; border-radius: 4px; cursor: pointer; padding: 2px;">
+                            <label>Züge:</label>
+                            <input type="color" id="colorMoveDot" value="#f1c40f" style="width: 25px; height: 25px; border: none; border-radius: 4px; cursor: pointer; padding: 2px;">
                         </div>
                     </div>
                 </div>

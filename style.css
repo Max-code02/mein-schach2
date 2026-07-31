@@ -38,18 +38,20 @@ body {
     width: 24px;
     height: 24px;
     background: transparent;
-    border: 3px solid rgba(241, 196, 15, 0.6);
+    border: 3px solid var(--move-dot-color, #f1c40f);
     border-radius: 50%;
     position: absolute;
     z-index: 10;
     pointer-events: none;
-    transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), border-color 0.25s ease, box-shadow 0.25s ease;
+    opacity: 0.75;
+    transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), border-color 0.25s ease, box-shadow 0.25s ease, opacity 0.25s;
 }
 
 .square:hover .move-dot {
     transform: scale(1.35);
-    border-color: rgba(241, 196, 15, 0.95);
-    box-shadow: 0 0 10px rgba(241, 196, 15, 0.6);
+    border-color: var(--move-dot-color, #f1c40f);
+    box-shadow: 0 0 10px var(--move-dot-color, #f1c40f);
+    opacity: 1;
 }
 
 .move-dot.capture-dot {
@@ -383,6 +385,21 @@ button:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); 
     to {
         stroke-dashoffset: -100;
     }
+}
+
+/* Highly specific overrides to make last-move and premove visible on all themes with !important */
+#chess-board .square.white-sq.last-move,
+#chess-board .square.black-sq.last-move,
+#chess-board .square.last-move {
+    background: rgba(241, 196, 15, 0.3) !important;
+    box-shadow: inset 0 0 0 5px rgba(241, 196, 15, 0.8) !important;
+}
+
+#chess-board .square.white-sq.premove,
+#chess-board .square.black-sq.premove,
+#chess-board .square.premove {
+    background: rgba(231, 76, 60, 0.3) !important;
+    box-shadow: inset 0 0 0 5px rgba(231, 76, 60, 0.8) !important;
 }
 
 /* Neon theme glow shedding and piece styling */
