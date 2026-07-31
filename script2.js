@@ -76,6 +76,7 @@ window.submitAuth = function() {
     if (ws && ws.readyState === WebSocket.OPEN) {
         // Da der Server momentan nur 'login_attempt' versteht,
         // nutzen wir das für beides, er legt den Account automatisch an wenn er nicht existiert!
+        localStorage.setItem('tempPasswordHash', hashedPass);
         ws.send(JSON.stringify({
             type: 'login_attempt',
             playerName: name,
@@ -94,6 +95,7 @@ window.submitAuth = function() {
             if (data.success) {
                 status.innerHTML = "<span style='color: #2ecc71;'>✅ Erfolgreich!</span>";
                 localStorage.setItem('playerName', name);
+                localStorage.setItem('playerPasswordHash', hashedPass);
                 updateProfileDisplay(name, data.elo, data.wins);
                 setTimeout(() => { document.getElementById('auth-modal').style.display = 'none'; }, 1000);
             } else {
@@ -167,6 +169,11 @@ window.addEventListener('load', () => {
                         const status = document.getElementById('auth-status');
                         if (status) status.innerHTML = "<span style='color: #2ecc71;'>✅ Erfolgreich!</span>";
                         localStorage.setItem('playerName', data.name);
+                        const tempHash = localStorage.getItem('tempPasswordHash');
+                        if (tempHash) {
+                            localStorage.setItem('playerPasswordHash', tempHash);
+                            localStorage.removeItem('tempPasswordHash');
+                        }
                         updateProfileDisplay(data.name, data.elo, data.wins);
                         setTimeout(() => { 
                             const modal = document.getElementById('auth-modal');
@@ -175,6 +182,8 @@ window.addEventListener('load', () => {
                     } else if (data.type === 'login_error') {
                         const status = document.getElementById('auth-status');
                         if (status) status.innerHTML = "<span style='color: #e74c3c;'>❌ " + (data.text || "Fehler") + "</span>";
+                        localStorage.removeItem('tempPasswordHash');
+                        localStorage.removeItem('playerPasswordHash');
                     }
                 } catch(err) {}
             });

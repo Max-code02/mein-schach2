@@ -173,6 +173,11 @@ let isGlobalLocked = false;
 const fixedRandomName = "Spieler_" + Math.floor(Math.random() * 10000);
 
 function getMyName() { 
+    // 1. Wenn eingeloggt, nimm den gespeicherten Namen aus dem localStorage
+    const savedName = localStorage.getItem("playerName");
+    if (savedName && savedName.trim() !== "") {
+        return savedName.trim();
+    }
     // 2. Wenn ein Name im Feld steht, nimm den
     if (nameInput && nameInput.value.trim() !== "") {
         return nameInput.value.trim();
@@ -1025,6 +1030,18 @@ socket.onmessage = (e) => {
 
 socket.onopen = () => {
     loadChatHistory();
+    
+    // Auto-Login, falls bereits eingeloggt
+    const savedName = localStorage.getItem('playerName');
+    const savedHash = localStorage.getItem('playerPasswordHash');
+    if (savedName && savedHash) {
+        console.log("Automatischer Hintergrund-Login für " + savedName);
+        socket.send(JSON.stringify({
+            type: 'login_attempt',
+            playerName: savedName,
+            password: savedHash
+        }));
+    }
 };
 
 function draw() {
