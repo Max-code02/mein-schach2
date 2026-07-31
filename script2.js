@@ -108,17 +108,79 @@ window.submitAuth = function() {
     }
 };
 
-function updateProfileDisplay(name, elo, wins) {
+function updateProfileDisplay(name, elo, wins, losses = 0, level = 1, xp = 0, achievements = []) {
     const profileName = document.getElementById('profile-name');
     const profileStats = document.getElementById('profile-stats');
     if (profileName) profileName.innerText = name;
-    if (profileStats) profileStats.innerText = `Elo: ${elo || 1200} | Siege: ${wins || 0}`;
+    if (profileStats) profileStats.innerText = `Elo: ${elo || 1200} | S: ${wins || 0} N: ${losses || 0}`;
     
     // Auth Button verstecken, wenn eingeloggt
     const authBtn = document.getElementById('openAuthBtn');
     if (authBtn) {
         authBtn.style.display = 'none';
     }
+
+    // Achievements badges freischalten
+    if (achievements && Array.isArray(achievements)) {
+        // Reset all badges first
+        const allBadges = document.querySelectorAll('.achievement-badge');
+        allBadges.forEach(b => b.classList.add('locked'));
+        
+        achievements.forEach(achId => {
+            const el = document.getElementById(`badge-${achId}`);
+            if (el) {
+                el.classList.remove('locked');
+            }
+        });
+    }
+}
+
+function showAchievementNotification(title, description) {
+    const oldNotif = document.getElementById('achievement-notification');
+    if (oldNotif) oldNotif.remove();
+    
+    const notif = document.createElement('div');
+    notif.id = 'achievement-notification';
+    notif.innerHTML = `
+        <div style="font-size: 2em; animation: pulse 1s infinite;">🏆</div>
+        <div>
+            <div style="font-weight: bold; color: #f1c40f; font-size: 1.05em; margin-bottom: 2px;">Erfolg freigeschaltet!</div>
+            <div style="font-size: 0.95em; font-weight: 600; color: white;">${title}</div>
+            <div style="font-size: 0.8em; color: #aaa; margin-top: 1px;">${description}</div>
+        </div>
+    `;
+    
+    document.body.appendChild(notif);
+    
+    // Play a lovely success audio sound!
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        // Beautiful arpeggio chime!
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+        osc.frequency.setValueAtTime(659.25, osc.frequency.setValueAtTime ? audioCtx.currentTime : 0); // fallback
+        osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1); // E5
+        osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.2); // G5
+        osc.frequency.setValueAtTime(1046.50, audioCtx.currentTime + 0.3); // C6
+        
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
+        
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.8);
+    } catch (e) {
+        console.warn("Could not play achievement audio chime:", e);
+    }
+    
+    setTimeout(() => {
+        notif.style.animation = 'slideInRight 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) reverse forwards';
+        setTimeout(() => notif.remove(), 500);
+    }, 4500);
 }
 
 window.addEventListener('load', () => {
@@ -174,7 +236,23 @@ window.addEventListener('load', () => {
                             localStorage.setItem('playerPasswordHash', tempHash);
                             localStorage.removeItem('tempPasswordHash');
                         }
-                        updateProfileDisplay(data.name, data.elo, data.wins);
+                        updateProfileDisplay(data.name, data.elo, data.wins, data.losses || 0, data.level || 1, data.xp || 0, data.achievements || []);
+                        
+                        // Apply themes from database
+                        if (data.board_theme) {
+                            localStorage.setItem('board_theme', data.board_theme);
+                            const bSelect = document.getElementById('boardThemeSelect');
+                            if (bSelect) bSelect.value = data.board_theme;
+                        }
+                        if (data.piece_theme) {
+                            localStorage.setItem('piece_theme', data.piece_theme);
+                            const pSelect = document.getElementById('pieceThemeSelect');
+                            if (pSelect) pSelect.value = data.piece_theme;
+                        }
+                        if (typeof window.applyThemes === 'function') {
+                            window.applyThemes(data.board_theme, data.piece_theme);
+                        }
+
                         setTimeout(() => { 
                             const modal = document.getElementById('auth-modal');
                             if(modal) modal.style.display = 'none'; 
@@ -184,6 +262,10 @@ window.addEventListener('load', () => {
                         if (status) status.innerHTML = "<span style='color: #e74c3c;'>❌ " + (data.text || "Fehler") + "</span>";
                         localStorage.removeItem('tempPasswordHash');
                         localStorage.removeItem('playerPasswordHash');
+                    } else if (data.type === 'achievement_unlocked') {
+                        const badgeEl = document.getElementById(`badge-${data.id}`);
+                        if (badgeEl) badgeEl.classList.remove('locked');
+                        showAchievementNotification(data.title, data.description);
                     }
                 } catch(err) {}
             });

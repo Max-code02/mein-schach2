@@ -32,12 +32,15 @@ try { parseEmojis = require('./emojis').parseEmojis || parseEmojis; } catch (e) 
 let isNameAllowed = () => true;
 try { isNameAllowed = require('./badnames').isNameAllowed || isNameAllowed; } catch (e) {}
 
-let addSpectator = () => {}, removeSpectator = () => {}, broadcastToSpectators = () => {};
+let addSpectator = () => {}, removeSpectator = () => {}, broadcastToSpectators = () => {}, handleSpectatorChat = () => {}, getSpectatorCount = () => {}, spectatorsMap = new Map();
 try {
     const spec = require('./spectator');
     addSpectator = spec.addSpectator || addSpectator;
     removeSpectator = spec.removeSpectator || removeSpectator;
     broadcastToSpectators = spec.broadcastToSpectators || broadcastToSpectators;
+    handleSpectatorChat = spec.handleSpectatorChat || handleSpectatorChat;
+    getSpectatorCount = spec.getSpectatorCount || getSpectatorCount;
+    spectatorsMap = spec.spectators || spectatorsMap;
 } catch (e) {}
 
 let startAutoMessages = () => {};
@@ -706,7 +709,13 @@ async function loadFirestoreProfiles() {
                     xp: data.xp || 0,
                     level: data.level || 1,
                     ip_address: data.ip_address || "",
-                    last_login: data.last_login || new Date().toISOString()
+                    last_login: data.last_login || new Date().toISOString(),
+                    board_theme: data.board_theme || "classic",
+                    piece_theme: data.piece_theme || "classic",
+                    achievements: data.achievements || [],
+                    last_puzzle_solved: data.last_puzzle_solved || "",
+                    last_puzzle_solved_date: data.last_puzzle_solved_date || "",
+                    puzzle_streak: data.puzzle_streak || 0
                 };
                 leaderboard[uname] = data.wins || 0;
             }
@@ -829,10 +838,36 @@ async function saveAll(specificPlayerName = null) {
                 role: u.role || 'Gast',
                 ip_address: u.ip_address || "",
                 last_login: u.last_login || new Date().toISOString(),
-                last_puzzle_solved: u.last_puzzle_solved || ""
+                last_puzzle_solved: u.last_puzzle_solved || "",
+                board_theme: u.board_theme || "classic",
+                piece_theme: u.piece_theme || "classic",
+                achievements: u.achievements || [],
+                last_puzzle_solved_date: u.last_puzzle_solved_date || "",
+                puzzle_streak: u.puzzle_streak || 0
             }, { merge: true }).catch((err) => {
                 console.error("Firestore Save Error for user " + uname + ":", err.message);
             });
+        }
+    }
+}
+
+function checkAndUnlockAchievement(ws, uname, achievementId, title, description) {
+    if (!uname || uname === "Gast" || uname === "Anonym" || uname === "Gastspieler") return;
+    const user = userDB[uname];
+    if (!user) return;
+    
+    if (!user.achievements) user.achievements = [];
+    if (!user.achievements.includes(achievementId)) {
+        user.achievements.push(achievementId);
+        saveAll(uname);
+        
+        if (ws && ws.readyState === 1) {
+            ws.send(JSON.stringify({
+                type: 'achievement_unlocked',
+                id: achievementId,
+                title: title,
+                description: description
+            }));
         }
     }
 }
@@ -1077,7 +1112,13 @@ wss.on('connection', function(ws, req) {
                     type: 'login_success', 
                     name: playerName, 
                     elo: user.elo || 1200,
-                    wins: user.wins || 0
+                    wins: user.wins || 0,
+                    losses: user.losses || 0,
+                    level: user.level || 1,
+                    xp: user.xp || 0,
+                    board_theme: user.board_theme || 'classic',
+                    piece_theme: user.piece_theme || 'classic',
+                    achievements: user.achievements || []
                 }));
                 console.log(`✅ Login & Profil bereit: ${playerName}`);
                 return; 
@@ -1433,6 +1474,18 @@ wss.on('connection', function(ws, req) {
                         user.xp -= user.level * 100;
                         user.level += 1;
                     }
+
+                    // Taktik-Meister Streak / Total Check
+                    const yesterdayStr = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+                    if (user.last_puzzle_solved_date === yesterdayStr) {
+                        user.puzzle_streak = (user.puzzle_streak || 0) + 1;
+                    } else if (user.last_puzzle_solved_date !== todayStr) {
+                        user.puzzle_streak = 1;
+                    }
+                    user.last_puzzle_solved_date = todayStr;
+
+                    user.puzzles_solved_count = (user.puzzles_solved_count || 0) + 1;
+                    
                     saveAll(uname);
                     sendLeaderboardUpdate();
                     
@@ -1443,6 +1496,10 @@ wss.on('connection', function(ws, req) {
                         newLevel: user.level,
                         newXp: user.xp
                     }));
+
+                    if (user.puzzles_solved_count >= 3 || user.puzzle_streak >= 3) {
+                        checkAndUnlockAchievement(ws, uname, 'puzzle_streak_3', '🧠 Taktik-Meister', 'Löse 3 Taktikrätsel insgesamt.');
+                    }
                 } else {
                     ws.send(JSON.stringify({
                         type: 'puzzle_info',
@@ -1492,11 +1549,84 @@ wss.on('connection', function(ws, req) {
                     userDB[name].elo = Math.round(winnerElo + k * (1 - expectedWinner));
                 }
 
+                // Check achievements based on gameMode or botMatch!
+                const gameMode = data.gameMode || 'local';
+                const movesCount = data.movesCount || 999;
+                
+                if (gameMode === 'bot') {
+                    checkAndUnlockAchievement(ws, name, 'first_victory_bot', '🤖 Bot-Bändiger', 'Besiege den Smart-Bot.');
+                } else if (gameMode === 'stockfish') {
+                    checkAndUnlockAchievement(ws, name, 'first_victory_stockfish', '🔥 Maschinen-Bezwinger', 'Besiege den Extrem-Bot.');
+                } else if (gameMode === 'online' || gameMode === 'random' || oppName) {
+                    checkAndUnlockAchievement(ws, name, 'first_victory_online', '⚔️ Online-Ritter', 'Gewinne dein erstes Online-Spiel.');
+                }
+                
+                if (movesCount <= 40) {
+                    checkAndUnlockAchievement(ws, name, 'speed_mate', '⚡ Blitz-Schachmatt', 'Schachmatt in unter 20 Zügen.');
+                }
+
                 saveAll(name);
                 if (oppName && userDB[oppName]) {
                     saveAll(oppName);
                 }
                 sendLeaderboardUpdate();
+                return;
+            }
+
+            if (data.type === 'update_settings') {
+                const playerName = ws.playerName;
+                if (!playerName) return;
+                const user = userDB[playerName];
+                if (user) {
+                    if (data.board_theme) user.board_theme = data.board_theme;
+                    if (data.piece_theme) user.piece_theme = data.piece_theme;
+                    saveAll(playerName);
+                    ws.send(JSON.stringify({
+                        type: 'settings_updated',
+                        board_theme: user.board_theme,
+                        piece_theme: user.piece_theme
+                    }));
+                }
+                return;
+            }
+
+            if (data.type === 'get_active_games') {
+                const games = [];
+                activeRoomStates.forEach((state, roomID) => {
+                    games.push({
+                        room: roomID,
+                        whitePlayer: state.whitePlayer || 'Weiß',
+                        blackPlayer: state.blackPlayer || 'Schwarz',
+                        spectatorCount: typeof getSpectatorCount === 'function' ? getSpectatorCount(roomID) : 0,
+                        turn: state.turn || 'white'
+                    });
+                });
+                ws.send(JSON.stringify({
+                    type: 'active_games_list',
+                    games: games
+                }));
+                return;
+            }
+
+            if (data.type === 'spectate_join') {
+                if (typeof addSpectator === 'function') {
+                    addSpectator(ws, data.room, wss, activeRoomStates);
+                }
+                return;
+            }
+
+            if (data.type === 'spectate_leave') {
+                if (typeof removeSpectator === 'function') {
+                    removeSpectator(ws);
+                }
+                return;
+            }
+
+            if (data.type === 'spectate_chat') {
+                if (typeof handleSpectatorChat === 'function') {
+                    handleSpectatorChat(ws, data.text);
+                }
+                return;
             }
 
             if (data.type === 'game_over') {
@@ -1554,6 +1684,12 @@ wss.on('connection', function(ws, req) {
     ws.on('close', function() {
         if (waitingPlayer === ws) {
             waitingPlayer = null;
+        }
+        if (ws.room) {
+            activeRoomStates.delete(ws.room);
+        }
+        if (typeof removeSpectator === 'function') {
+            removeSpectator(ws);
         }
     });
 });

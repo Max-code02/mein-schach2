@@ -21,6 +21,52 @@ const PIECES = {
     'q': 'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg', 'k': 'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg'
 };
 
+const PIECE_THEMES = {
+    classic: PIECES,
+    goldsilver: {
+        'P': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/anarcandy/wP.svg',
+        'R': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/anarcandy/wR.svg',
+        'N': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/anarcandy/wN.svg',
+        'B': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/anarcandy/wB.svg',
+        'Q': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/anarcandy/wQ.svg',
+        'K': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/anarcandy/wK.svg',
+        'p': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/anarcandy/bP.svg',
+        'r': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/anarcandy/bR.svg',
+        'n': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/anarcandy/bN.svg',
+        'b': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/anarcandy/bB.svg',
+        'q': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/anarcandy/bQ.svg',
+        'k': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/anarcandy/bK.svg'
+    },
+    neon: {
+        'P': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/pirouetti/wP.svg',
+        'R': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/pirouetti/wR.svg',
+        'N': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/pirouetti/wN.svg',
+        'B': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/pirouetti/wB.svg',
+        'Q': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/pirouetti/wQ.svg',
+        'K': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/pirouetti/wK.svg',
+        'p': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/pirouetti/bP.svg',
+        'r': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/pirouetti/bR.svg',
+        'n': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/pirouetti/bN.svg',
+        'b': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/pirouetti/bB.svg',
+        'q': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/pirouetti/bQ.svg',
+        'k': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/pirouetti/bK.svg'
+    },
+    vintage: {
+        'P': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/caliente/wP.svg',
+        'R': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/caliente/wR.svg',
+        'N': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/caliente/wN.svg',
+        'B': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/caliente/wB.svg',
+        'Q': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/caliente/wQ.svg',
+        'K': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/caliente/wK.svg',
+        'p': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/caliente/bP.svg',
+        'r': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/caliente/bR.svg',
+        'n': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/caliente/bN.svg',
+        'b': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/caliente/bB.svg',
+        'q': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/caliente/bQ.svg',
+        'k': 'https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/caliente/bK.svg'
+    }
+};
+
 const textures = PIECES;
 const texture = PIECES;
 
@@ -152,7 +198,11 @@ function handleTimeout(color) {
         ws.send(JSON.stringify({ type: 'game_over', reason: 'timeout', text: `${color} hat keine Zeit mehr! ${winner} gewinnt.` }));
         if ((myColor === "white" && winner === "Weiß") || (myColor === "black" && winner === "Schwarz")) {
             const pName = getMyName();
-            if (pName) ws.send(JSON.stringify({ type: 'win', name: pName }));
+            if (pName) {
+                const moves = typeof moveHistoryLog !== 'undefined' ? moveHistoryLog.length : 0;
+                const mode = gameModeSelect ? gameModeSelect.value : 'local';
+                ws.send(JSON.stringify({ type: 'win', name: pName, movesCount: moves, gameMode: mode }));
+            }
         }
     }
 }
@@ -509,7 +559,11 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
             socket.send(JSON.stringify({ type: 'game_over', reason: 'checkmate', text: `Schachmatt! ${winner} gewinnt.` }));
             if ((myColor === "white" && winner === "Weiß") || (myColor === "black" && winner === "Schwarz")) {
                 const pName = getMyName();
-                if (pName) socket.send(JSON.stringify({ type: 'win', name: pName }));
+                if (pName) {
+                    const moves = typeof moveHistoryLog !== 'undefined' ? moveHistoryLog.length : 0;
+                    const mode = gameModeSelect ? gameModeSelect.value : 'local';
+                    socket.send(JSON.stringify({ type: 'win', name: pName, movesCount: moves, gameMode: mode }));
+                }
             }
         }
     }
@@ -808,12 +862,21 @@ function sendMsg() {
     if (!inp) return;
     const t = inp.value.trim();
     if (t && socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ 
-            type: 'chat_message', 
-            username: getMyName(),
-            content: t,
-            text: t
-        }));
+        if (typeof isSpectatorMode !== 'undefined' && isSpectatorMode) {
+            socket.send(JSON.stringify({
+                type: 'spectate_chat',
+                room: onlineRoom,
+                username: getMyName(),
+                text: t
+            }));
+        } else {
+            socket.send(JSON.stringify({ 
+                type: 'chat_message', 
+                username: getMyName(),
+                content: t,
+                text: t
+            }));
+        }
         inp.value = "";
     }
 }
@@ -823,7 +886,13 @@ window.addEventListener('DOMContentLoaded', () => {
     const sendChatBtn = document.getElementById("send-chat");
     if (sendChatBtn) sendChatBtn.onclick = sendMsg;
     const inp = document.getElementById("chat-input");
-    if (inp) inp.onkeydown = (e) => { if(e.key === "Enter") sendMsg(); };
+    if (inp) inp.onkeydown = (e) => { 
+        if(e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            sendMsg(); 
+        }
+    };
 
     const connectMPBtn = document.getElementById("connectMP");
     if (connectMPBtn) {
@@ -1039,6 +1108,71 @@ socket.onmessage = (e) => {
             }
             return;
         }
+        if (data.type === 'active_games_list') {
+            const listEl = document.getElementById('spectator-games-list');
+            if (listEl) {
+                if (!data.games || data.games.length === 0) {
+                    listEl.innerHTML = `<div style="color: #aaa; font-style: italic; text-align: center; font-size: 0.85em; padding: 10px 0;">Keine laufenden Online-Spiele.</div>`;
+                } else {
+                    listEl.innerHTML = data.games.map(g => `
+                        <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.85em;">
+                            <div style="display: flex; flex-direction: column; gap: 2px;">
+                                <span style="font-weight: bold; color: #f1c40f;">Raum ${g.room}</span>
+                                <span style="color: #ccc;">⚪ ${g.whitePlayer} vs ⚫ ${g.blackPlayer}</span>
+                            </div>
+                            <button onclick="joinSpectate('${g.room}')" style="background: #3498db; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.85em;">👁️ Zuschauen</button>
+                        </div>
+                    `).join('');
+                }
+            }
+            return;
+        }
+
+        if (data.type === 'spectator_join_success') {
+            isSpectatorMode = true;
+            onlineRoom = data.room;
+            
+            const banner = document.getElementById('spectating-banner');
+            const text = document.getElementById('spectating-text');
+            if (banner && text) {
+                banner.style.display = 'flex';
+                text.innerText = `👁️ Zuschauer-Modus: Raum ${data.room} (${data.whitePlayer} vs ${data.blackPlayer})`;
+            }
+            
+            if (data.board) {
+                board = data.board;
+                if (data.turn) turn = data.turn;
+                draw();
+            }
+            
+            addChat("System", `👁️ Du schaust jetzt Raum ${data.room} zu. Chatnachrichten im Zuschauer-Chat stören die Spieler nicht!`, "system");
+            return;
+        }
+
+        if (data.type === 'spectator_board_update') {
+            if (data.board) board = data.board;
+            if (data.turn) turn = data.turn;
+            if (data.lastMove) {
+                lastMove = data.lastMove;
+            }
+            draw();
+            return;
+        }
+
+        if (data.type === 'spectator_chat') {
+            const u = data.user || "Zuschauer";
+            addChat("👁️ " + u, data.text, "spectator");
+            return;
+        }
+
+        if (data.type === 'spectator_count') {
+            const countEl = document.getElementById('spectator-count-display');
+            if (countEl) {
+                countEl.innerText = `👁️ Zuschauer: ${data.count}`;
+                countEl.style.display = data.count > 0 ? 'inline-block' : 'none';
+            }
+            return;
+        }
         if (data.type === 'video_ready') {
             if (typeof onVideoReady === 'function') onVideoReady(data.url, data.prompt);
             addVideoToFeed({ url: data.url, prompt: data.prompt, playerName: data.playerName });
@@ -1140,7 +1274,9 @@ function draw() {
 
             if(p) {
                 const img = document.createElement("img"); 
-                img.src = PIECES[p];
+                const currentPieceTheme = localStorage.getItem('piece_theme') || 'classic';
+                const themePieces = (typeof PIECE_THEMES !== 'undefined' && PIECE_THEMES[currentPieceTheme]) ? PIECE_THEMES[currentPieceTheme] : PIECES;
+                img.src = themePieces[p] || PIECES[p];
                 img.style.width = "85%"; 
                 d.appendChild(img);
             }
@@ -1501,8 +1637,132 @@ setTimeout(() => {
     }
 }, 1000);
 
+// --- CUSTOMIZATION & PIECE CUSTOM COLOR LOGIK ---
+function initCustomizationControls() {
+    const boardThemeSelect = document.getElementById("boardThemeSelect");
+    const pieceThemeSelect = document.getElementById("pieceThemeSelect");
+    
+    // Read from localStorage on boot
+    const savedBoardTheme = localStorage.getItem("board_theme") || "classic";
+    const savedPieceTheme = localStorage.getItem("piece_theme") || "classic";
+    
+    if (boardThemeSelect) {
+        boardThemeSelect.value = savedBoardTheme;
+        boardThemeSelect.addEventListener("change", () => {
+            const theme = boardThemeSelect.value;
+            localStorage.setItem("board_theme", theme);
+            applyThemes(theme, pieceThemeSelect ? pieceThemeSelect.value : "classic");
+            
+            // Sync settings to server
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'update_settings',
+                    board_theme: theme,
+                    piece_theme: pieceThemeSelect ? pieceThemeSelect.value : "classic"
+                }));
+            }
+        });
+    }
+    
+    if (pieceThemeSelect) {
+        pieceThemeSelect.value = savedPieceTheme;
+        pieceThemeSelect.addEventListener("change", () => {
+            const theme = pieceThemeSelect.value;
+            localStorage.setItem("piece_theme", theme);
+            applyThemes(boardThemeSelect ? boardThemeSelect.value : "classic", theme);
+            
+            // Sync settings to server
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'update_settings',
+                    board_theme: boardThemeSelect ? boardThemeSelect.value : "classic",
+                    piece_theme: theme
+                }));
+            }
+        });
+    }
+    
+    // Apply initial themes
+    applyThemes(savedBoardTheme, savedPieceTheme);
+}
+
+function applyThemes(boardTheme, pieceTheme) {
+    const boardEl = document.getElementById("chess-board");
+    if (!boardEl) return;
+    
+    boardEl.classList.remove('theme-wood', 'theme-neon', 'theme-marble', 'theme-slate');
+    if (boardTheme && boardTheme !== 'classic') {
+        boardEl.classList.add(`theme-${boardTheme}`);
+    }
+    
+    if (typeof draw === 'function') draw();
+}
+window.applyThemes = applyThemes;
+
+// --- SPECTATOR CONTROLS ---
+isSpectatorMode = false;
+window.isSpectatorMode = isSpectatorMode;
+
+function initSpectatorControls() {
+    const refreshGamesBtn = document.getElementById("refreshGamesBtn");
+    const leaveSpectateBtn = document.getElementById("leaveSpectateBtn");
+    
+    if (refreshGamesBtn) {
+        refreshGamesBtn.addEventListener("click", () => {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'get_active_games' }));
+            }
+        });
+        
+        // Auto-refresh every 15 seconds
+        setInterval(() => {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'get_active_games' }));
+            }
+        }, 15000);
+    }
+    
+    if (leaveSpectateBtn) {
+        leaveSpectateBtn.addEventListener("click", leaveSpectate);
+    }
+}
+
+function joinSpectate(room) {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            type: 'spectate_join',
+            room: room
+        }));
+    }
+}
+window.joinSpectate = joinSpectate;
+
+function leaveSpectate() {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'spectate_leave' }));
+    }
+    isSpectatorMode = false;
+    window.isSpectatorMode = false;
+    
+    const banner = document.getElementById('spectating-banner');
+    if (banner) banner.style.display = 'none';
+    
+    addChat("System", "👁️ Zuschauer-Modus beendet.", "system");
+    resetGame();
+}
+window.leaveSpectate = leaveSpectate;
+
 // Initialize all controls on DOM load
 window.addEventListener('DOMContentLoaded', () => {
     initPuzzleControls();
     initFullscreenControls();
+    initCustomizationControls();
+    initSpectatorControls();
+    
+    // Pull active games list on load
+    setTimeout(() => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: 'get_active_games' }));
+        }
+    }, 1500);
 });

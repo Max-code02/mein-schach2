@@ -273,6 +273,14 @@
                 </div>
             </div>
 
+            <div id="spectating-banner" style="display: none; background: rgba(41, 128, 185, 0.2); border: 1px solid #2980b9; padding: 10px; border-radius: 8px; margin-bottom: 15px; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; width: 100%; max-width: 600px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="pulse" style="width: 8px; height: 8px; background: #e74c3c; border-radius: 50%; display: inline-block;"></span>
+                    <span id="spectating-text" style="font-weight: bold; font-size: 0.9em; color: #3498db;">👁️ Zuschauer-Modus: Du schaust zu</span>
+                </div>
+                <button id="leaveSpectateBtn" style="background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 0.8em; font-weight: bold;">Beenden</button>
+            </div>
+
             <h2 id="status-display" style="display: none;">Weiß am Zug</h2>
             <div id="chess-board"></div> 
 
@@ -333,6 +341,34 @@
                     <div id="profile-display" style="display: flex; flex-direction: column; gap: 10px; align-items: center; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px;">
                         <div id="profile-name" style="font-size: 1.2em; font-weight: bold; color: #f1c40f;">Gastspieler</div>
                         <div id="profile-stats" style="font-size: 0.9em; color: #ccc;">Elo: 1200 | Siege: 0</div>
+                        
+                        <!-- Achievements / Medaillen -->
+                        <div style="width: 100%; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 5px; padding-top: 8px;">
+                            <div style="font-size: 0.8em; text-transform: uppercase; color: #888; letter-spacing: 0.05em; text-align: center; margin-bottom: 6px;">🏆 Erfolge & Medaillen</div>
+                            <div id="profile-achievements" style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                                <div class="achievement-badge locked" id="badge-first_victory_bot">
+                                    <span>🤖</span>
+                                    <div class="tooltip"><strong>Bot-Bändiger</strong>Besiege den Smart-Bot.</div>
+                                </div>
+                                <div class="achievement-badge locked" id="badge-first_victory_stockfish">
+                                    <span>🔥</span>
+                                    <div class="tooltip"><strong>Maschinen-Bezwinger</strong>Besiege den Extrem-Bot.</div>
+                                </div>
+                                <div class="achievement-badge locked" id="badge-first_victory_online">
+                                    <span>⚔️</span>
+                                    <div class="tooltip"><strong>Online-Ritter</strong>Gewinne dein erstes Online-Spiel.</div>
+                                </div>
+                                <div class="achievement-badge locked" id="badge-puzzle_streak_3">
+                                    <span>🧠</span>
+                                    <div class="tooltip"><strong>Taktik-Meister</strong>Löse 3 Taktikrätsel insgesamt.</div>
+                                </div>
+                                <div class="achievement-badge locked" id="badge-speed_mate">
+                                    <span>⚡</span>
+                                    <div class="tooltip"><strong>Blitz-Schachmatt</strong>Schachmatt in unter 20 Zügen.</div>
+                                </div>
+                            </div>
+                        </div>
+
                         <button id="openAuthBtn" style="background: #3498db; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s; margin-top: 5px;">
                             🔐 Einloggen / Registrieren
                         </button>
@@ -342,12 +378,36 @@
             </div>
 
             <div class="glass-panel">
-                <span>🎨 <strong>Board Design</strong></span>
-                <div style="display: flex; gap: 10px; margin-top: 10px; align-items: center;">
-                    <label>Hell:</label>
-                    <input type="color" id="colorWhite" value="#f0d9b5">
-                    <label>Dunkel:</label>
-                    <input type="color" id="colorBlack" value="#b58863">
+                <span>🎨 <strong>Brett & Figuren Customization</strong></span>
+                <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
+                    <div>
+                        <label style="font-size: 0.85em; color: #ccc; display: block; margin-bottom: 4px;">Brett-Stil:</label>
+                        <select id="boardThemeSelect" style="width: 100%; padding: 6px; background: rgba(0,0,0,0.3); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; cursor: pointer;">
+                            <option value="classic">Klassisch (Default)</option>
+                            <option value="wood">Klassisches Holz 🪵</option>
+                            <option value="neon">Moderner Neon-Look ⚡</option>
+                            <option value="marble">Weißer Marmor 🏛️</option>
+                            <option value="slate">Luxuriöser 3D-Schiefer 💎</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: 0.85em; color: #ccc; display: block; margin-bottom: 4px;">Figuren-Stil:</label>
+                        <select id="pieceThemeSelect" style="width: 100%; padding: 6px; background: rgba(0,0,0,0.3); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; cursor: pointer;">
+                            <option value="classic">Klassisch (Wikipedia)</option>
+                            <option value="goldsilver">Gold & Silber ✨</option>
+                            <option value="neon">Neon Glow 🔴🔵</option>
+                            <option value="vintage">Vintage Holz 🪵</option>
+                        </select>
+                    </div>
+                    <div id="customColorPickers" style="display: flex; gap: 10px; align-items: center; justify-content: space-between; font-size: 0.8em; margin-top: 4px;">
+                        <span style="color: #aaa;">Eigene Farben:</span>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <label>Hell:</label>
+                            <input type="color" id="colorWhite" value="#f0d9b5" style="width: 25px; height: 25px; border: none; border-radius: 4px; cursor: pointer; padding: 2px;">
+                            <label>Dunkel:</label>
+                            <input type="color" id="colorBlack" value="#b58863" style="width: 25px; height: 25px; border: none; border-radius: 4px; cursor: pointer; padding: 2px;">
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -378,6 +438,16 @@
                         <button id="loadPuzzleBtn" style="flex: 1; padding: 6px; background: #9b59b6; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold;">Rätsel starten</button>
                         <button id="resetPuzzleBtn" style="padding: 6px; background: #e74c3c; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold; display: none;">Reset</button>
                     </div>
+                </div>
+            </div>
+
+            <div class="glass-panel" id="spectator-panel" style="display: flex; flex-direction: column; gap: 8px;">
+                <span>👁️ <strong>Zuschauer-Lobby</strong></span>
+                <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                    <div id="spectator-games-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto; margin-bottom: 8px;">
+                        <div style="color: #aaa; font-style: italic; text-align: center; font-size: 0.85em; padding: 10px 0;">Keine laufenden Online-Spiele.</div>
+                    </div>
+                    <button id="refreshGamesBtn" style="width: 100%; padding: 6px; background: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold; transition: 0.2s;">🔄 Liste aktualisieren</button>
                 </div>
             </div>
 
