@@ -10,5 +10,8 @@ service cloud.firestore {
     match /games/{gameId} {
       allow read, write: if true;
     }
+    match /bans/{banId} {
+      allow read, write: if true;
+    }
   }
 }

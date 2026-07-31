@@ -1,3 +1,136 @@
+// --- DYNAMISCHES BAN-OVERLAY & CHECK ---
+function showBanOverlay(message) {
+    localStorage.setItem('banned', 'true');
+    localStorage.setItem('ban_message', message || 'Deine IP-Adresse oder dein Account wurden permanent gesperrt.');
+    
+    let overlay = document.getElementById('ban-fullscreen-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'ban-fullscreen-overlay';
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.backgroundColor = 'rgba(10, 5, 5, 0.98)';
+        overlay.style.color = '#ff3b30';
+        overlay.style.display = 'flex';
+        overlay.style.flexDirection = 'column';
+        overlay.style.justifyContent = 'center';
+        overlay.style.alignItems = 'center';
+        overlay.style.zIndex = '999999';
+        overlay.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+        overlay.style.textAlign = 'center';
+        overlay.style.padding = '2rem';
+        overlay.style.boxSizing = 'border-box';
+        
+        const content = document.createElement('div');
+        content.style.maxWidth = '600px';
+        content.style.padding = '3rem';
+        content.style.borderRadius = '16px';
+        content.style.border = '2px solid #ff3b30';
+        content.style.backgroundColor = '#1a0d0d';
+        content.style.boxShadow = '0 0 30px rgba(255, 59, 48, 0.3)';
+        content.style.animation = 'pulseGlow 2s infinite alternate';
+        
+        const title = document.createElement('h1');
+        title.innerText = '⛔ ZUGRIFF GESPERRT';
+        title.style.fontSize = '3rem';
+        title.style.margin = '0 0 1.5rem 0';
+        title.style.letterSpacing = '2px';
+        title.style.fontWeight = '800';
+        title.style.textShadow = '0 0 10px rgba(255, 59, 48, 0.5)';
+        
+        const desc = document.createElement('p');
+        desc.id = 'ban-overlay-desc';
+        desc.innerText = message || 'Deine IP-Adresse oder dein Account wurden permanent gesperrt.';
+        desc.style.fontSize = '1.25rem';
+        desc.style.lineHeight = '1.6';
+        desc.style.color = '#f5f5f7';
+        desc.style.margin = '0 0 2rem 0';
+        
+        const subtext = document.createElement('p');
+        subtext.innerText = 'Diese Sperre ist permanent und kann nicht umgangen werden. Wende dich bei Fragen an den Administrator.';
+        subtext.style.fontSize = '0.9rem';
+        subtext.style.color = '#8e8e93';
+        subtext.style.margin = '0';
+
+        const checkBtn = document.createElement('button');
+        checkBtn.innerText = 'Status prüfen / Aktualisieren';
+        checkBtn.style.marginTop = '2rem';
+        checkBtn.style.padding = '0.75rem 1.5rem';
+        checkBtn.style.backgroundColor = 'transparent';
+        checkBtn.style.border = '1px solid #ff3b30';
+        checkBtn.style.color = '#ff3b30';
+        checkBtn.style.borderRadius = '8px';
+        checkBtn.style.cursor = 'pointer';
+        checkBtn.style.fontWeight = 'bold';
+        checkBtn.style.transition = 'all 0.3s';
+        checkBtn.onmouseover = () => {
+            checkBtn.style.backgroundColor = '#ff3b30';
+            checkBtn.style.color = '#1a0d0d';
+        };
+        checkBtn.onmouseout = () => {
+            checkBtn.style.backgroundColor = 'transparent';
+            checkBtn.style.color = '#ff3b30';
+        };
+        checkBtn.onclick = () => {
+            checkBtn.innerText = 'Prüfe...';
+            checkBtn.disabled = true;
+            
+            const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+            const testSocket = new WebSocket(`${protocol}//${window.location.host}`);
+            
+            let wasDisconnected = false;
+            testSocket.onclose = () => {
+                wasDisconnected = true;
+                checkBtn.innerText = 'Sperre aktiv!';
+                setTimeout(() => {
+                    checkBtn.innerText = 'Status prüfen / Aktualisieren';
+                    checkBtn.disabled = false;
+                }, 2000);
+            };
+            
+            testSocket.onopen = () => {
+                setTimeout(() => {
+                    if (!wasDisconnected) {
+                        localStorage.removeItem('banned');
+                        localStorage.removeItem('ban_message');
+                        window.location.reload();
+                    }
+                }, 1500);
+            };
+        };
+        
+        const style = document.createElement('style');
+        style.innerHTML = `
+            @keyframes pulseGlow {
+                from { box-shadow: 0 0 20px rgba(255, 59, 48, 0.2); border-color: #d32f2f; }
+                to { box-shadow: 0 0 40px rgba(255, 59, 48, 0.5); border-color: #ff3b30; }
+            }
+            body { overflow: hidden !important; }
+        `;
+        document.head.appendChild(style);
+        
+        content.appendChild(title);
+        content.appendChild(desc);
+        content.appendChild(subtext);
+        content.appendChild(checkBtn);
+        overlay.appendChild(content);
+        document.body.appendChild(overlay);
+    } else {
+        const desc = document.getElementById('ban-overlay-desc');
+        if (desc) desc.innerText = message;
+    }
+}
+
+if (localStorage.getItem('banned') === 'true') {
+    const savedMsg = localStorage.getItem('ban_message');
+    window.addEventListener('DOMContentLoaded', () => {
+        showBanOverlay(savedMsg);
+    });
+}
+
 // --- GLOBALE VARIABLEN & SHIM (KÖNIG- & TEXTUR-DEFINITIONEN) ---
 function findKing(turnColor) {
     if (typeof board === 'undefined' || !board || !Array.isArray(board)) return null;
@@ -1085,7 +1218,11 @@ socket.onmessage = (e) => {
         }
         if (data.type === 'system_alert') {
             addChat("SYSTEM ALERT", data.message, "system");
-            alert(data.message);
+            if (typeof showBanOverlay === 'function') {
+                showBanOverlay(data.message);
+            } else {
+                alert(data.message);
+            }
             return;
         }
         if (data.type === 'login_success') {
@@ -1167,6 +1304,11 @@ socket.onmessage = (e) => {
         if (data.type === 'login_error') {
             const statusBox = document.getElementById('save-status');
             if (statusBox) statusBox.innerHTML = "<span style='color: #ff4444;'>❌ " + (data.text || "Login fehlgeschlagen") + "</span>";
+            if (data.text && (data.text.includes('gesperrt') || data.text.includes('gebannt') || data.text.includes('Sperre'))) {
+                if (typeof showBanOverlay === 'function') {
+                    showBanOverlay(data.text);
+                }
+            }
             return;
         }
         if (data.type === 'move') {

@@ -42,6 +42,18 @@
         "timestamp": { "type": "string" }
       },
       "required": ["white_player", "black_player"]
+    },
+    "Ban": {
+      "title": "Ban",
+      "description": "Banned IP addresses and player accounts",
+      "type": "object",
+      "properties": {
+        "target": { "type": "string" },
+        "type": { "type": "string" },
+        "reason": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["target", "type"]
     }
   },
   "firestore": {
@@ -56,6 +68,10 @@
     "/games/{gameId}": {
       "schema": { "$ref": "#/entities/GameHistory" },
       "description": "Game history collection with visual snapshots"
+    },
+    "/bans/{banId}": {
+      "schema": { "$ref": "#/entities/Ban" },
+      "description": "Banned IPs and accounts"
     }
   }
 }

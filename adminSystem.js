@@ -89,14 +89,19 @@ async function handleAdminCommand(ws, text, context) {
             
             // 1. Memory IP & Player bans clearing
             if (bannedIPs) bannedIPs.delete(targetName);
-            if (bannedPlayers) bannedPlayers.delete(targetName);
+            if (bannedPlayers) bannedPlayers.delete(targetName.toLowerCase());
 
-            // 2. Postgres DB unban if configured
+            // 2. Centralized unbanPlayer helper
+            if (typeof unbanPlayer === 'function') {
+                await unbanPlayer(targetName);
+            }
+
+            // 3. Postgres DB unban if configured
             if (db) {
                 try {
                     const schema = require('./src/db/schema.js');
                     const { eq } = require('drizzle-orm');
-                    await db.update(schema.players).set({ is_banned: false }).where(eq(schema.players.username, targetName));
+                    await db.update(schema.players).set({ is_banned: false, ip_ban: false }).where(eq(schema.players.username, targetName));
                 } catch(e) {
                     console.error("DB Unban Error:", e);
                 }

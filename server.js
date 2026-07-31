@@ -726,6 +726,213 @@ async function loadFirestoreProfiles() {
     }
 }
 
+async function loadFirestoreBans() {
+    if (!firestoreDb) return;
+    try {
+        const snapshot = await firestoreDb.collection('bans').get();
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            const target = data.target;
+            const type = data.type; // 'ip' or 'username'
+            if (target && type) {
+                if (type === 'ip') {
+                    bannedIPs.add(target);
+                } else if (type === 'username') {
+                    bannedPlayers.add(target.trim().toLowerCase());
+                }
+            }
+        });
+        console.log(`🔥 ${snapshot.size} Bans aus Firestore geladen. (Banned IPs: ${bannedIPs.size}, Banned Players: ${bannedPlayers.size})`);
+    } catch (e) {
+        console.warn("Firestore bans load error:", e.message);
+    }
+}
+
+async function sendBanEmail(playerName, reason, ip) {
+    console.log(`✉️ E-Mail Benachrichtigung: Spieler ${playerName} (${ip}) wurde gesperrt. Grund: ${reason}`);
+}
+
+async function triggerUltraBan(targetOrReason, possibleReason = null, ws = null) {
+    let targetName = null;
+    let reason = "Admin-Entscheidung";
+    
+    // Determine if automatic anti-hack ban (1 parameter: reason) or manual admin ban (2 parameters: target, reason)
+    if (possibleReason === null) {
+        reason = targetOrReason || "Anti-Hack Trigger";
+        if (ws) {
+            targetName = ws.playerName || "Unbekannter_Spieler";
+        } else {
+            targetName = "Unbekannter_Spieler";
+        }
+    } else {
+        targetName = targetOrReason;
+        reason = possibleReason || "Admin-Entscheidung";
+    }
+
+    if (!targetName) targetName = "Unbekannter_Spieler";
+    const cleanTarget = targetName.trim();
+    const cleanTargetLower = cleanTarget.toLowerCase();
+
+    // Prevent banning Admin users
+    const ADMIN_NAMES = ['Max', '222', 'Admin'];
+    if (ADMIN_NAMES.some(adm => adm.toLowerCase() === cleanTargetLower)) {
+        console.log(`🛡️ Schutz: Admin-User ${cleanTarget} kann nicht gebannt werden.`);
+        if (ws && ws.readyState === 1) {
+            ws.send(JSON.stringify({ type: 'chat', text: `🛡️ Schutz: Admin-User "${cleanTarget}" kann nicht gebannt werden.`, system: true }));
+        }
+        return;
+    }
+
+    console.error(`⛔ CENTRAL ULTRA-BAN: Spieler: ${cleanTarget} | Grund: ${reason}`);
+
+    // 1. Memory updates
+    bannedPlayers.add(cleanTargetLower);
+    if (userDB[cleanTarget]) {
+        userDB[cleanTarget].is_banned = true;
+        userDB[cleanTarget].ip_ban = true;
+    }
+
+    // 2. Save Player Ban to Firestore
+    if (firestoreDb) {
+        try {
+            const banId = `username_${cleanTargetLower}`;
+            await firestoreDb.collection('bans').doc(banId).set({
+                target: cleanTarget,
+                type: 'username',
+                reason: reason,
+                createdAt: new Date().toISOString()
+            }, { merge: true });
+        } catch (e) {
+            console.error("Fehler beim Speichern des Player-Bans in Firestore:", e.message);
+        }
+    }
+
+    // 3. Find client IP
+    let foundIP = null;
+    if (ws && ws.playerName && ws.playerName.toLowerCase() === cleanTargetLower) {
+        foundIP = ws.clientIP;
+    } else {
+        wss.clients.forEach(c => {
+            if (c.playerName && c.playerName.toLowerCase() === cleanTargetLower) {
+                if (c.clientIP) foundIP = c.clientIP;
+            }
+        });
+    }
+
+    if (!foundIP && userDB[cleanTarget]) {
+        foundIP = userDB[cleanTarget].ip_address;
+    }
+
+    // 4. Ban IP if found
+    if (foundIP && foundIP !== '::1' && foundIP !== '127.0.0.1' && foundIP !== 'localhost') {
+        bannedIPs.add(foundIP);
+        
+        const htaccessPath = path.join(__dirname, '.htaccess');
+        const denyLine = `\nDeny from ${foundIP}`;
+        fs.appendFile(htaccessPath, denyLine, (err) => {
+            if (err) console.error("Fehler beim Schreiben in .htaccess:", err);
+        });
+
+        if (firestoreDb) {
+            try {
+                const banId = `ip_${foundIP.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+                await firestoreDb.collection('bans').doc(banId).set({
+                    target: foundIP,
+                    type: 'ip',
+                    reason: reason,
+                    createdAt: new Date().toISOString()
+                }, { merge: true });
+            } catch (e) {
+                console.error("Fehler beim Speichern des IP-Bans in Firestore:", e.message);
+            }
+        }
+
+        if (db) {
+            try {
+                const schema = require('./src/db/schema.js');
+                await db.insert(schema.ipBan).values({ ip_address: foundIP, reason: reason }).onConflictDoNothing();
+            } catch (e) {}
+        }
+    }
+
+    // 5. Update Postgres Player Row
+    if (db) {
+        try {
+            const schema = require('./src/db/schema.js');
+            const { eq } = require('drizzle-orm');
+            await db.update(schema.players)
+                .set({ ip_ban: true, is_banned: true })
+                .where(eq(schema.players.username, cleanTarget));
+        } catch (err) {
+            console.error("Fehler beim DB-Update:", err.message);
+        }
+    }
+
+    // 6. Save backup local bans.json
+    try {
+        fs.writeFileSync(BAN_FILE, JSON.stringify([...bannedIPs], null, 2));
+    } catch (e) {}
+
+    // 7. Send ban notification email
+    try {
+        await sendBanEmail(cleanTarget, reason, foundIP || "Unbekannt");
+    } catch (e) {}
+
+    // 8. Kick all active sessions for this player and their IP immediately with clear screen message
+    wss.clients.forEach(c => {
+        const nameMatch = c.playerName && c.playerName.toLowerCase() === cleanTargetLower;
+        const ipMatch = c.clientIP && c.clientIP === foundIP;
+        if (nameMatch || ipMatch) {
+            c.send(JSON.stringify({ 
+                type: 'system_alert', 
+                message: `🚫 DEIN ACCOUNT UND DEINE IP WURDEN PERMANENT GESPERRT.\nGrund: ${reason}` 
+            }));
+            setTimeout(() => { c.terminate(); }, 400);
+        }
+    });
+}
+
+async function unbanPlayerHelper(targetName) {
+    if (!targetName) return;
+    const cleanTarget = targetName.trim();
+    const cleanTargetLower = cleanTarget.toLowerCase();
+
+    bannedPlayers.delete(cleanTargetLower);
+    bannedIPs.delete(cleanTarget);
+
+    if (userDB[cleanTarget]) {
+        userDB[cleanTarget].is_banned = false;
+        userDB[cleanTarget].ip_ban = false;
+    }
+
+    if (firestoreDb) {
+        try {
+            const banIdUser = `username_${cleanTargetLower}`;
+            await firestoreDb.collection('bans').doc(banIdUser).delete();
+            
+            const banIdIP = `ip_${cleanTarget.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+            await firestoreDb.collection('bans').doc(banIdIP).delete();
+        } catch (e) {
+            console.error("Fehler beim Löschen des Bans aus Firestore:", e.message);
+        }
+    }
+
+    if (db) {
+        try {
+            const schema = require('./src/db/schema.js');
+            const { eq } = require('drizzle-orm');
+            await db.update(schema.players).set({ is_banned: false, ip_ban: false }).where(eq(schema.players.username, cleanTarget));
+            await db.delete(schema.ipBan).where(eq(schema.ipBan.ip_address, cleanTarget));
+        } catch (e) {
+            console.error("Fehler beim DB-Unban:", e.message);
+        }
+    }
+
+    try {
+        fs.writeFileSync(BAN_FILE, JSON.stringify([...bannedIPs], null, 2));
+    } catch (e) {}
+}
+
 function loadData() {
     if (fs.existsSync(LB_FILE)) {
         try {
@@ -753,6 +960,7 @@ function loadData() {
         }
     }
     loadFirestoreProfiles();
+    loadFirestoreBans();
 }
 loadData();
 
@@ -924,42 +1132,8 @@ wss.on('connection', function(ws, req) {
         const now = Date.now();
         let data;
 
-        const triggerUltraBan = async (reason) => {
-            if (ip === '::1' || ip === '127.0.0.1' || ip === 'localhost') {
-                console.log(`🛡️ Schutz: Server-IP (${ip}) wird nicht gebannt. Grund: ${reason}`);
-                return; 
-            }
-
-            const currentName = ((typeof data !== 'undefined' && data.playerName) ? data.playerName : ws.playerName || "Unbekannt").trim();
-            console.error(`⛔ ULTRA-BAN: ${ip} | User: ${currentName} | Grund: ${reason}`);
-
-            bannedIPs.add(ip);
-            try {
-                fs.writeFileSync(BAN_FILE, JSON.stringify([...bannedIPs], null, 2));
-            } catch (e) {
-                console.error("Fehler beim Speichern der bans.json");
-            }
-
-            try {
-                await db.update(schema.players)
-                    .set({ 
-                        ip_ban: true, 
-                        is_banned: true,  
-                    })
-                    .where(eq(schema.players.username, currentName));
-                console.log(`☁️ DB: Account ${currentName} und IP erfolgreich als gebannt markiert.`);
-            } catch (err) {
-                console.error("❌ Fehler beim DB-Update:", err.message);
-            }
-
-            try {
-                await sendBanEmail(currentName, reason, ip);
-            } catch (e) {}
-
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'system_alert', message: "🚫 DEIN ACCOUNT UND DEINE IP WURDEN PERMANENT GESPERRT." }));
-                setTimeout(() => { ws.terminate(); }, 500);
-            }
+        const triggerUltraBanLocal = async (reason) => {
+            await triggerUltraBan(reason, null, ws);
         };
 
         try {
@@ -981,7 +1155,7 @@ wss.on('connection', function(ws, req) {
                 return;
             }
 
-            const isSafe = validateSecurity(data, ws, bannedIPs, triggerUltraBan);
+            const isSafe = validateSecurity(data, ws, bannedIPs, triggerUltraBanLocal);
             if (!isSafe) return;
 
             const currentName = (ws.playerName || "").trim();
@@ -990,7 +1164,7 @@ wss.on('connection', function(ws, req) {
             if (data.type !== 'login_attempt' && data.type !== 'login' && data.type !== 'join') { 
                 if (data.playerName === 'Max' && ws.playerName !== 'Max') {
                     console.log(`⚠️ Identitäts-Check abgelehnt für: ${ws.playerName}`);
-                    return triggerUltraBan("Admin-Identitätsklau Versuch");
+                    return triggerUltraBanLocal("Admin-Identitätsklau Versuch");
                 }
             }
 
@@ -1003,6 +1177,7 @@ wss.on('connection', function(ws, req) {
                     wss, 
                     db: db, 
                     banPlayer: triggerUltraBan, 
+                    unbanPlayer: unbanPlayerHelper,
                     bannedIPs, 
                     bannedPlayers, 
                     profiles: userDB, 
@@ -1060,11 +1235,19 @@ wss.on('connection', function(ws, req) {
                     return ws.send(JSON.stringify({ type: 'login_error', text: 'Bitte Name & Passwort eingeben!' }));
                 }
 
-                if (bannedIPs.has(clientIP)) {
-                    return ws.send(JSON.stringify({ type: 'login_error', text: 'Deine IP ist gesperrt!' }));
+                if (bannedIPs.has(clientIP) || (ws.clientIP && bannedIPs.has(ws.clientIP))) {
+                    return ws.send(JSON.stringify({ type: 'login_error', text: 'Deine IP oder dein Account ist permanent gesperrt!' }));
+                }
+
+                if (bannedPlayers.has(playerName.toLowerCase())) {
+                    return ws.send(JSON.stringify({ type: 'login_error', text: 'Dieser Account ist permanent gesperrt!' }));
                 }
 
                 let user = userDB[playerName];
+                if (user && (user.is_banned || user.ip_ban)) {
+                    return ws.send(JSON.stringify({ type: 'login_error', text: 'Dieser Account ist permanent gesperrt!' }));
+                }
+
                 if (user) {
                     if (user.password && user.password !== password) {
                         return ws.send(JSON.stringify({ type: 'login_error', text: 'Falsches Passwort für diesen Namen!' }));
@@ -1134,6 +1317,7 @@ wss.on('connection', function(ws, req) {
                         wss, 
                         db: db, 
                         banPlayer: triggerUltraBan, 
+                        unbanPlayer: unbanPlayerHelper,
                         bannedIPs, 
                         bannedPlayers, 
                         profiles: userDB, 
