@@ -208,7 +208,9 @@ window.switchAuthTab = function(mode) {
 
 window.submitAuth = async function() {
     const emailStr = document.getElementById('auth-username').value.trim();
-    const email = emailStr.includes('@') ? emailStr : `${emailStr}@schachlive.test`;
+    // Normalize the username to avoid invalid email format (e.g. spaces, special chars)
+    const normalizedForEmail = emailStr.replace(/[^a-zA-Z0-9_.-]/g, '').toLowerCase();
+    const email = emailStr.includes('@') ? emailStr : `${normalizedForEmail}@schachlive.app`;
     const pass = document.getElementById('auth-password').value;
     const status = document.getElementById('auth-status');
 
