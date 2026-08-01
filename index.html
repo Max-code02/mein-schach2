@@ -236,14 +236,25 @@
     <div id="auth-modal" class="modal-overlay">
         <div class="modal-box">
             <span class="close-modal" onclick="document.getElementById('auth-modal').style.display='none'">&times;</span>
-            <div class="auth-tabs">
-                <div class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Login</div>
-                <div class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Registrieren</div>
-            </div>
-            <input type="text" id="auth-username" class="auth-input" placeholder="Benutzername">
-            <input type="password" id="auth-password" class="auth-input" placeholder="Passwort">
-            <button id="auth-submit-btn" class="auth-btn" onclick="submitAuth()">Einloggen</button>
+            <h2 style="color: white; margin-top: 0; margin-bottom: 20px;">Einloggen</h2>
+            <p style="color: #bdc3c7; font-size: 0.9em; margin-bottom: 20px;">Melde dich mit deinem Google-Konto an, um online zu spielen, deine Elo zu speichern und Errungenschaften freizuschalten.</p>
+            <button id="auth-google-btn" class="auth-btn" style="background: #ffffff; color: #333; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid #ddd;" onclick="submitAuthGoogle()">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width: 18px; height: 18px;" alt="Google Logo">
+                Mit Google anmelden
+            </button>
             <div id="auth-status" style="margin-top: 15px; font-size: 0.9em;"></div>
+        </div>
+    </div>
+
+    <!-- Name Modal -->
+    <div id="name-modal" class="modal-overlay">
+        <div class="modal-box">
+            <span class="close-modal" onclick="document.getElementById('name-modal').style.display='none'">&times;</span>
+            <h2 style="color: white; margin-top: 0; margin-bottom: 20px;">Benutzername ändern</h2>
+            <p style="color: #bdc3c7; font-size: 0.9em; margin-bottom: 20px;">Lege einen eindeutigen Namen für Leaderboard und Chat fest.</p>
+            <input type="text" id="new-username" class="auth-input" placeholder="Neuer Name" maxlength="15">
+            <button class="auth-btn" onclick="submitNameChange()">Speichern</button>
+            <div id="name-status" style="margin-top: 15px; font-size: 0.9em;"></div>
         </div>
     </div>
 
@@ -340,7 +351,10 @@
                 <div class="user-info" style="display: flex; flex-direction: column; gap: 8px;">
                     <span>👤 <strong>Spieler-Profil</strong></span>
                     <div id="profile-display" style="display: flex; flex-direction: column; gap: 10px; align-items: center; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px;">
-                        <div id="profile-name" style="font-size: 1.2em; font-weight: bold; color: #f1c40f;">Gastspieler</div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div id="profile-name" style="font-size: 1.2em; font-weight: bold; color: #f1c40f;">Gastspieler</div>
+                            <button id="edit-name-btn" onclick="openNameModal()" style="background: none; border: none; cursor: pointer; color: #aaa; padding: 2px;" title="Name ändern">✏️</button>
+                        </div>
                         <div id="profile-stats" style="font-size: 0.9em; color: #ccc;">Elo: 1200 | Siege: 0</div>
                         
                         <!-- Achievements / Medaillen -->

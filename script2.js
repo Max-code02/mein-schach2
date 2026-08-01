@@ -46,8 +46,8 @@ window.acceptAGB = function() {
 
 // 3. Auth Modal Logic
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, updateProfile, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 
 let firebaseConfig = null;
 let fbApp = null;
@@ -83,7 +83,23 @@ async function initFirebase() {
                     userUnsubscribe = onSnapshot(userDoc, (snapshot) => {
                         if (snapshot.exists()) {
                             const data = snapshot.data();
-                            updateProfileDisplay(pName, data.elo || 1200, data.wins || 0, data.losses || 0, data.level || 1, data.xp || 0, data.achievements || []);
+                            const dbName = data.username || pName;
+                            
+                            // Speichere den Namen für Websocket und andere Features
+                            localStorage.setItem('playerName', dbName);
+                            const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+                            if (ws && ws.readyState === WebSocket.OPEN && ws.playerName !== dbName) {
+                                ws.send(JSON.stringify({
+                                    type: 'login_attempt',
+                                    playerName: dbName,
+                                    uid: user.uid,
+                                    password: 'firebase-auth-token',
+                                    isRegister: false
+                                }));
+                                ws.playerName = dbName;
+                            }
+                            
+                            updateProfileDisplay(dbName, data.elo || 1200, data.wins || 0, data.losses || 0, data.level || 1, data.xp || 0, data.achievements || []);
                             
                             // Check admin role
                             const isAdmin = (data.role === 'admin' || data.role === 'moderator'); // Let's just make both see it for now, or just admin
@@ -196,56 +212,29 @@ async function initFirebase() {
 }
 initFirebase();
 
-let authMode = 'login';
-window.switchAuthTab = function(mode) {
-    authMode = mode;
-    document.getElementById('tab-login').classList.remove('active');
-    document.getElementById('tab-register').classList.remove('active');
-    document.getElementById('tab-' + mode).classList.add('active');
-    document.getElementById('auth-submit-btn').innerText = mode === 'login' ? 'Einloggen' : 'Registrieren';
-    document.getElementById('auth-status').innerHTML = '';
-};
-
-window.submitAuth = async function() {
-    const emailStr = document.getElementById('auth-username').value.trim();
-    const pass = document.getElementById('auth-password').value;
+window.submitAuthGoogle = async function() {
     const status = document.getElementById('auth-status');
-
-    if (!emailStr || !pass) {
-        status.innerHTML = "<span style='color: #e74c3c;'>❌ Bitte fülle alle Felder aus!</span>";
-        return;
-    }
-
-    // Normalize the username to avoid invalid email format (e.g. spaces, special chars)
-    const normalizedForEmail = emailStr.replace(/[^a-zA-Z0-9_.-]/g, '').toLowerCase();
-    // If it has an @ sign, remove any spaces. Otherwise, append a dummy domain.
-    const email = emailStr.includes('@') ? emailStr.replace(/\s+/g, '') : `${normalizedForEmail}@schachlive.app`;
-    
-    // Strict email validation regex
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-        status.innerHTML = "<span style='color: #e74c3c;'>❌ Ungültige E-Mail-Adresse!</span>";
-        return;
-    }
-    
     if (!fbAuth) {
-        status.innerHTML = "<span style='color: #e74c3c;'>❌ Firebase Auth nicht verfügbar!</span>";
+        if(status) status.innerHTML = "<span style='color: #e74c3c;'>❌ Firebase Auth nicht verfügbar!</span>";
         return;
     }
     
-    status.innerHTML = "<span style='color: #3498db;'>⏳ Verbinde...</span>";
+    if(status) status.innerHTML = "<span style='color: #3498db;'>⏳ Verbinde mit Google...</span>";
 
     try {
-        let userCred;
-        const pName = emailStr.split('@')[0];
-        if (authMode === 'register') {
-            userCred = await createUserWithEmailAndPassword(fbAuth, email, pass);
-            await updateProfile(userCred.user, { displayName: pName });
-            
-            const userDoc = doc(fbDb, 'players', userCred.user.uid);
+        const provider = new GoogleAuthProvider();
+        const userCred = await signInWithPopup(fbAuth, provider);
+        if(status) status.innerHTML = "<span style='color: #2ecc71;'>✅ Erfolgreich eingeloggt!</span>";
+        
+        const user = userCred.user;
+        const pName = user.displayName || user.email.split('@')[0];
+        
+        const userDoc = doc(fbDb, 'players', user.uid);
+        const docSnap = await getDoc(userDoc);
+        if (!docSnap.exists()) {
             await setDoc(userDoc, {
                 username: pName,
-                uid: userCred.user.uid,
+                uid: user.uid,
                 role: 'user',
                 elo: 1200,
                 wins: 0,
@@ -253,29 +242,79 @@ window.submitAuth = async function() {
                 level: 1,
                 xp: 0
             });
-            status.innerHTML = "<span style='color: #2ecc71;'>✅ Erfolgreich registriert!</span>";
-        } else {
-            userCred = await signInWithEmailAndPassword(fbAuth, email, pass);
-            status.innerHTML = "<span style='color: #2ecc71;'>✅ Erfolgreich eingeloggt!</span>";
         }
         
         localStorage.setItem('playerName', pName);
-        localStorage.setItem('firebaseUid', userCred.user.uid);
+        localStorage.setItem('firebaseUid', user.uid);
         
-        // Ensure WebSocket is updated immediately
         const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
                 type: 'login_attempt',
                 playerName: pName,
-                uid: userCred.user.uid,
+                uid: user.uid,
                 password: 'firebase-auth-token',
-                isRegister: authMode === 'register'
+                isRegister: !docSnap.exists()
             }));
         }
         
-        setTimeout(() => { document.getElementById('auth-modal').style.display = 'none'; }, 1000);
+        setTimeout(() => { 
+            const modal = document.getElementById('auth-modal');
+            if (modal) modal.style.display = 'none'; 
+        }, 1000);
     } catch (error) {
+        console.error("Auth error:", error);
+        if(status) status.innerHTML = "<span style='color: #e74c3c;'>❌ " + error.message + "</span>";
+    }
+};
+
+window.openNameModal = function() {
+    if (!fbAuth || !fbAuth.currentUser) {
+        alert("Bitte logge dich zuerst ein.");
+        return;
+    }
+    const modal = document.getElementById('name-modal');
+    if (modal) modal.style.display = 'flex';
+    document.getElementById('name-status').innerHTML = '';
+};
+
+window.submitNameChange = async function() {
+    const newName = document.getElementById('new-username').value.trim();
+    const status = document.getElementById('name-status');
+    
+    if (!newName) {
+        status.innerHTML = "<span style='color: #e74c3c;'>❌ Bitte gib einen Namen ein!</span>";
+        return;
+    }
+    
+    // Normalize the username
+    const normalized = newName.replace(/[^a-zA-Z0-9_.-]/g, '');
+    if (normalized.length < 3) {
+        status.innerHTML = "<span style='color: #e74c3c;'>❌ Name muss mind. 3 Zeichen lang sein!</span>";
+        return;
+    }
+
+    if (!fbAuth || !fbAuth.currentUser) {
+        status.innerHTML = "<span style='color: #e74c3c;'>❌ Nicht eingeloggt!</span>";
+        return;
+    }
+    
+    status.innerHTML = "<span style='color: #3498db;'>⏳ Speichere...</span>";
+
+    try {
+        const userDoc = doc(fbDb, 'players', fbAuth.currentUser.uid);
+        await updateDoc(userDoc, {
+            username: normalized
+        });
+        
+        status.innerHTML = "<span style='color: #2ecc71;'>✅ Name gespeichert!</span>";
+        
+        setTimeout(() => { 
+            const modal = document.getElementById('name-modal');
+            if (modal) modal.style.display = 'none'; 
+        }, 1000);
+    } catch (error) {
+        console.error("Name change error:", error);
         status.innerHTML = "<span style='color: #e74c3c;'>❌ " + error.message + "</span>";
     }
 };

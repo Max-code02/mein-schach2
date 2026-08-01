@@ -836,12 +836,9 @@ async function triggerUltraBan(targetOrReason, possibleReason = null, ws = null)
                 console.error("Fehler beim Speichern des IP-Bans in Firestore:", e.message);
             }
         }
-
-                }
     }
 
     // 5. Update Postgres Player Row
-        }
 
     // 6. Save backup local bans.json
     try {
@@ -1149,7 +1146,27 @@ wss.on('connection', function(ws, req) {
                     return ws.send(JSON.stringify({ type: 'login_error', text: 'Dieser Account ist permanent gesperrt!' }));
                 }
 
-                let user = userDB[playerName];
+                let user = null;
+                
+                if (uid) {
+                    // Try to find user by uid first
+                    const existingName = Object.keys(userDB).find(name => userDB[name].uid === uid);
+                    if (existingName) {
+                        user = userDB[existingName];
+                        if (existingName !== playerName) {
+                            // Name was changed! Remove old entry
+                            delete userDB[existingName];
+                            delete profiles[existingName];
+                            user.username = playerName;
+                            userDB[playerName] = user;
+                        }
+                    }
+                }
+                
+                if (!user) {
+                    user = userDB[playerName];
+                }
+
                 if (user && (user.is_banned || user.ip_ban)) {
                     return ws.send(JSON.stringify({ type: 'login_error', text: 'Dieser Account ist permanent gesperrt!' }));
                 }
@@ -1185,6 +1202,8 @@ wss.on('connection', function(ws, req) {
 
                 ws.playerName = playerName; 
                 profiles[playerName] = user; 
+                
+                sendLeaderboardUpdate();
                 
                 ws.send(JSON.stringify({ 
                     type: 'login_success', 
