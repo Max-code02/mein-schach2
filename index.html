@@ -294,7 +294,11 @@
             </div>
 
             <h2 id="status-display" style="display: none;">Weiß am Zug</h2>
-            <div id="chess-board"></div> 
+            
+            <div id="board-wrapper" style="position: relative;">
+                <div id="emote-popup-area" style="position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 100; overflow: hidden; display: flex; justify-content: center; align-items: center;"></div>
+                <div id="chess-board"></div> 
+            </div>
 
             <img src="schach-vorschau.jpg" alt="Max' Schach Live - Online Schachspiel Vorschau" style="display:none;">
 
@@ -303,6 +307,20 @@
                 <button id="resetBtn">🆕 Neues Spiel</button>
                 <button id="resignBtn">🚩 Aufgeben</button>
                 <button id="fullscreenBtn">📺 Vollbild</button>
+            </div>
+            <div class="control-row" style="margin-top: 10px;">
+                <div style="position: relative; display: inline-block;">
+                    <button id="emoteBtn" style="background: #34495e; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold;">😀 Emotes</button>
+                    <div id="emote-menu" style="display: none; position: absolute; bottom: 100%; left: 0; background: rgba(0,0,0,0.9); border: 1px solid #444; border-radius: 5px; padding: 10px; z-index: 10; margin-bottom: 5px; white-space: nowrap;">
+                        <span class="emote-select" style="cursor: pointer; padding: 5px; font-size: 1.5em; transition: 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">🤔</span>
+                        <span class="emote-select" style="cursor: pointer; padding: 5px; font-size: 1.5em; transition: 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">👏</span>
+                        <span class="emote-select" style="cursor: pointer; padding: 5px; font-size: 1.5em; transition: 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">😱</span>
+                        <span class="emote-select" style="cursor: pointer; padding: 5px; font-size: 1.5em; transition: 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">😡</span>
+                        <span class="emote-select" style="cursor: pointer; padding: 5px; font-size: 1.5em; transition: 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">😂</span>
+                    </div>
+                </div>
+                <button id="voiceChatBtn" style="display: none; background: #9b59b6; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold;">🎤 Voice-Chat starten</button>
+                <div id="voice-status" style="font-size: 0.8em; color: #ccc; margin-left: 10px; align-self: center;"></div>
             </div>
             <div id="videoFeed" class="video-container">
     </div>
@@ -524,6 +542,25 @@
                     🌐 Zum Globalen Chatroom
                 </a>
             </div>
+
+            <div class="glass-panel">
+                <span>👥 <strong>Freunde & Einladungen</strong></span>
+                <div style="display: flex; gap: 5px; margin-top: 10px;">
+                    <input type="text" id="friend-name-input" placeholder="Spieler suchen..." style="flex: 1; padding: 8px; border-radius: 5px; border: 1px solid #555; background: rgba(0,0,0,0.3); color: white;">
+                    <button id="addFriendBtn" style="background: #2ecc71; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold;">Hinzufügen</button>
+                </div>
+                <div id="friends-list" style="margin-top: 15px; font-size: 0.9em; max-height: 150px; overflow-y: auto;">
+                    <div style="color: #aaa; text-align: center; font-style: italic;">Logge dich ein, um Freunde zu sehen</div>
+                </div>
+            </div>
+
+            <div class="glass-panel">
+                <span>📜 <strong>Match History & Replays</strong></span>
+                <button id="loadHistoryBtn" style="width: 100%; margin-top: 10px; background: #34495e; color: white; border: none; padding: 8px; border-radius: 5px; cursor: pointer;">Laden</button>
+                <div id="match-history-list" style="margin-top: 15px; font-size: 0.9em; max-height: 200px; overflow-y: auto;">
+                    <div style="color: #aaa; text-align: center; font-style: italic;">Keine Matches gefunden</div>
+                </div>
+            </div>
         </div>
     </div>
     <div id="videoModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:9999; justify-content:center; align-items:center;">
@@ -545,6 +582,7 @@ function playVideo(url) {
     
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script type="module" src="features.js"></script>
     <script type="module" src="script.js"></script>
     <script type="module" src="script2.js"></script>
 

@@ -1198,6 +1198,25 @@ socket.onmessage = (e) => {
             }
             return;
         }
+        if (data.type === 'emote') {
+            if (data.sender !== getMyName() && window.showEmoteOnBoard) {
+                window.showEmoteOnBoard(data.emote, false);
+            }
+            return;
+        }
+        if (data.type === 'voice_signal') {
+            if (window.handleVoiceSignal) window.handleVoiceSignal(data);
+            return;
+        }
+        if (data.type === 'friends_list') {
+            if (window.updateFriendsList) window.updateFriendsList(data.friends);
+            return;
+        }
+        if (data.type === 'match_history') {
+            if (window.updateMatchHistory) window.updateMatchHistory(data.games);
+            return;
+        }
+        
         if (data.type === 'chat_history') {
             if (Array.isArray(data.messages)) {
                 data.messages.forEach(msg => {
@@ -1419,6 +1438,8 @@ socket.onopen = () => {
             password: savedHash
         }));
     }
+    
+    if (window.initFeatures) window.initFeatures(socket, savedName);
 };
 
 function draw() {

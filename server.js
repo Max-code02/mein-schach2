@@ -24,7 +24,7 @@ let validateSecurity = () => true;
 try { validateSecurity = require('./antihack.js').validateSecurity || validateSecurity; } catch (e) {}
 
 let getLocationFromIP = async () => ({ status: 'local', city: 'Unknown', country: 'Unknown', isp: 'Unknown' });
-try { getLocationFromIP = require('./geoTracker.js').getLocationFromIP || getLocationFromIP; } catch (e) {}
+try { getLocationFromIP = require('./geoTracker2.js').getLocationFromIP || getLocationFromIP; } catch (e) {}
 
 let parseEmojis = (t) => t;
 try { parseEmojis = require('./emojis').parseEmojis || parseEmojis; } catch (e) {}
@@ -118,7 +118,7 @@ try {
     if (fs.existsSync(configPath)) {
         const fbConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         if (fbConfig.projectId) {
-            if (!admin.apps.length) {
+            if (!admin.apps || !admin.apps.length) {
                 admin.initializeApp({
                     projectId: fbConfig.projectId
                 });
@@ -661,20 +661,27 @@ function escapeHTML(str) {
 
 async function loadProfilesFromDB() {
     try {
-                        data.forEach(p => {
-            userDB[p.username] = {
-                password: p.password || "",
-                elo: p.elo || 1200,
-                wins: p.wins || 0,
-                losses: p.losses || 0,
-                xp: p.xp || 0,
-                level: p.level || 1,
-                role: p.role || 'Gast',
-                ip_ban: p.ip_ban || false,
-                is_banned: p.is_banned || false
-            };
-        });
-        console.log(`✅ ${data.length} Profile erfolgreich aus DB geladen.`);
+        if (firestoreDb) {
+            const snapshot = await firestoreDb.collection('players').get();
+            let count = 0;
+            snapshot.forEach(doc => {
+                const p = doc.data();
+                userDB[doc.id] = {
+                    password: p.password || "",
+                    elo: p.elo || 1200,
+                    wins: p.wins || 0,
+                    losses: p.losses || 0,
+                    xp: p.xp || 0,
+                    level: p.level || 1,
+                    role: p.role || 'Gast',
+                    ip_ban: p.ip_ban || false,
+                    is_banned: p.is_banned || false,
+                    friends: p.friends || []
+                };
+                count++;
+            });
+            console.log(`✅ ${count} Profile erfolgreich aus Firestore geladen.`);
+        }
     } catch (err) {
         console.error("❌ Fehler beim Laden von DB:", err);
     }
@@ -889,8 +896,6 @@ async function unbanPlayerHelper(targetName) {
         }
     }
 
-        }
-
     try {
         fs.writeFileSync(BAN_FILE, JSON.stringify([...bannedIPs], null, 2));
     } catch (e) {}
@@ -929,8 +934,9 @@ loadData();
 
 async function loadBannedIPs() {
     try {
-                        if (data) {
-            data.forEach(row => bannedIPs.add(row.ip_address));
+        if (firestoreDb) {
+            const snapshot = await firestoreDb.collection('bans').where('type', '==', 'ip').get();
+            snapshot.forEach(doc => bannedIPs.add(doc.data().target));
             console.log(`✅ ${bannedIPs.size} gesperrte IPs aus DB geladen.`);
         }
     } catch (err) {
@@ -958,7 +964,9 @@ async function saveAll(specificPlayerName = null) {
         for (const uname of playersToSave) {
             const u = userDB[uname];
             if (!u) continue;
-                    }
+        }
+    } catch (e) {
+        console.error("Fehler bei saveAll try-catch:", e.message);
     }
 }
 
@@ -1280,7 +1288,113 @@ wss.on('connection', function(ws, req) {
                     } catch (e) {}
                 }
 
-                                ws.send(JSON.stringify({ type: 'chat_history', messages: messages || [] }));
+                ws.send(JSON.stringify({ type: 'chat_history', messages: [] }));
+                return;
+            }
+
+            // --- FEATURE 1: Emotes ---
+            if (data.type === 'emote') {
+                const room = ws.room || 'global';
+                wss.clients.forEach(client => {
+                    if (client.readyState === WebSocket.OPEN && client.room === room) {
+                        client.send(JSON.stringify({ type: 'emote', emote: data.emote, sender: ws.playerName || data.sender }));
+                    }
+                });
+                return;
+            }
+
+            // --- FEATURE 2: Voice Chat ---
+            if (data.type === 'voice_offer_request' || data.type === 'voice_signal' || data.type === 'voice_stop') {
+                const room = ws.room;
+                if (!room || room === 'global') return; // Nur in privaten Räumen
+                // Weiterleiten an den Gegner im selben Raum
+                wss.clients.forEach(client => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && client.room === room) {
+                        if (data.type === 'voice_offer_request') {
+                            client.send(JSON.stringify({ type: 'voice_signal', signalType: 'request', sender: ws.playerName }));
+                        } else if (data.type === 'voice_stop') {
+                            client.send(JSON.stringify({ type: 'voice_signal', signalType: 'stop' }));
+                        } else {
+                            client.send(JSON.stringify(data)); // leitet offer/answer/candidate weiter
+                        }
+                    }
+                });
+                return;
+            }
+
+            // --- FEATURE 3: Freunde & Einladungen ---
+            if (data.type === 'add_friend') {
+                const uname = ws.playerName;
+                if (!uname || !userDB[uname]) return;
+                const fname = data.friend;
+                if (!userDB[fname]) return; // Freund existiert nicht
+
+                if (!userDB[uname].friends) userDB[uname].friends = [];
+                if (!userDB[uname].friends.includes(fname)) {
+                    userDB[uname].friends.push(fname);
+                    saveAll(uname);
+                }
+                
+                // Schicke aktuelle Freundesliste zurück
+                const friendsStatus = userDB[uname].friends.map(f => {
+                    let isOnline = false;
+                    for (let client of wss.clients) {
+                        if (client.playerName === f && client.readyState === WebSocket.OPEN) isOnline = true;
+                    }
+                    return { name: f, online: isOnline };
+                });
+                ws.send(JSON.stringify({ type: 'friends_list', friends: friendsStatus }));
+                return;
+            }
+
+            if (data.type === 'challenge_friend') {
+                const targetName = data.friend;
+                let targetWs = null;
+                for (let client of wss.clients) {
+                    if (client.playerName === targetName && client.readyState === WebSocket.OPEN) {
+                        targetWs = client;
+                        break;
+                    }
+                }
+                if (targetWs) {
+                    const roomID = "room_" + Math.random().toString(36).substr(2, 9);
+                    ws.room = roomID;
+                    targetWs.room = roomID;
+                    ws.color = 'white';
+                    targetWs.color = 'black';
+                    ws.opponentName = targetWs.playerName;
+                    targetWs.opponentName = ws.playerName;
+                    
+                    activeRoomStates.set(roomID, {
+                        board: null,
+                        turn: 'white',
+                        whitePlayer: ws.playerName,
+                        blackPlayer: targetWs.playerName
+                    });
+
+                    ws.send(JSON.stringify({ type: 'gameStart', room: roomID, color: 'white', opponent: ws.opponentName }));
+                    targetWs.send(JSON.stringify({ type: 'gameStart', room: roomID, color: 'black', opponent: targetWs.opponentName }));
+                }
+                return;
+            }
+
+            // --- FEATURE 4: Match History ---
+            if (data.type === 'get_match_history') {
+                const uname = ws.playerName;
+                if (!uname || !firestoreDb) return;
+                try {
+                    const snapshot1 = await firestoreDb.collection('games').where('white', '==', uname).orderBy('timestamp', 'desc').limit(10).get();
+                    const snapshot2 = await firestoreDb.collection('games').where('black', '==', uname).orderBy('timestamp', 'desc').limit(10).get();
+                    
+                    let games = [];
+                    snapshot1.forEach(d => games.push(d.data()));
+                    snapshot2.forEach(d => games.push(d.data()));
+                    games.sort((a,b) => b.timestamp - a.timestamp);
+                    
+                    ws.send(JSON.stringify({ type: 'match_history', games: games.slice(0, 10) }));
+                } catch (e) {
+                    console.error(e);
+                }
                 return;
             }
 
