@@ -522,16 +522,48 @@ window.submitNameChange = async function() {
     }
 };
 
+window.openAuthModal = function() {
+    const modal = document.getElementById('auth-modal');
+    if (modal) modal.style.display = 'flex';
+};
+
+window.switchSidebarTab = function(tabId, btn) {
+    document.querySelectorAll('.sidebar-tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.sidebar-tab-btn').forEach(b => b.classList.remove('active'));
+    
+    const target = document.getElementById(tabId);
+    if (target) {
+        target.classList.add('active');
+    }
+    if (btn) btn.classList.add('active');
+};
+
 function updateProfileDisplay(name, elo, wins, losses = 0, level = 1, xp = 0, achievements = []) {
     const profileName = document.getElementById('profile-name');
     const profileStats = document.getElementById('profile-stats');
     if (profileName) profileName.innerText = name;
     if (profileStats) profileStats.innerText = `Elo: ${elo || 1200} | S: ${wins || 0} N: ${losses || 0}`;
     
-    // Auth Button verstecken, wenn eingeloggt
+    const navAuthBtn = document.getElementById('navAuthBtn');
+    const navUserPill = document.getElementById('navUserPill');
+    const navUserName = document.getElementById('navUserName');
+    
     const authBtn = document.getElementById('openAuthBtn');
-    if (authBtn) {
-        authBtn.style.display = 'none';
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    if (name && name !== 'Gastspieler') {
+        if (authBtn) authBtn.style.display = 'none';
+        if (logoutBtn) logoutBtn.style.display = 'block';
+        
+        if (navAuthBtn) navAuthBtn.style.display = 'none';
+        if (navUserPill) navUserPill.style.display = 'flex';
+        if (navUserName) navUserName.innerText = `${name} (${elo || 1200} Elo)`;
+    } else {
+        if (authBtn) authBtn.style.display = 'block';
+        if (logoutBtn) logoutBtn.style.display = 'none';
+        
+        if (navAuthBtn) navAuthBtn.style.display = 'block';
+        if (navUserPill) navUserPill.style.display = 'none';
     }
 
     // Achievements badges freischalten

@@ -224,6 +224,27 @@
 </head>
 <body>
 
+    <!-- Top Navigation Header -->
+    <header class="top-header">
+        <div class="header-brand">
+            <span class="brand-logo">♟️</span>
+            <span class="brand-title">Schach Live</span>
+        </div>
+        <div class="header-stats">
+            <span class="status-badge"><span class="pulse-green">●</span> <span id="nav-server-status">Server Online</span></span>
+            <span class="status-badge">👥 <span id="nav-user-counter">1 Online</span></span>
+            <span class="status-badge">⚡ <span id="nav-ping">-- ms</span></span>
+        </div>
+        <div class="header-user-actions">
+            <button id="navThemeToggle" onclick="toggleAppTheme()" class="nav-btn">🌙 Theme</button>
+            <button id="navAuthBtn" onclick="openAuthModal()" class="nav-btn primary">🔐 Einloggen / Registrieren</button>
+            <div id="navUserPill" style="display: none; align-items: center; gap: 8px; background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.15);">
+                <span id="navUserName" style="font-weight: bold; color: #f1c40f; font-size: 0.85em;">Gast</span>
+                <button id="navLogoutBtn" onclick="logout()" class="nav-btn danger" style="padding: 3px 8px; font-size: 0.75em;">Abmelden</button>
+            </div>
+        </div>
+    </header>
+
     <div id="agb-popup">
         <div class="popup-content">
             <h2>Willkommen bei Prochess!</h2>
@@ -390,200 +411,220 @@
         </a>
     </div>
         <div class="sidebar">
-            <div class="glass-panel">
-                <div class="user-info" style="display: flex; flex-direction: column; gap: 8px;">
-                    <span>👤 <strong>Spieler-Profil</strong></span>
-                    <div id="profile-display" style="display: flex; flex-direction: column; gap: 10px; align-items: center; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div id="profile-name" style="font-size: 1.2em; font-weight: bold; color: #f1c40f;">Gastspieler</div>
-                            <button id="edit-name-btn" onclick="openNameModal()" style="background: none; border: none; cursor: pointer; color: #aaa; padding: 2px;" title="Name ändern">✏️</button>
+            <!-- Sidebar Navigation Tabs -->
+            <div class="sidebar-tabs">
+                <button class="sidebar-tab-btn active" onclick="switchSidebarTab('tab-game', this)">🎮 Spiel</button>
+                <button class="sidebar-tab-btn" onclick="switchSidebarTab('tab-profile', this)">🏆 Profil</button>
+                <button class="sidebar-tab-btn" onclick="switchSidebarTab('tab-chat', this)">💬 Community</button>
+                <button class="sidebar-tab-btn" onclick="switchSidebarTab('tab-design', this)">🎨 Design</button>
+            </div>
+
+            <!-- TAB 1: GAME & LOBBY -->
+            <div id="tab-game" class="sidebar-tab-content active">
+                <div class="glass-panel">
+                    <div class="mode-select">
+                        <span>🎮 <strong>Spielmodus</strong></span>
+                        <select id="gameMode">
+                            <option value="local">Lokal (2 Spieler am Gerät)</option>
+                            <option value="bot">Gegen den Bot (Smart)</option>
+                            <option value="stockfish">Gegen Bot (Extrem 🔥)</option>
+                            <option value="random">Zufälliger Gegner (Suche)</option>
+                            <option value="online">Online (Privat)</option>
+                        </select>
+                    </div>
+                    <div class="room-controls">
+                        <input type="text" id="roomID" placeholder="Raum ID eingeben">
+                        <button id="connectMP">Beitreten</button>
+                    </div>
+                </div>
+
+                <div class="glass-panel" id="tactical-puzzle-panel" style="display: flex; flex-direction: column; gap: 8px;">
+                    <span>🧩 <strong>Tägliches Taktik-Rätsel</strong></span>
+                    <div id="puzzle-details" style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                        <div id="puzzle-title" style="font-weight: bold; color: #f1c40f; font-size: 1em;">Lade Taktik-Rätsel...</div>
+                        <div id="puzzle-desc" style="font-size: 0.85em; color: #bdc3c7; margin-top: 4px;">Finde den besten Zug, um +100 ELO & XP zu ergattern.</div>
+                        <div id="puzzle-status" style="font-size: 0.8em; color: #2ecc71; margin-top: 5px; font-weight: bold;"></div>
+                        <div style="display: flex; gap: 5px; margin-top: 10px;">
+                            <button id="loadPuzzleBtn" style="flex: 1; padding: 6px; background: #9b59b6; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold;">Rätsel starten</button>
+                            <button id="resetPuzzleBtn" style="padding: 6px; background: #e74c3c; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold; display: none;">Reset</button>
                         </div>
-                        <div id="profile-stats" style="font-size: 0.9em; color: #ccc;">Elo: 1200 | Siege: 0</div>
-                        
-                        <!-- Achievements / Medaillen -->
-                        <div style="width: 100%; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 5px; padding-top: 8px;">
-                            <div style="font-size: 0.8em; text-transform: uppercase; color: #888; letter-spacing: 0.05em; text-align: center; margin-bottom: 6px;">🏆 Erfolge & Medaillen</div>
-                            <div id="profile-achievements" style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
-                                <div class="achievement-badge locked" id="badge-first_victory_bot">
-                                    <span>🤖</span>
-                                    <div class="tooltip"><strong>Bot-Bändiger</strong>Besiege den Smart-Bot.</div>
-                                </div>
-                                <div class="achievement-badge locked" id="badge-first_victory_stockfish">
-                                    <span>🔥</span>
-                                    <div class="tooltip"><strong>Maschinen-Bezwinger</strong>Besiege den Extrem-Bot.</div>
-                                </div>
-                                <div class="achievement-badge locked" id="badge-first_victory_online">
-                                    <span>⚔️</span>
-                                    <div class="tooltip"><strong>Online-Ritter</strong>Gewinne dein erstes Online-Spiel.</div>
-                                </div>
-                                <div class="achievement-badge locked" id="badge-puzzle_streak_3">
-                                    <span>🧠</span>
-                                    <div class="tooltip"><strong>Taktik-Meister</strong>Löse 3 Taktikrätsel insgesamt.</div>
-                                </div>
-                                <div class="achievement-badge locked" id="badge-speed_mate">
-                                    <span>⚡</span>
-                                    <div class="tooltip"><strong>Blitz-Schachmatt</strong>Schachmatt in unter 20 Zügen.</div>
+                    </div>
+                </div>
+
+                <div class="glass-panel" id="spectator-panel" style="display: flex; flex-direction: column; gap: 8px;">
+                    <span>👁️ <strong>Zuschauer-Lobby</strong></span>
+                    <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                        <div id="spectator-games-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto; margin-bottom: 8px;">
+                            <div style="color: #aaa; font-style: italic; text-align: center; font-size: 0.85em; padding: 10px 0;">Keine laufenden Online-Spiele.</div>
+                        </div>
+                        <button id="refreshGamesBtn" style="width: 100%; padding: 6px; background: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold; transition: 0.2s;">🔄 Liste aktualisieren</button>
+                    </div>
+                </div>
+
+                <div class="glass-panel" id="move-history-panel" style="max-height: 250px; display: flex; flex-direction: column; gap: 8px;">
+                    <span>📋 <strong>Zugsverlauf (Notation)</strong></span>
+                    <div id="move-history-list" style="overflow-y: auto; flex-grow: 1; max-height: 180px; font-family: monospace; font-size: 0.9em; display: flex; flex-direction: column; gap: 4px; padding-right: 5px;">
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: PROFILE & LEADERBOARD -->
+            <div id="tab-profile" class="sidebar-tab-content">
+                <div class="glass-panel">
+                    <div class="user-info" style="display: flex; flex-direction: column; gap: 8px;">
+                        <span>👤 <strong>Spieler-Profil</strong></span>
+                        <div id="profile-display" style="display: flex; flex-direction: column; gap: 10px; align-items: center; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div id="profile-name" style="font-size: 1.2em; font-weight: bold; color: #f1c40f;">Gastspieler</div>
+                                <button id="edit-name-btn" onclick="openNameModal()" style="background: none; border: none; cursor: pointer; color: #aaa; padding: 2px;" title="Name ändern">✏️</button>
+                            </div>
+                            <div id="profile-stats" style="font-size: 0.9em; color: #ccc;">Elo: 1200 | Siege: 0</div>
+                            
+                            <!-- Achievements / Medaillen -->
+                            <div style="width: 100%; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 5px; padding-top: 8px;">
+                                <div style="font-size: 0.8em; text-transform: uppercase; color: #888; letter-spacing: 0.05em; text-align: center; margin-bottom: 6px;">🏆 Erfolge & Medaillen</div>
+                                <div id="profile-achievements" style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                                    <div class="achievement-badge locked" id="badge-first_victory_bot">
+                                        <span>🤖</span>
+                                        <div class="tooltip"><strong>Bot-Bändiger</strong>Besiege den Smart-Bot.</div>
+                                    </div>
+                                    <div class="achievement-badge locked" id="badge-first_victory_stockfish">
+                                        <span>🔥</span>
+                                        <div class="tooltip"><strong>Maschinen-Bezwinger</strong>Besiege den Extrem-Bot.</div>
+                                    </div>
+                                    <div class="achievement-badge locked" id="badge-first_victory_online">
+                                        <span>⚔️</span>
+                                        <div class="tooltip"><strong>Online-Ritter</strong>Gewinne dein erstes Online-Spiel.</div>
+                                    </div>
+                                    <div class="achievement-badge locked" id="badge-puzzle_streak_3">
+                                        <span>🧠</span>
+                                        <div class="tooltip"><strong>Taktik-Meister</strong>Löse 3 Taktikrätsel insgesamt.</div>
+                                    </div>
+                                    <div class="achievement-badge locked" id="badge-speed_mate">
+                                        <span>⚡</span>
+                                        <div class="tooltip"><strong>Blitz-Schachmatt</strong>Schachmatt in unter 20 Zügen.</div>
+                                    </div>
                                 </div>
                             </div>
+
+                            <button id="openAuthBtn" onclick="openAuthModal()" style="background: #3498db; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s; margin-top: 5px;">
+                                🔐 Einloggen / Registrieren
+                            </button>
+                            <button id="logoutBtn" onclick="logout()" style="display: none; background: #e74c3c; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s; margin-top: 5px;">
+                                🚪 Abmelden
+                            </button>
                         </div>
-
-                        <button id="openAuthBtn" style="background: #3498db; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s; margin-top: 5px;">
-                            🔐 Einloggen / Registrieren
-                        </button>
-                        <button id="logoutBtn" style="display: none; background: #e74c3c; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s; margin-top: 5px;">
-                            🚪 Abmelden
-                        </button>
                     </div>
+                    <div id="user-counter" style="margin-top: 10px; font-size: 0.85em; color: #aaa; text-align: center;">Online: 1 ● Live</div>
                 </div>
-                <div id="user-counter">Online: 1 ● Live</div>
-            </div>
-            
-            <div class="glass-panel" id="admin-panel" style="display: none;">
-                <span>🛡️ <strong>Benutzerverwaltung</strong> (Admin)</span>
-                <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin-top: 10px; max-height: 250px; overflow-y: auto;">
-                    <div id="admin-user-list" style="display: flex; flex-direction: column; gap: 8px;">
-                        <div style="color: #aaa; font-style: italic; text-align: center; font-size: 0.85em; padding: 10px 0;">Lädt Benutzer...</div>
-                    </div>
-                </div>
-            </div>
 
-            <div class="glass-panel">
-                <span>🎨 <strong>Brett & Figuren Customization</strong></span>
-                <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
-                    <div>
-                        <label style="font-size: 0.85em; color: #ccc; display: block; margin-bottom: 4px;">Brett-Stil:</label>
-                        <select id="boardThemeSelect" style="width: 100%; padding: 6px; background: rgba(0,0,0,0.3); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; cursor: pointer;">
-                            <option value="classic">Klassisch (Default)</option>
-                            <option value="wood">Klassisches Holz 🪵</option>
-                            <option value="neon">Moderner Neon-Look ⚡</option>
-                            <option value="marble">Weißer Marmor 🏛️</option>
-                            <option value="slate">Luxuriöser 3D-Schiefer 💎</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label style="font-size: 0.85em; color: #ccc; display: block; margin-bottom: 4px;">Figuren-Stil:</label>
-                        <select id="pieceThemeSelect" style="width: 100%; padding: 6px; background: rgba(0,0,0,0.3); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; cursor: pointer;">
-                            <option value="classic">Klassisch (Wikipedia)</option>
-                            <option value="goldsilver">Gold & Silber ✨</option>
-                            <option value="neon">Neon Glow 🔴🔵</option>
-                            <option value="vintage">Vintage Holz 🪵</option>
-                        </select>
-                    </div>
-                    <div id="customColorPickers" style="display: flex; gap: 10px; align-items: center; justify-content: space-between; font-size: 0.8em; margin-top: 4px;">
-                        <span style="color: #aaa;">Eigene Farben:</span>
-                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                            <label>Hell:</label>
-                            <input type="color" id="colorWhite" value="#f0d9b5" style="width: 25px; height: 25px; border: none; border-radius: 4px; cursor: pointer; padding: 2px;">
-                            <label>Dunkel:</label>
-                            <input type="color" id="colorBlack" value="#b58863" style="width: 25px; height: 25px; border: none; border-radius: 4px; cursor: pointer; padding: 2px;">
-                            <label>Züge:</label>
-                            <input type="color" id="colorMoveDot" value="#f1c40f" style="width: 25px; height: 25px; border: none; border-radius: 4px; cursor: pointer; padding: 2px;">
+                <div class="glass-panel" id="admin-panel" style="display: none;">
+                    <span>🛡️ <strong>Benutzerverwaltung</strong> (Admin)</span>
+                    <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin-top: 10px; max-height: 250px; overflow-y: auto;">
+                        <div id="admin-user-list" style="display: flex; flex-direction: column; gap: 8px;">
+                            <div style="color: #aaa; font-style: italic; text-align: center; font-size: 0.85em; padding: 10px 0;">Lädt Benutzer...</div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="glass-panel">
-                <div class="mode-select">
-                    <span>🎮 <strong>Spielmodus</strong></span>
-                    <select id="gameMode">
-                        <option value="local">Lokal (2 Spieler am Gerät)</option>
-                        <option value="bot">Gegen den Bot (Smart)</option>
-                        <option value="stockfish">Gegen Bot (Extrem 🔥)</option>
-                        <option value="random">Zufälliger Gegner (Suche)</option>
-                        <option value="online">Online (Privat)</option>
-                    </select>
+                <div class="glass-panel">
+                    <span>🏆 <strong>Beste Spieler</strong></span>
+                    <div id="leaderboard-list" style="margin-top: 10px; font-size: 0.9em;"></div>
+                    <a href="stats.html" style="color: #3498db; text-decoration: none; font-size: 0.8em; margin-top: 10px; display: block; text-align: center;">📊 Volle Rangliste ansehen</a>
                 </div>
-                <div class="room-controls">
-                    <input type="text" id="roomID" placeholder="Raum ID eingeben">
-                    <button id="connectMP">Beitreten</button>
+
+                <div class="glass-panel">
+                    <span>📜 <strong>Match History & Replays</strong></span>
+                    <button id="loadHistoryBtn" style="width: 100%; margin-top: 10px; background: #34495e; color: white; border: none; padding: 8px; border-radius: 5px; cursor: pointer;">Laden</button>
+                    <div id="match-history-list" style="margin-top: 15px; font-size: 0.9em; max-height: 200px; overflow-y: auto;">
+                        <div style="color: #aaa; text-align: center; font-style: italic;">Keine Matches gefunden</div>
+                    </div>
                 </div>
             </div>
 
-            <div class="glass-panel" id="tactical-puzzle-panel" style="display: flex; flex-direction: column; gap: 8px;">
-                <span>🧩 <strong>Tägliches Taktik-Rätsel</strong></span>
-                <div id="puzzle-details" style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                    <div id="puzzle-title" style="font-weight: bold; color: #f1c40f; font-size: 1em;">Lade Taktik-Rätsel...</div>
-                    <div id="puzzle-desc" style="font-size: 0.85em; color: #bdc3c7; margin-top: 4px;">Finde den besten Zug, um +100 ELO & XP zu ergattern.</div>
-                    <div id="puzzle-status" style="font-size: 0.8em; color: #2ecc71; margin-top: 5px; font-weight: bold;"></div>
+            <!-- TAB 3: CHAT & COMMUNITY -->
+            <div id="tab-chat" class="sidebar-tab-content">
+                <div id="chat-container">
+                    <div id="chat-messages"></div>
+                    <div class="chat-input-area" style="position: relative;">
+                        <div class="emoji-bar">
+                            <span class="emoji-btn">😊</span><span class="emoji-btn">😂</span>
+                            <span class="emoji-btn">🔥</span><span class="emoji-btn">👍</span>
+                            <span class="emoji-btn">♟️</span><span class="emoji-btn">⚔️</span>
+                        </div>
+
+                        <div style="display: flex; gap: 5px; align-items: center; position: relative;">
+                            <button id="emote-menu-btn" style="padding: 5px 10px; cursor: pointer; background: #eee; border: 1px solid #ccc; border-radius: 4px;">...</button>
+                            
+                            <div id="emote-popup" style="display: none; position: absolute; bottom: 110%; left: 0; background: white; border: 2px solid #444; border-radius: 8px; box-shadow: 0 8px 20px rgba(0,0,0,0.3); z-index: 9999; width: 160px; padding: 5px;">
+                                <button class="emote-btn" data-msg="Viel Glück! 🍀" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee;">Viel Glück! 🍀</button>
+                                <button class="emote-btn" data-msg="Guter Zug! 👏" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee;">Guter Zug! 👏</button>
+                                <button class="emote-btn" data-msg="Ups! 😅" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee;">Ups! 😅</button>
+                                <button class="emote-btn" data-msg="Danke! 😊" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee;">Danke! 😊</button>
+                                <button class="emote-btn" data-msg="Gutes Spiel! 🤝" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px;">Gutes Spiel! 🤝</button>
+                            </div>
+
+                            <input type="text" id="chat-input" placeholder="Nachricht..." style="flex-grow: 1;">
+                            <button id="send-chat">Senden</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-panel" style="margin-top: 15px;">
+                    <span>💬 <strong>Community</strong></span>
+                    <a href="chat.html" style="display: block; background: #3498db; color: white; text-align: center; padding: 10px; border-radius: 8px; text-decoration: none; margin-top: 10px; font-weight: bold;">
+                        🌐 Zum Globalen Chatroom
+                    </a>
+                </div>
+
+                <div class="glass-panel" style="margin-top: 15px;">
+                    <span>👥 <strong>Freunde & Einladungen</strong></span>
                     <div style="display: flex; gap: 5px; margin-top: 10px;">
-                        <button id="loadPuzzleBtn" style="flex: 1; padding: 6px; background: #9b59b6; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold;">Rätsel starten</button>
-                        <button id="resetPuzzleBtn" style="padding: 6px; background: #e74c3c; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold; display: none;">Reset</button>
+                        <input type="text" id="friend-name-input" placeholder="Spieler suchen..." style="flex: 1; padding: 8px; border-radius: 5px; border: 1px solid #555; background: rgba(0,0,0,0.3); color: white;">
+                        <button id="addFriendBtn" style="background: #2ecc71; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold;">Hinzufügen</button>
+                    </div>
+                    <div id="friends-list" style="margin-top: 15px; font-size: 0.9em; max-height: 150px; overflow-y: auto;">
+                        <div style="color: #aaa; text-align: center; font-style: italic;">Logge dich ein, um Freunde zu sehen</div>
                     </div>
                 </div>
             </div>
 
-            <div class="glass-panel" id="spectator-panel" style="display: flex; flex-direction: column; gap: 8px;">
-                <span>👁️ <strong>Zuschauer-Lobby</strong></span>
-                <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                    <div id="spectator-games-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto; margin-bottom: 8px;">
-                        <div style="color: #aaa; font-style: italic; text-align: center; font-size: 0.85em; padding: 10px 0;">Keine laufenden Online-Spiele.</div>
+            <!-- TAB 4: DESIGN -->
+            <div id="tab-design" class="sidebar-tab-content">
+                <div class="glass-panel">
+                    <span>🎨 <strong>Brett & Figuren Customization</strong></span>
+                    <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
+                        <div>
+                            <label style="font-size: 0.85em; color: #ccc; display: block; margin-bottom: 4px;">Brett-Stil:</label>
+                            <select id="boardThemeSelect" style="width: 100%; padding: 6px; background: rgba(0,0,0,0.3); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; cursor: pointer;">
+                                <option value="classic">Klassisch (Default)</option>
+                                <option value="wood">Klassisches Holz 🪵</option>
+                                <option value="neon">Moderner Neon-Look ⚡</option>
+                                <option value="marble">Weißer Marmor 🏛️</option>
+                                <option value="slate">Luxuriöser 3D-Schiefer 💎</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size: 0.85em; color: #ccc; display: block; margin-bottom: 4px;">Figuren-Stil:</label>
+                            <select id="pieceThemeSelect" style="width: 100%; padding: 6px; background: rgba(0,0,0,0.3); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; cursor: pointer;">
+                                <option value="classic">Klassisch (Wikipedia)</option>
+                                <option value="goldsilver">Gold & Silber ✨</option>
+                                <option value="neon">Neon Glow 🔴🔵</option>
+                                <option value="vintage">Vintage Holz 🪵</option>
+                            </select>
+                        </div>
+                        <div id="customColorPickers" style="display: flex; gap: 10px; align-items: center; justify-content: space-between; font-size: 0.8em; margin-top: 4px;">
+                            <span style="color: #aaa;">Eigene Farben:</span>
+                            <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                                <label>Hell:</label>
+                                <input type="color" id="colorWhite" value="#f0d9b5" style="width: 25px; height: 25px; border: none; border-radius: 4px; cursor: pointer; padding: 2px;">
+                                <label>Dunkel:</label>
+                                <input type="color" id="colorBlack" value="#b58863" style="width: 25px; height: 25px; border: none; border-radius: 4px; cursor: pointer; padding: 2px;">
+                                <label>Züge:</label>
+                                <input type="color" id="colorMoveDot" value="#f1c40f" style="width: 25px; height: 25px; border: none; border-radius: 4px; cursor: pointer; padding: 2px;">
+                            </div>
+                        </div>
                     </div>
-                    <button id="refreshGamesBtn" style="width: 100%; padding: 6px; background: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold; transition: 0.2s;">🔄 Liste aktualisieren</button>
-                </div>
-            </div>
-
-            <div class="glass-panel" id="move-history-panel" style="max-height: 250px; display: flex; flex-direction: column; gap: 8px;">
-                <span>📋 <strong>Zugsverlauf (Notation)</strong></span>
-                <div id="move-history-list" style="overflow-y: auto; flex-grow: 1; max-height: 180px; font-family: monospace; font-size: 0.9em; display: flex; flex-direction: column; gap: 4px; padding-right: 5px;">
-                    <!-- Moves will be dynamically inserted here -->
-                </div>
-            </div>
-
-            <div id="chat-container">
-    <div id="chat-messages"></div>
-    <div class="chat-input-area" style="position: relative;"> <div class="emoji-bar">
-        <span class="emoji-btn">😊</span><span class="emoji-btn">😂</span>
-        <span class="emoji-btn">🔥</span><span class="emoji-btn">👍</span>
-        <span class="emoji-btn">♟️</span><span class="emoji-btn">⚔️</span>
-    </div>
-
-    <div style="display: flex; gap: 5px; align-items: center; position: relative;">
-        <button id="emote-menu-btn" style="padding: 5px 10px; cursor: pointer; background: #eee; border: 1px solid #ccc; border-radius: 4px;">...</button>
-        
-        <div id="emote-popup" style="display: none; position: absolute; bottom: 110%; left: 0; background: white; border: 2px solid #444; border-radius: 8px; box-shadow: 0 8px 20px rgba(0,0,0,0.3); z-index: 9999; width: 160px; padding: 5px;">
-            <button class="emote-btn" data-msg="Viel Glück! 🍀" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee;">Viel Glück! 🍀</button>
-            <button class="emote-btn" data-msg="Guter Zug! 👏" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee;">Guter Zug! 👏</button>
-            <button class="emote-btn" data-msg="Ups! 😅" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee;">Ups! 😅</button>
-            <button class="emote-btn" data-msg="Danke! 😊" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee;">Danke! 😊</button>
-            <button class="emote-btn" data-msg="Gutes Spiel! 🤝" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px;">Gutes Spiel! 🤝</button>
-        </div>
-
-        <input type="text" id="chat-input" placeholder="Nachricht..." style="flex-grow: 1;">
-        <button id="send-chat">Senden</button>
-    </div>
-</div>
-</div>
-
-            <div class="glass-panel">
-                <span>🏆 <strong>Beste Spieler</strong></span>
-                <div id="leaderboard-list" style="margin-top: 10px; font-size: 0.9em;"></div>
-                <a href="stats.html" style="color: #3498db; text-decoration: none; font-size: 0.8em; margin-top: 10px; display: block; text-align: center;">📊 Volle Rangliste ansehen</a>
-            </div>
-
-            <div class="glass-panel">
-                <span>💬 <strong>Community</strong></span>
-                <a href="chat.html" style="display: block; background: #3498db; color: white; text-align: center; padding: 10px; border-radius: 8px; text-decoration: none; margin-top: 10px; font-weight: bold;">
-                    🌐 Zum Globalen Chatroom
-                </a>
-            </div>
-
-            <div class="glass-panel">
-                <span>👥 <strong>Freunde & Einladungen</strong></span>
-                <div style="display: flex; gap: 5px; margin-top: 10px;">
-                    <input type="text" id="friend-name-input" placeholder="Spieler suchen..." style="flex: 1; padding: 8px; border-radius: 5px; border: 1px solid #555; background: rgba(0,0,0,0.3); color: white;">
-                    <button id="addFriendBtn" style="background: #2ecc71; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold;">Hinzufügen</button>
-                </div>
-                <div id="friends-list" style="margin-top: 15px; font-size: 0.9em; max-height: 150px; overflow-y: auto;">
-                    <div style="color: #aaa; text-align: center; font-style: italic;">Logge dich ein, um Freunde zu sehen</div>
-                </div>
-            </div>
-
-            <div class="glass-panel">
-                <span>📜 <strong>Match History & Replays</strong></span>
-                <button id="loadHistoryBtn" style="width: 100%; margin-top: 10px; background: #34495e; color: white; border: none; padding: 8px; border-radius: 5px; cursor: pointer;">Laden</button>
-                <div id="match-history-list" style="margin-top: 15px; font-size: 0.9em; max-height: 200px; overflow-y: auto;">
-                    <div style="color: #aaa; text-align: center; font-style: italic;">Keine Matches gefunden</div>
                 </div>
             </div>
         </div>

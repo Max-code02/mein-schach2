@@ -11,10 +11,131 @@
 body { 
     background: radial-gradient(circle at center, #1a1a1a 0%, #050505 100%);
     color: white; font-family: 'Segoe UI', Roboto, sans-serif; 
-    margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh;
+    margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh;
 }
 
-.game-container { display: flex; gap: 30px; padding: 20px; max-width: 1300px; width: 100%; }
+/* --- TOP NAV HEADER BAR --- */
+.top-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(15, 12, 30, 0.85);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 10px 25px;
+    width: 100%;
+    box-sizing: border-box;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+.header-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.3em;
+    font-weight: 800;
+    color: white;
+}
+.header-stats {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.85em;
+    color: #bdc3c7;
+}
+.status-badge {
+    background: rgba(255,255,255,0.06);
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.pulse-green {
+    color: #2ecc71;
+    animation: blinker 1.5s infinite;
+}
+.header-user-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.nav-btn {
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 0.85em;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.08);
+    color: white;
+    transition: 0.2s;
+}
+.nav-btn:hover {
+    background: rgba(255,255,255,0.15);
+}
+.nav-btn.primary {
+    background: #3498db;
+    border-color: #2980b9;
+    color: white;
+}
+.nav-btn.primary:hover {
+    background: #2980b9;
+}
+.nav-btn.danger {
+    background: #e74c3c;
+    border-color: #c0392b;
+    color: white;
+}
+.nav-btn.danger:hover {
+    background: #c0392b;
+}
+
+/* --- SIDEBAR TABS & TAB CONTENT --- */
+.sidebar-tabs {
+    display: flex;
+    gap: 4px;
+    background: rgba(0,0,0,0.3);
+    padding: 4px;
+    border-radius: 10px;
+    margin-bottom: 12px;
+    border: 1px solid rgba(255,255,255,0.08);
+}
+.sidebar-tab-btn {
+    flex: 1;
+    padding: 8px 4px;
+    font-size: 0.8em;
+    font-weight: 700;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: #808e9b;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+}
+.sidebar-tab-btn:hover {
+    color: white;
+    background: rgba(255,255,255,0.05);
+}
+.sidebar-tab-btn.active {
+    background: #3498db;
+    color: white;
+    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.4);
+}
+.sidebar-tab-content {
+    display: none;
+    flex-direction: column;
+    gap: 15px;
+}
+.sidebar-tab-content.active {
+    display: flex;
+}
+
+.game-container { display: flex; gap: 30px; padding: 20px; max-width: 1300px; width: 100%; box-sizing: border-box; }
 
 #chess-board { 
     display: grid; grid-template-columns: repeat(8, 65px); grid-template-rows: repeat(8, 65px); 
