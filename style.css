@@ -427,3 +427,69 @@ button:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); 
 ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.22);
 }
+
+/* ==========================================================================
+   GLOBAL LIGHT MODE STYLING & ACCESSIBILITY
+   ========================================================================== */
+body.light-mode {
+    background: #eef2f7 !important;
+    color: #2c3e50 !important;
+}
+
+body.light-mode .glass-panel,
+body.light-mode #chat-container,
+body.light-mode .top-scoreboard,
+body.light-mode .status-panel,
+body.light-mode .modal-box,
+body.light-mode .popup-content {
+    background: #ffffff !important;
+    color: #2c3e50 !important;
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08) !important;
+}
+
+body.light-mode input,
+body.light-mode select,
+body.light-mode button {
+    background: #f8fafc !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #1e293b !important;
+}
+
+body.light-mode button:hover {
+    background: #e2e8f0 !important;
+}
+
+body.light-mode .player-clock .time {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+}
+
+body.light-mode .player-clock .name {
+    color: #475569 !important;
+}
+
+body.light-mode .other-msg {
+    background: #e2e8f0 !important;
+    color: #1e293b !important;
+}
+
+body.light-mode .status-item {
+    color: #334155 !important;
+}
+
+body.light-mode #chess-board {
+    border-color: #64748b !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15) !important;
+}
+
+body.light-mode .auth-input {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+}
+
+body.light-mode #profile-stats {
+    color: #475569 !important;
+}

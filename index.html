@@ -234,15 +234,35 @@
 
     <!-- Auth Modal -->
     <div id="auth-modal" class="modal-overlay">
-        <div class="modal-box">
+        <div class="modal-box" style="max-width: 420px; width: 90%;">
             <span class="close-modal" onclick="document.getElementById('auth-modal').style.display='none'">&times;</span>
-            <h2 style="color: white; margin-top: 0; margin-bottom: 20px;">Einloggen</h2>
-            <p style="color: #bdc3c7; font-size: 0.9em; margin-bottom: 20px;">Melde dich mit deinem Google-Konto an, um online zu spielen, deine Elo zu speichern und Errungenschaften freizuschalten.</p>
-            <button id="auth-google-btn" class="auth-btn" style="background: #ffffff; color: #333; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid #ddd;" onclick="submitAuthGoogle()">
+            <h2 style="color: white; margin-top: 0; margin-bottom: 15px;">Einloggen / Registrieren</h2>
+            <p style="color: #bdc3c7; font-size: 0.85em; margin-bottom: 15px;">Melde dich mit E-Mail/Passwort oder Google an, um deinen Spielfortschritt und Elo-Wert zu speichern.</p>
+            
+            <!-- Email/Password Auth Form -->
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px;">
+                <input type="email" id="auth-email-input" class="auth-input" placeholder="E-Mail-Adresse" style="padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: white; width: 100%; box-sizing: border-box;">
+                <input type="password" id="auth-password-input" class="auth-input" placeholder="Passwort (min. 6 Zeichen)" style="padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: white; width: 100%; box-sizing: border-box;">
+                <div style="display: flex; gap: 10px;">
+                    <button class="auth-btn" style="flex: 1; background: #27ae60; color: white; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;" onclick="submitAuthEmailLogin()">Einloggen</button>
+                    <button class="auth-btn" style="flex: 1; background: #2980b9; color: white; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;" onclick="submitAuthEmailRegister()">Registrieren</button>
+                </div>
+            </div>
+
+            <div style="display: flex; align-items: center; margin: 15px 0; color: #7f8c8d; font-size: 0.8em;">
+                <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.15);"></div>
+                <span style="padding: 0 10px;">ODER</span>
+                <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.15);"></div>
+            </div>
+
+            <button id="auth-google-btn" class="auth-btn" style="width: 100%; background: #ffffff; color: #333; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid #ddd; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="submitAuthGoogle()">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width: 18px; height: 18px;" alt="Google Logo">
                 Mit Google anmelden
             </button>
-            <div id="auth-status" style="margin-top: 15px; font-size: 0.9em;"></div>
+            <button id="auth-guest-btn" class="auth-btn" style="width: 100%; background: rgba(255,255,255,0.1); color: #fff; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="playAsGuest()">
+                👤 Als Gast spielen (Ohne Konto)
+            </button>
+            <div id="auth-status" style="margin-top: 15px; font-size: 0.9em; text-align: left;"></div>
         </div>
     </div>
 
@@ -278,7 +298,10 @@
                     <span class="name" id="name-black">Schwarz</span>
                     <span class="time" id="time-black">10:00</span>
                 </div>
-                <div style="font-weight: bold; color: #7f8fa6; font-size: 1.2em;">VS</div>
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                    <div style="font-weight: bold; color: #7f8fa6; font-size: 1.2em;">VS</div>
+                    <button id="themeToggleBtn" onclick="toggleAppTheme()" style="padding: 4px 10px; font-size: 0.8em; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; font-weight: bold;">🌙 Dark Mode</button>
+                </div>
                 <div class="player-clock active" id="clock-white">
                     <span class="name" id="name-white">Weiß</span>
                     <span class="time" id="time-white">10:00</span>
@@ -319,9 +342,11 @@
                         <span class="emote-select" style="cursor: pointer; padding: 5px; font-size: 1.5em; transition: 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">😂</span>
                     </div>
                 </div>
+                <button id="voiceMoveBtn" onclick="toggleVoiceMoveControl()" style="background: #27ae60; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; flex: 1;">🎤 Sprachsteuerung</button>
                 <button id="voiceChatBtn" style="display: none; background: #9b59b6; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold;">🎤 Voice-Chat starten</button>
                 <div id="voice-status" style="font-size: 0.8em; color: #ccc; margin-left: 10px; align-self: center;"></div>
             </div>
+            <div id="voice-move-status" style="font-size: 0.9em; font-weight: bold; margin-top: 8px; text-align: center; min-height: 22px;"></div>
             <div id="videoFeed" class="video-container">
     </div>
 

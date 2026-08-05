@@ -54,19 +54,37 @@ let fbApp = null;
 let fbAuth = null;
 let fbDb = null;
 
+const defaultFirebaseConfig = {
+    apiKey: "AIzaSyA3KVyicVW1wqLjhNmJf3g9hJUAaovhDv0",
+    authDomain: "schachlive.firebaseapp.com",
+    projectId: "schachlive",
+    storageBucket: "schachlive.firebasestorage.app",
+    messagingSenderId: "729285821168",
+    appId: "1:729285821168:web:6d3fc2d942c8b8d101b835",
+    measurementId: "G-184X8Q73WV"
+};
+
 async function initFirebase() {
     try {
-        const res = await fetch('/firebase-applet-config.json');
-        if (res.ok) {
-            firebaseConfig = await res.json();
-            fbApp = initializeApp(firebaseConfig);
-            fbAuth = getAuth(fbApp);
-            
-            if (firebaseConfig.firestoreDatabaseId) {
-                fbDb = getFirestore(fbApp, firebaseConfig.firestoreDatabaseId);
-            } else {
-                fbDb = getFirestore(fbApp);
+        let firebaseConfig = defaultFirebaseConfig;
+        try {
+            const res = await fetch('/firebase-applet-config.json');
+            if (res.ok) {
+                const loaded = await res.json();
+                if (loaded && loaded.apiKey) firebaseConfig = loaded;
             }
+        } catch(e) {
+            console.warn("Could not load /firebase-applet-config.json, using default config", e);
+        }
+        
+        fbApp = initializeApp(firebaseConfig);
+        fbAuth = getAuth(fbApp);
+        
+        if (firebaseConfig.firestoreDatabaseId) {
+            fbDb = getFirestore(fbApp, firebaseConfig.firestoreDatabaseId);
+        } else {
+            fbDb = getFirestore(fbApp);
+        }
 
             let userUnsubscribe = null;
             let adminUnsubscribe = null;
@@ -168,17 +186,27 @@ async function initFirebase() {
                         }));
                     }
                 } else {
-                    updateProfileDisplay("Gastspieler", 1200, 0, 0, 1, 0, []);
-                    localStorage.removeItem('playerName');
-                    localStorage.removeItem('firebaseUid');
+                    const savedGuest = localStorage.getItem('guestName');
+                    if (savedGuest) {
+                        localStorage.setItem('playerName', savedGuest);
+                        updateProfileDisplay(savedGuest, 1200, 0, 0, 1, 0, []);
+                        const openAuthBtn = document.getElementById('openAuthBtn');
+                        const logoutBtn = document.getElementById('logoutBtn');
+                        if (openAuthBtn) openAuthBtn.style.display = 'none';
+                        if (logoutBtn) logoutBtn.style.display = 'block';
+                    } else {
+                        updateProfileDisplay("Gastspieler", 1200, 0, 0, 1, 0, []);
+                        localStorage.removeItem('playerName');
+                        localStorage.removeItem('firebaseUid');
+                        
+                        const openAuthBtn = document.getElementById('openAuthBtn');
+                        const logoutBtn = document.getElementById('logoutBtn');
+                        if (openAuthBtn) openAuthBtn.style.display = 'block';
+                        if (logoutBtn) logoutBtn.style.display = 'none';
+                    }
                     
                     const adminPanel = document.getElementById('admin-panel');
                     if (adminPanel) adminPanel.style.display = 'none';
-                    
-                    const openAuthBtn = document.getElementById('openAuthBtn');
-                    const logoutBtn = document.getElementById('logoutBtn');
-                    if (openAuthBtn) openAuthBtn.style.display = 'block';
-                    if (logoutBtn) logoutBtn.style.display = 'none';
                 }
             });
             
@@ -192,25 +220,181 @@ async function initFirebase() {
             };
             
             window.logout = async function() {
-                if (fbAuth) {
+                localStorage.removeItem('guestName');
+                localStorage.removeItem('playerName');
+                localStorage.removeItem('firebaseUid');
+                if (fbAuth && fbAuth.currentUser) {
                     try {
                         await signOut(fbAuth);
-                        alert("Du wurdest erfolgreich abgemeldet.");
-                        window.location.reload();
                     } catch(e) {
                         console.error("Fehler beim Abmelden", e);
                     }
                 }
+                alert("Du wurdest erfolgreich abgemeldet.");
+                window.location.reload();
             };
             
             const lBtn = document.getElementById('logoutBtn');
             if (lBtn) lBtn.addEventListener('click', window.logout);
-        }
     } catch (e) {
         console.warn("Firebase Init Fehler (Frontend):", e);
     }
 }
 initFirebase();
+
+window.submitAuthEmailLogin = async function() {
+    const emailEl = document.getElementById('auth-email-input');
+    const passEl = document.getElementById('auth-password-input');
+    const status = document.getElementById('auth-status');
+    
+    if (!emailEl || !passEl) return;
+    const email = emailEl.value.trim();
+    const password = passEl.value;
+
+    if (!email || !password) {
+        if (status) status.innerHTML = "<span style='color: #e74c3c;'>⚠️ Bitte E-Mail und Passwort eingeben.</span>";
+        return;
+    }
+
+    if (!fbAuth) {
+        if (status) status.innerHTML = "<span style='color: #e74c3c;'>❌ Firebase Auth nicht verfügbar!</span>";
+        return;
+    }
+
+    if (status) status.innerHTML = "<span style='color: #3498db;'>⏳ Logge ein...</span>";
+
+    try {
+        const userCred = await signInWithEmailAndPassword(fbAuth, email, password);
+        if (status) status.innerHTML = "<span style='color: #2ecc71;'>✅ Erfolgreich eingeloggt!</span>";
+        
+        const user = userCred.user;
+        const pName = user.displayName || user.email.split('@')[0];
+
+        const userDoc = doc(fbDb, 'players', user.uid);
+        const docSnap = await getDoc(userDoc);
+        if (!docSnap.exists()) {
+            await setDoc(userDoc, {
+                username: pName,
+                uid: user.uid,
+                role: 'user',
+                elo: 1200,
+                wins: 0,
+                losses: 0,
+                level: 1,
+                xp: 0
+            });
+        }
+
+        localStorage.setItem('playerName', pName);
+        localStorage.setItem('firebaseUid', user.uid);
+
+        const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'login_attempt',
+                playerName: pName,
+                uid: user.uid,
+                password: 'firebase-auth-token',
+                isRegister: false
+            }));
+        }
+
+        setTimeout(() => {
+            const modal = document.getElementById('auth-modal');
+            if (modal) modal.style.display = 'none';
+        }, 1000);
+    } catch (error) {
+        console.error("Email login error:", error);
+        if (status) {
+            let msg = error.message;
+            if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                msg = "E-Mail oder Passwort ungültig.";
+            } else if (error.code === 'auth/invalid-email') {
+                msg = "Ungültiges E-Mail Format.";
+            }
+            status.innerHTML = "<span style='color: #e74c3c;'>❌ " + msg + "</span>";
+        }
+    }
+};
+
+window.submitAuthEmailRegister = async function() {
+    const emailEl = document.getElementById('auth-email-input');
+    const passEl = document.getElementById('auth-password-input');
+    const status = document.getElementById('auth-status');
+
+    if (!emailEl || !passEl) return;
+    const email = emailEl.value.trim();
+    const password = passEl.value;
+
+    if (!email || !password) {
+        if (status) status.innerHTML = "<span style='color: #e74c3c;'>⚠️ Bitte E-Mail und Passwort eingeben.</span>";
+        return;
+    }
+
+    if (password.length < 6) {
+        if (status) status.innerHTML = "<span style='color: #e74c3c;'>⚠️ Das Passwort muss mindestens 6 Zeichen lang sein.</span>";
+        return;
+    }
+
+    if (!fbAuth) {
+        if (status) status.innerHTML = "<span style='color: #e74c3c;'>❌ Firebase Auth nicht verfügbar!</span>";
+        return;
+    }
+
+    if (status) status.innerHTML = "<span style='color: #3498db;'>⏳ Erstelle Konto...</span>";
+
+    try {
+        const userCred = await createUserWithEmailAndPassword(fbAuth, email, password);
+        if (status) status.innerHTML = "<span style='color: #2ecc71;'>✅ Konto erfolgreich erstellt!</span>";
+
+        const user = userCred.user;
+        const pName = user.displayName || user.email.split('@')[0];
+
+        const userDoc = doc(fbDb, 'players', user.uid);
+        await setDoc(userDoc, {
+            username: pName,
+            uid: user.uid,
+            role: 'user',
+            elo: 1200,
+            wins: 0,
+            losses: 0,
+            level: 1,
+            xp: 0
+        });
+
+        localStorage.setItem('playerName', pName);
+        localStorage.setItem('firebaseUid', user.uid);
+
+        const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'login_attempt',
+                playerName: pName,
+                uid: user.uid,
+                password: 'firebase-auth-token',
+                isRegister: true
+            }));
+        }
+
+        setTimeout(() => {
+            const modal = document.getElementById('auth-modal');
+            if (modal) modal.style.display = 'none';
+        }, 1000);
+    } catch (error) {
+        console.error("Email registration error:", error);
+        if (status) {
+            let msg = error.message;
+            if (error.code === 'auth/email-already-in-use') {
+                msg = "Diese E-Mail-Adresse wird bereits verwendet.";
+            } else if (error.code === 'auth/invalid-email') {
+                msg = "Ungültige E-Mail-Adresse.";
+            } else if (error.code === 'auth/weak-password') {
+                msg = "Das Passwort ist zu schwach (min. 6 Zeichen).";
+            }
+            status.innerHTML = "<span style='color: #e74c3c;'>❌ " + msg + "</span>";
+        }
+    }
+};
 
 window.submitAuthGoogle = async function() {
     const status = document.getElementById('auth-status');
@@ -264,7 +448,26 @@ window.submitAuthGoogle = async function() {
         }, 1000);
     } catch (error) {
         console.error("Auth error:", error);
-        if(status) status.innerHTML = "<span style='color: #e74c3c;'>❌ " + error.message + "</span>";
+        if (status) {
+            if (error.code === 'auth/unauthorized-domain' || (error.message && error.message.includes('auth/unauthorized-domain'))) {
+                const currentHost = window.location.hostname;
+                status.innerHTML = `
+                    <div style="background: rgba(231, 76, 60, 0.15); border: 1px solid #e74c3c; padding: 12px; border-radius: 8px; margin-top: 10px; color: #ff6b6b; font-size: 0.85em; text-align: left; line-height: 1.4;">
+                        <strong>⚠️ Domain nicht autorisiert in Firebase!</strong><br>
+                        Die Adresse <code>${currentHost}</code> muss in der Firebase Console zugelassen werden.<br><br>
+                        <strong>Lösung in der Console:</strong><br>
+                        1. Öffne <a href="https://console.firebase.google.com/" target="_blank" style="color: #3498db; text-decoration: underline;">Firebase Console</a> &gt; Authentication &gt; Settings &gt; Authorized Domains.<br>
+                        2. Füge <code>${currentHost}</code> als Domain hinzu.<br><br>
+                        <strong>Alternative:</strong> Spiele direkt ohne Google-Anmeldung als Gast:
+                        <button onclick="playAsGuest()" style="margin-top: 8px; width: 100%; background: #2ecc71; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                            👤 Jetzt als Gast weiterspielen
+                        </button>
+                    </div>
+                `;
+            } else {
+                status.innerHTML = "<span style='color: #e74c3c;'>❌ " + (error.message || error) + "</span>";
+            }
+        }
     }
 };
 
@@ -483,3 +686,242 @@ window.addEventListener('load', () => {
         }
     }, 500);
 });
+
+/* ==========================================================================
+   GUEST AUTH FALLBACK
+   ========================================================================== */
+window.playAsGuest = function() {
+    let savedGuest = localStorage.getItem('guestName');
+    if (!savedGuest) {
+        const defaultGuestName = "Gast_" + Math.floor(1000 + Math.random() * 9000);
+        const input = prompt("Wähle einen Gast-Namen:", defaultGuestName);
+        savedGuest = (input ? input.trim() : defaultGuestName) || defaultGuestName;
+        savedGuest = savedGuest.replace(/[^a-zA-Z0-9_.-]/g, '');
+        if (!savedGuest) savedGuest = defaultGuestName;
+        localStorage.setItem('guestName', savedGuest);
+    }
+    
+    localStorage.setItem('playerName', savedGuest);
+    if (typeof updateProfileDisplay === 'function') {
+        updateProfileDisplay(savedGuest, 1200, 0, 0, 1, 0, []);
+    }
+    
+    const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            type: 'login_attempt',
+            playerName: savedGuest,
+            password: 'guest-mode'
+        }));
+    }
+    
+    const modal = document.getElementById('auth-modal');
+    if (modal) modal.style.display = 'none';
+    
+    const openAuthBtn = document.getElementById('openAuthBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (openAuthBtn) openAuthBtn.style.display = 'none';
+    if (logoutBtn) logoutBtn.style.display = 'block';
+};
+
+/* ==========================================================================
+   DARK / LIGHT MODE GLOBAL TOGGLE
+   ========================================================================== */
+window.initAppTheme = function() {
+    const savedTheme = localStorage.getItem('app_theme') || 'dark';
+    if (savedTheme === 'light') {
+        document.body.classList.add('light-mode');
+    } else {
+        document.body.classList.remove('light-mode');
+    }
+    updateThemeBtnText();
+};
+
+window.toggleAppTheme = function() {
+    const isLight = document.body.classList.toggle('light-mode');
+    const newTheme = isLight ? 'light' : 'dark';
+    localStorage.setItem('app_theme', newTheme);
+    updateThemeBtnText();
+};
+
+function updateThemeBtnText() {
+    const btn = document.getElementById('themeToggleBtn');
+    if (btn) {
+        const isLight = document.body.classList.contains('light-mode');
+        btn.innerHTML = isLight ? '☀️ Light Mode' : '🌙 Dark Mode';
+        btn.setAttribute('title', isLight ? 'Zu Dark Mode wechseln' : 'Zu Light Mode wechseln');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initAppTheme();
+});
+
+/* ==========================================================================
+   WEB SPEECH API - VOICE CHESS MOVE CONTROL
+   ========================================================================== */
+window.isVoiceListening = false;
+let speechRecognitionInstance = null;
+
+window.toggleVoiceMoveControl = function() {
+    const statusEl = document.getElementById('voice-move-status');
+    const btn = document.getElementById('voiceMoveBtn');
+    
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        if (statusEl) statusEl.innerHTML = "<span style='color: #e74c3c;'>⚠️ Spracherkennung in diesem Browser nicht unterstützt. Verwende Google Chrome oder Microsoft Edge.</span>";
+        return;
+    }
+    
+    if (window.isVoiceListening) {
+        if (speechRecognitionInstance) {
+            try { speechRecognitionInstance.stop(); } catch(e){}
+        }
+        window.isVoiceListening = false;
+        if (btn) {
+            btn.style.background = '#27ae60';
+            btn.innerHTML = '🎤 Sprachsteuerung';
+        }
+        if (statusEl) statusEl.innerHTML = "<span style='color: #888;'>Sprachsteuerung aus.</span>";
+        return;
+    }
+    
+    try {
+        speechRecognitionInstance = new SpeechRecognition();
+        speechRecognitionInstance.lang = 'de-DE';
+        speechRecognitionInstance.continuous = true;
+        speechRecognitionInstance.interimResults = false;
+        
+        speechRecognitionInstance.onstart = function() {
+            window.isVoiceListening = true;
+            if (btn) {
+                btn.style.background = '#e74c3c';
+                btn.innerHTML = '🔴 Höre zu... (Klick zum Stoppen)';
+            }
+            if (statusEl) statusEl.innerHTML = "<span style='color: #2ecc71;'>🎤 Höre zu... Sag z.B. <i>'e2 nach e4'</i> oder <i>'Springer c3'</i></span>";
+        };
+        
+        speechRecognitionInstance.onresult = function(event) {
+            const last = event.results.length - 1;
+            const transcript = event.results[last][0].transcript;
+            console.log("🎤 Voice command received:", transcript);
+            processVoiceMoveCommand(transcript);
+        };
+        
+        speechRecognitionInstance.onerror = function(event) {
+            console.warn("Speech recognition error:", event.error);
+            if (event.error === 'not-allowed') {
+                if (statusEl) statusEl.innerHTML = "<span style='color: #e74c3c;'>⚠️ Mikrofon-Zugriff verweigert! Bitte in den Browser-Einstellungen erlauben.</span>";
+                window.isVoiceListening = false;
+                if (btn) {
+                    btn.style.background = '#27ae60';
+                    btn.innerHTML = '🎤 Sprachsteuerung';
+                }
+            }
+        };
+        
+        speechRecognitionInstance.onend = function() {
+            if (window.isVoiceListening) {
+                try { speechRecognitionInstance.start(); } catch(e) {}
+            }
+        };
+        
+        speechRecognitionInstance.start();
+    } catch (e) {
+        console.error("Speech recognition error:", e);
+        if (statusEl) statusEl.innerHTML = "<span style='color: #e74c3c;'>⚠️ Fehler beim Starten der Spracherkennung.</span>";
+    }
+};
+
+function processVoiceMoveCommand(rawText) {
+    const statusEl = document.getElementById('voice-move-status');
+    if (!rawText) return;
+    
+    let text = rawText.toLowerCase().trim();
+    
+    // Replace German word numbers and homophones
+    text = text.replace(/\beins\b/g, "1").replace(/\bzwei\b/g, "2").replace(/\bdrei\b/g, "3")
+               .replace(/\bvier\b/g, "4").replace(/\bfünf\b/g, "5").replace(/\bsechs\b/g, "6")
+               .replace(/\bsieben\b/g, "7").replace(/\bach|acht\b/g, "8");
+               
+    text = text.replace(/\banton\b/g, "a").replace(/\bberta\b/g, "b").replace(/\bcäsar\b/g, "c")
+               .replace(/\bcesar\b/g, "c").replace(/\bdora\b/g, "d").replace(/\bemil\b/g, "e")
+               .replace(/\bfriedrich\b/g, "f").replace(/\bgustav\b/g, "g").replace(/\bheinrich\b/g, "h");
+
+    // Common words to ignore
+    text = text.replace(/\b(nach|auf|zu|bis|to|von|aus|zieht|gehe|stelle|zug|spieler)\b/gi, " ");
+
+    // Handle pieces
+    // Springer -> N, Läufer -> B, Turm -> R, Dame -> Q, König -> K, Bauer -> P
+    let pieceType = null;
+    if (/springer|pferd|knight/i.test(text)) pieceType = 'N';
+    else if (/läufer|laufer|bishop/i.test(text)) pieceType = 'B';
+    else if (/turm|rook/i.test(text)) pieceType = 'R';
+    else if (/dame|königin|queen/i.test(text)) pieceType = 'Q';
+    else if (/könig|koenig|king/i.test(text)) pieceType = 'K';
+    else if (/bauer|pawn/i.test(text)) pieceType = 'P';
+
+    // Check pattern 1: Two squares (e.g. e2 e4)
+    const twoSquareMatch = text.match(/([a-h][1-8])[\s\-_]*([a-h][1-8])/i);
+    if (twoSquareMatch) {
+        const fromSq = twoSquareMatch[1].toLowerCase();
+        const toSq = twoSquareMatch[2].toLowerCase();
+        
+        const fr = 8 - parseInt(fromSq[1]);
+        const fc = fromSq.charCodeAt(0) - 97;
+        const tr = 8 - parseInt(toSq[1]);
+        const tc = toSq.charCodeAt(0) - 97;
+        
+        if (typeof window.canMoveLogic === 'function' && typeof window.isSafeMove === 'function' && typeof window.doMove === 'function') {
+            if (window.canMoveLogic(fr, fc, tr, tc) && window.isSafeMove(fr, fc, tr, tc)) {
+                window.doMove(fr, fc, tr, tc);
+                if (statusEl) statusEl.innerHTML = `<span style='color: #2ecc71;'>✅ Erkannt: "${rawText}" &rarr; <b>${fromSq} &rarr; ${toSq}</b> ausgeführt!</span>`;
+                return;
+            } else {
+                if (statusEl) statusEl.innerHTML = `<span style='color: #e74c3c;'>⚠️ Erkannt: "${rawText}" &rarr; Zug <b>${fromSq} &rarr; ${toSq}</b> ist unzulässig!</span>`;
+                return;
+            }
+        }
+    }
+
+    // Check pattern 2: Single target square (e.g. "c3" or "e4")
+    const singleSquareMatch = text.match(/([a-h][1-8])/i);
+    if (singleSquareMatch) {
+        const targetSq = singleSquareMatch[1].toLowerCase();
+        const tr = 8 - parseInt(targetSq[1]);
+        const tc = targetSq.charCodeAt(0) - 97;
+
+        // Search current player's pieces for a valid move to targetSq
+        if (typeof board !== 'undefined' && typeof turn !== 'undefined' && typeof window.isOwn === 'function') {
+            let candidates = [];
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const p = board[r][c];
+                    if (p && window.isOwn(p, turn)) {
+                        if (pieceType && p.toUpperCase() !== pieceType) continue;
+                        if (window.canMoveLogic(r, c, tr, tc) && window.isSafeMove(r, c, tr, tc)) {
+                            const fromCol = String.fromCharCode(97 + c);
+                            const fromRow = 8 - r;
+                            candidates.push({ fr: r, fc: c, fromSq: `${fromCol}${fromRow}` });
+                        }
+                    }
+                }
+            }
+
+            if (candidates.length === 1) {
+                const move = candidates[0];
+                window.doMove(move.fr, move.fc, tr, tc);
+                if (statusEl) statusEl.innerHTML = `<span style='color: #2ecc71;'>✅ Erkannt: "${rawText}" &rarr; <b>${move.fromSq} &rarr; ${targetSq}</b> ausgeführt!</span>`;
+                return;
+            } else if (candidates.length > 1) {
+                if (statusEl) statusEl.innerHTML = `<span style='color: #f1c40f;'>⚠️ Mehrere Figuren können nach <b>${targetSq}</b> ziehen. Nenne Startfeld (z.B. '${candidates[0].fromSq} nach ${targetSq}').</span>`;
+                return;
+            }
+        }
+    }
+
+    if (statusEl) {
+        statusEl.innerHTML = `<span style='color: #e74c3c;'>❓ Nicht erkannt: "${rawText}". Sage z.B. <i>'e2 nach e4'</i> oder <i>'Springer c3'</i>.</span>`;
+    }
+}
+
