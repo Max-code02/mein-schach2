@@ -1,7 +1,7 @@
 // adminSystem.js - EXCLUSIVE ADMIN PANEL (POWER-VERSION)
 const fs = require('fs');
 
-const ADMINS = []; // Gelöscht: ['Max', '222', 'Admin']
+const ADMINS = ['Max', 'max', '222', 'Admin', 'admin', 'max.schule13@gmail.com'];
 const ADMIN_PASSWORDS = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi', '222'];
 
 function parseArgsWithQuotes(text) {
@@ -134,7 +134,9 @@ async function handleAdminCommand(ws, text, context) {
             }
         }
         
-        const isAdminUser = ADMINS.includes(ws.playerName) || hasAdminPass || hasAdminRole;
+        const currentName = (ws.playerName || '').toLowerCase();
+        const currentEmail = (ws.userEmail || '').toLowerCase();
+        const isAdminUser = ADMINS.some(a => a.toLowerCase() === currentName) || currentName === 'max' || currentEmail === 'max.schule13@gmail.com' || hasAdminPass || hasAdminRole;
         const isHelperUser = hasHelperPass || hasHelperRole;
 
         let isAuthorized = isAdminUser;
@@ -383,6 +385,25 @@ async function handleAdminCommand(ws, text, context) {
             }
             break;
 
+        case 'testbot':
+        case 'test':
+        case 'diag':
+            try {
+                const { runSystemDiagnostics } = require('./adminTestBot.js');
+                ws.send(JSON.stringify({ type: 'chat', text: '🤖 Starte automatischen System-Diagnosetest...', system: true }));
+                const diagResults = await runSystemDiagnostics(context);
+                
+                let report = `🤖 **DIAGNOSE-BERICHT (${diagResults.timestamp}):**\n` +
+                             `✅ Bestanden: ${diagResults.passed} | ❌ Fehlgeschlagen: ${diagResults.failed}\n\n`;
+                diagResults.tests.forEach(t => {
+                    report += `• **${t.name}**: ${t.status} (${t.details})\n`;
+                });
+                ws.send(JSON.stringify({ type: 'chat', text: report, system: true }));
+            } catch(err) {
+                ws.send(JSON.stringify({ type: 'chat', text: `⚠️ Fehler beim Ausführen des Testbots: ${err.message}`, system: true }));
+            }
+            break;
+
         case 'h':
         case 'help':
         case 'befehle':
@@ -400,6 +421,7 @@ async function handleAdminCommand(ws, text, context) {
                           '• `/setrole <Spieler> <Rolle>` - Ändert die Rolle eines Spielers (z.B. admin)\n' +
                           '• `/clear` - Leert den Chatverlauf komplett\n' +
                           '• `/announce <Nachricht>` - Sendet eine globale System-Durchsage\n' +
+                          '• `/testbot` - Führt den automatischen System-Diagnosetest aus\n' +
                           '• `/wartung` - Schaltet den Wartungsmodus ein/aus\n' +
                           '• `/backup` - Erstellt ein manuelles Backup der Datenbank\n' +
                           '• `/info <Spieler>` - Zeigt IP und Raum eines Spielers an', 

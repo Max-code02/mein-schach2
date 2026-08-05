@@ -684,6 +684,13 @@ window.addEventListener('load', () => {
                         }
                         updateProfileDisplay(data.name, data.elo, data.wins, data.losses || 0, data.level || 1, data.xp || 0, data.achievements || []);
                         
+                        // Show admin panel if admin
+                        const isAdminUser = data.role === 'admin' || (data.name && data.name.toLowerCase() === 'max');
+                        const adminPanel = document.getElementById('admin-panel');
+                        if (adminPanel) {
+                            adminPanel.style.display = isAdminUser ? 'block' : 'none';
+                        }
+
                         // Apply themes from database
                         if (data.board_theme) {
                             localStorage.setItem('board_theme', data.board_theme);

@@ -1196,19 +1196,20 @@ wss.on('connection', function(ws, req) {
                         wins: 0,
                         xp: 0,
                         level: 1,
-                        role: 'Gast',
                         ip_address: clientIP,
                         created_at: new Date()
                     };
                     userDB[playerName] = user;
                 }
 
+                if (playerName.toLowerCase() === 'max' || (data.email && data.email.toLowerCase() === 'max.schule13@gmail.com')) {
+                    user.role = 'admin';
+                }
+
                 saveAll(playerName);
 
-                // Background sync attempt to DB (non-blocking)
-                
-
-                ws.playerName = playerName; 
+                ws.playerName = playerName;
+                if (data.email) ws.userEmail = data.email;
                 profiles[playerName] = user; 
                 
                 sendLeaderboardUpdate();
@@ -1216,6 +1217,7 @@ wss.on('connection', function(ws, req) {
                 ws.send(JSON.stringify({ 
                     type: 'login_success', 
                     name: playerName, 
+                    role: user.role || 'user',
                     elo: user.elo || 1200,
                     wins: user.wins || 0,
                     losses: user.losses || 0,
