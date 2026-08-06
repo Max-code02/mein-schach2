@@ -2181,8 +2181,60 @@ wss.on('connection', function(ws, req) {
                 return;
             }
 
+            if (data.type === 'rejoin_room') {
+                const targetRoom = data.room;
+                const pName = data.playerName || ws.playerName;
+                const roomState = activeRoomStates.get(targetRoom);
+
+                if (roomState && !roomState.gameOver) {
+                    ws.room = targetRoom;
+                    if (pName && pName === roomState.whitePlayer) {
+                        ws.color = 'white';
+                        ws.opponentName = roomState.blackPlayer;
+                    } else if (pName && pName === roomState.blackPlayer) {
+                        ws.color = 'black';
+                        ws.opponentName = roomState.whitePlayer;
+                    } else {
+                        ws.color = 'white';
+                        ws.opponentName = roomState.blackPlayer || 'Gegner';
+                    }
+
+                    if (roomState.isBotMatch || (ws.opponentName && (ws.opponentName.includes('Ghost') || ws.opponentName.includes('Bot')))) {
+                        ws.isBotMatch = true;
+                    }
+
+                    ws.send(JSON.stringify({
+                        type: 'rejoin_success',
+                        room: targetRoom,
+                        color: ws.color,
+                        opponent: ws.opponentName,
+                        board: roomState.board,
+                        turn: roomState.turn,
+                        timeWhite: roomState.timeWhite,
+                        timeBlack: roomState.timeBlack,
+                        timeControl: roomState.timeControl
+                    }));
+
+                    wss.clients.forEach(client => {
+                        if (client !== ws && client.readyState === 1 && client.room === targetRoom) {
+                            client.send(JSON.stringify({
+                                type: 'chat',
+                                text: `🟢 ${pName} hat sich wieder mit dem Spiel verbunden!`,
+                                system: true
+                            }));
+                        }
+                    });
+                    console.log(`🔄 ${pName} erfolgreich wieder mit Raum ${targetRoom} verbunden.`);
+                } else {
+                    ws.send(JSON.stringify({ type: 'rejoin_failed', room: targetRoom }));
+                }
+                return;
+            }
+
             if (data.type === 'game_over') {
                 const targetRoom = data.room || ws.room || "global";
+                const roomState = activeRoomStates.get(targetRoom);
+                if (roomState) roomState.gameOver = true;
                 generateGameVideo(targetRoom, ws);
 
                 if (firestoreDb) {
@@ -2237,9 +2289,7 @@ wss.on('connection', function(ws, req) {
         if (waitingPlayer === ws) {
             waitingPlayer = null;
         }
-        if (ws.room) {
-            activeRoomStates.delete(ws.room);
-        }
+        // Raum-Status nicht sofort beim Trennen löschen, damit Spieler sich nach Neuladen wiederverbinden können!
         if (typeof removeSpectator === 'function') {
             removeSpectator(ws);
         }

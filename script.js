@@ -1464,6 +1464,11 @@ socket.onmessage = (e) => {
             if (data.color) myColor = data.color;
             if (data.opponent) opponentName = data.opponent;
             if (gameModeSelect) gameModeSelect.value = "online";
+
+            localStorage.setItem('active_game_room', onlineRoom);
+            localStorage.setItem('my_color', myColor || 'white');
+            if (opponentName) localStorage.setItem('opponent_name', opponentName);
+
             resetGame();
             const statusEl = document.getElementById('status-display');
             if (statusEl) {
@@ -1472,7 +1477,47 @@ socket.onmessage = (e) => {
             addChat("System", "🎮 Spiel gestartet gegen " + (opponentName || "Gegner") + "! Du bist " + (myColor === "white" ? "Weiß" : "Schwarz") + ".", "system");
             return;
         }
+        if (data.type === 'rejoin_success') {
+            onlineRoom = data.room;
+            myColor = data.color || 'white';
+            opponentName = data.opponent || 'Gegner';
+            if (gameModeSelect) gameModeSelect.value = "online";
+
+            localStorage.setItem('active_game_room', onlineRoom);
+            localStorage.setItem('my_color', myColor);
+            localStorage.setItem('opponent_name', opponentName);
+
+            if (data.board) board = data.board;
+            if (data.turn) turn = data.turn;
+
+            const statusEl = document.getElementById('status-display');
+            if (statusEl) {
+                statusEl.textContent = "Online gegen " + (opponentName || "Gegner") + " (" + (myColor === "white" ? "Weiß" : "Schwarz") + ")";
+            }
+
+            draw();
+
+            if (typeof window.showInAppNotification === 'function') {
+                window.showInAppNotification(
+                    "🔄 Wiederverbunden",
+                    `Erfolgreich wieder mit deinem Spiel in Raum ${data.room} verbunden!`,
+                    "info"
+                );
+            }
+            addChat("System", `🔄 Du bist wieder mit Raum ${data.room} verbunden!`, "system");
+            return;
+        }
+        if (data.type === 'rejoin_failed') {
+            localStorage.removeItem('active_game_room');
+            localStorage.removeItem('my_color');
+            localStorage.removeItem('opponent_name');
+            console.log(`Raum ${data.room} ist nicht mehr aktiv.`);
+            return;
+        }
         if (data.type === 'game_over') {
+            localStorage.removeItem('active_game_room');
+            localStorage.removeItem('my_color');
+            localStorage.removeItem('opponent_name');
             const statusEl = document.getElementById('status-display');
             if (statusEl && data.text) statusEl.textContent = data.text;
             addChat("System", data.text || "Spiel beendet.", "system");
@@ -1535,6 +1580,9 @@ socket.onmessage = (e) => {
             return;
         }
         if (data.type === 'draw_accepted') {
+            localStorage.removeItem('active_game_room');
+            localStorage.removeItem('my_color');
+            localStorage.removeItem('opponent_name');
             addChat("System", "Remis (Draw) wurde akzeptiert. Das Spiel endet unentschieden.", "system");
             showCheckmateModal("Remis", "Das Spiel endete unentschieden.");
             if (timerInterval) clearInterval(timerInterval);
@@ -1673,6 +1721,9 @@ socket.onmessage = (e) => {
                 if (modal) {
                     modal.style.display = 'none';
                 }
+
+                // Versuche automatisch ein aktives Spiel wiederzubetreten
+                setTimeout(attemptGameRejoin, 300);
             }
             return;
         }
@@ -1819,6 +1870,20 @@ socket.onmessage = (e) => {
     }
 };
 
+function attemptGameRejoin() {
+    const savedRoom = localStorage.getItem('active_game_room');
+    const myName = getMyName ? getMyName() : (localStorage.getItem('playerName') || 'Gast');
+    if (savedRoom && socket && socket.readyState === WebSocket.OPEN && myName) {
+        console.log(`🔄 Automatischer Rejoin-Versuch für Raum: ${savedRoom} als ${myName}`);
+        socket.send(JSON.stringify({
+            type: 'rejoin_room',
+            room: savedRoom,
+            playerName: myName
+        }));
+    }
+}
+window.attemptGameRejoin = attemptGameRejoin;
+
 socket.onopen = () => {
     loadChatHistory();
     
@@ -1842,6 +1907,8 @@ socket.onopen = () => {
             playerName: savedName,
             password: savedHash
         }));
+    } else {
+        setTimeout(attemptGameRejoin, 400);
     }
     
     if (window.initFeatures) window.initFeatures(socket, savedName);

@@ -86,6 +86,72 @@ async function initFirebase() {
             fbDb = getFirestore(fbApp);
         }
 
+        // --- FIRESTORE VERBINDUNGS-MONITORING (TOAST-BANNER BEI UNTERBRECHUNG) ---
+        let wasFirestoreOffline = false;
+        let firestoreConnInitialized = false;
+
+        function showFirestoreStatusToast(isReconnected) {
+            if (typeof window.showInAppNotification === 'function') {
+                if (!isReconnected) {
+                    window.showInAppNotification(
+                        "⚠️ Verbindung getrennt",
+                        "Verbindung zu Google Firestore kurzzeitig unterbrochen. Daten werden lokal synchronisiert...",
+                        "warning"
+                    );
+                } else {
+                    window.showInAppNotification(
+                        "✅ Verbindung hergestellt",
+                        "Verbindung zu Google Firestore erfolgreich wiederhergestellt!",
+                        "info"
+                    );
+                }
+            }
+        }
+
+        try {
+            const connHealthRef = doc(fbDb, 'system', 'connection_health');
+            onSnapshot(connHealthRef, { includeMetadataChanges: true }, (snapshot) => {
+                const isFromCache = snapshot.metadata ? snapshot.metadata.fromCache : false;
+                if (!firestoreConnInitialized) {
+                    firestoreConnInitialized = true;
+                    if (isFromCache) {
+                        wasFirestoreOffline = true;
+                        showFirestoreStatusToast(false);
+                    }
+                    return;
+                }
+
+                if (isFromCache && !wasFirestoreOffline) {
+                    wasFirestoreOffline = true;
+                    showFirestoreStatusToast(false);
+                } else if (!isFromCache && wasFirestoreOffline) {
+                    wasFirestoreOffline = false;
+                    showFirestoreStatusToast(true);
+                }
+            }, (err) => {
+                if (!wasFirestoreOffline) {
+                    wasFirestoreOffline = true;
+                    showFirestoreStatusToast(false);
+                }
+            });
+        } catch (connErr) {
+            console.warn("Firestore connection check setup error:", connErr);
+        }
+
+        window.addEventListener('offline', () => {
+            if (!wasFirestoreOffline) {
+                wasFirestoreOffline = true;
+                showFirestoreStatusToast(false);
+            }
+        });
+
+        window.addEventListener('online', () => {
+            if (wasFirestoreOffline) {
+                wasFirestoreOffline = false;
+                showFirestoreStatusToast(true);
+            }
+        });
+
             let userUnsubscribe = null;
             let adminUnsubscribe = null;
 
