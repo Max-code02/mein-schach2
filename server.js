@@ -253,7 +253,7 @@ app.post('/api/login', async (req, res) => {
 
     if (!user) {
         try {
-                        if (data && data.length > 0) {
+            if (data && data.length > 0) {
                 user = data[0];
                 userDB[username] = user;
             }
@@ -269,6 +269,21 @@ app.post('/api/login', async (req, res) => {
                 userDB[username] = user;
             }
         } catch (e) {}
+    }
+
+    const clientIP = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
+    const uLower = username.trim().toLowerCase();
+
+    // Ban check (unless admin)
+    if (!isUserAdmin(username) && (bannedPlayers.has(uLower) || bannedIPs.has(clientIP) || (user && (user.is_banned || user.ip_ban)))) {
+        const banReason = (user && user.ban_reason) || "Account gesperrt von der Administration";
+        return res.status(403).json({
+            success: false,
+            banned: true,
+            error: "Account gesperrt",
+            reason: banReason,
+            message: `Account gesperrt! Grund: ${banReason}`
+        });
     }
 
     if (user && user.password && user.password !== password) {
@@ -775,6 +790,114 @@ async function sendBanEmail(playerName, reason, ip) {
     console.log(`✉️ E-Mail Benachrichtigung: Spieler ${playerName} (${ip}) wurde gesperrt. Grund: ${reason}`);
 }
 
+// --- ADMIN PROTECTION & LOGGING ENGINE ---
+let adminBanLogs = [];
+const ADMIN_LOG_FILE = path.join(__dirname, 'admin_ban_logs.json');
+if (fs.existsSync(ADMIN_LOG_FILE)) {
+    try {
+        adminBanLogs = JSON.parse(fs.readFileSync(ADMIN_LOG_FILE, 'utf8'));
+    } catch (e) {}
+}
+
+function isUserAdmin(target) {
+    if (!target) return false;
+    const str = String(target).toLowerCase().trim();
+    const ADMIN_LIST = ['max', '222', 'admin', 'max.schule13@gmail.com', 'owner', 'eigentümer'];
+    if (ADMIN_LIST.includes(str)) return true;
+
+    if (userDB) {
+        if (userDB[target] && (userDB[target].role === 'admin' || userDB[target].is_owner || userDB[target].role === 'moderator')) {
+            return true;
+        }
+        for (const k in userDB) {
+            const u = userDB[k];
+            if (u && (u.username?.toLowerCase() === str || u.email?.toLowerCase() === str || u.uid === target)) {
+                if (u.role === 'admin' || u.is_owner) return true;
+            }
+        }
+    }
+    return false;
+}
+
+function broadcastInAppNotification(notifObj) {
+    const msgStr = JSON.stringify({
+        type: 'in_app_notification',
+        title: notifObj.title,
+        message: notifObj.message,
+        level: notifObj.level || 'info',
+        timestamp: new Date().toISOString()
+    });
+    if (wss && wss.clients) {
+        wss.clients.forEach(c => {
+            if (c.readyState === 1) {
+                c.send(msgStr);
+            }
+        });
+    }
+}
+
+function broadcastAdminLogs() {
+    const msgStr = JSON.stringify({
+        type: 'admin_logs_update',
+        logs: adminBanLogs
+    });
+    if (wss && wss.clients) {
+        wss.clients.forEach(c => {
+            if (c.readyState === 1) {
+                c.send(msgStr);
+            }
+        });
+    }
+}
+
+function logAdminConflict(ws, targetAdminName, reason = "Kein Grund angegeben") {
+    const executorName = (ws && ws.playerName) || "System / Anti-Cheat";
+    const executorId = (ws && (ws.userEmail || ws.playerName || ws.clientIP)) || "System";
+    const logItem = {
+        id: "conflict_" + Date.now() + "_" + Math.random().toString(36).substring(2, 6),
+        event: 'Admin-Conflict',
+        type: 'Admin-Conflict',
+        timestamp: new Date().toISOString(),
+        formattedTime: new Date().toLocaleString('de-DE'),
+        executorId: executorId,
+        executorName: executorName,
+        targetAdminId: targetAdminName,
+        targetAdminName: targetAdminName,
+        reason: reason,
+        details: `Aktion gegen Administrator '${targetAdminName}' abgewehrt und als 'Admin-Conflict' erfasst.`
+    };
+
+    adminBanLogs.unshift(logItem);
+    if (adminBanLogs.length > 200) adminBanLogs = adminBanLogs.slice(0, 200);
+    try {
+        fs.writeFileSync(ADMIN_LOG_FILE, JSON.stringify(adminBanLogs, null, 2));
+    } catch(e) {}
+
+    // Save Admin-Conflict directly to Firebase Firestore
+    if (firestoreDb) {
+        try {
+            firestoreDb.collection('admin_conflicts').doc(logItem.id).set(logItem, { merge: true });
+            firestoreDb.collection('admin_logs').doc(logItem.id).set(logItem, { merge: true });
+            console.log(`🔥 Firebase: Admin-Conflict Event [${logItem.id}] erfolgreich hinterlegt.`);
+        } catch(e) {
+            console.error("Fehler beim Speichern von Admin-Conflict in Firestore:", e.message);
+        }
+    }
+
+    broadcastInAppNotification({
+        title: "🛡️ Admin-Conflict erfasst!",
+        message: `Bann/Anti-Cheat Aktion gegen Admin '${targetAdminName}' abgewehrt und als 'Admin-Conflict' protokolliert! (Grund: ${reason})`,
+        level: "warning"
+    });
+
+    broadcastAdminLogs();
+}
+
+function logAdminBanAttempt(ws, targetAdminName, reason = "Kein Grund angegeben") {
+    return logAdminConflict(ws, targetAdminName, reason);
+}
+global.logAdminConflict = logAdminConflict;
+
 async function triggerUltraBan(targetOrReason, possibleReason = null, ws = null) {
     let targetName = null;
     let reason = "Admin-Entscheidung";
@@ -796,23 +919,42 @@ async function triggerUltraBan(targetOrReason, possibleReason = null, ws = null)
     const cleanTarget = targetName.trim();
     const cleanTargetLower = cleanTarget.toLowerCase();
 
-    // Prevent banning Admin users
-    const ADMIN_NAMES = ['Max', '222', 'Admin'];
-    if (ADMIN_NAMES.some(adm => adm.toLowerCase() === cleanTargetLower)) {
-        console.log(`🛡️ Schutz: Admin-User ${cleanTarget} kann nicht gebannt werden.`);
+    // HARD-CODED ADMIN & OWNER IMMUNITY CHECK
+    const isTargetAdmin = isUserAdmin(cleanTarget);
+    const isWsAdmin = ws && (isUserAdmin(ws.playerName) || isUserAdmin(ws.userEmail) || ws.isAdmin || ws.is_owner || ws.role === 'admin');
+
+    if (isTargetAdmin || isWsAdmin) {
+        console.warn(`🛡️ ADMIN-CONFLICT INTERCEPTED: target='${cleanTarget}', ws='${ws?.playerName}'. Ban cancelled.`);
+        logAdminConflict(ws, cleanTarget, reason);
         if (ws && ws.readyState === 1) {
-            ws.send(JSON.stringify({ type: 'chat', text: `🛡️ Schutz: Admin-User "${cleanTarget}" kann nicht gebannt werden.`, system: true }));
+            ws.send(JSON.stringify({ 
+                type: 'chat', 
+                text: `🛡️ ADMIN-CONFLICT: "${cleanTarget}" ist ein Administrator/Eigentümer und ist gegen Sperren geschützt! Die Aktion wurde protokolliert.`, 
+                system: true 
+            }));
+            ws.send(JSON.stringify({
+                type: 'system_alert',
+                message: `🛡️ ADMIN-CONFLICT 🛡️\n\nAnti-Cheat / Ban-Aktion gegen den Admin '${cleanTarget}' wurde automatisch abgefangen und im System protokolliert.\nGrund: ${reason}`
+            }));
         }
         return;
     }
 
     console.error(`⛔ CENTRAL ULTRA-BAN: Spieler: ${cleanTarget} | Grund: ${reason}`);
 
-    // 1. Memory updates
+    // 1. Memory updates & Ban History
     bannedPlayers.add(cleanTargetLower);
     if (userDB[cleanTarget]) {
         userDB[cleanTarget].is_banned = true;
         userDB[cleanTarget].ip_ban = true;
+        userDB[cleanTarget].ban_reason = reason;
+        if (!userDB[cleanTarget].ban_history) userDB[cleanTarget].ban_history = [];
+        userDB[cleanTarget].ban_history.push({
+            action: 'banned',
+            reason: reason,
+            timestamp: new Date().toISOString(),
+            admin: (ws && ws.playerName) || 'System/Admin'
+        });
     }
 
     // 2. Save Player Ban to Firestore
@@ -888,6 +1030,10 @@ async function triggerUltraBan(targetOrReason, possibleReason = null, ws = null)
         const nameMatch = c.playerName && c.playerName.toLowerCase() === cleanTargetLower;
         const ipMatch = c.clientIP && c.clientIP === foundIP;
         if (nameMatch || ipMatch) {
+            c.send(JSON.stringify({
+                type: 'account_banned_overlay',
+                reason: reason
+            }));
             c.send(JSON.stringify({ 
                 type: 'system_alert', 
                 message: `🚫 DEIN ACCOUNT UND DEINE IP WURDEN PERMANENT GESPERRT.\nGrund: ${reason}` 
@@ -955,6 +1101,25 @@ function loadData() {
     }
     loadFirestoreProfiles();
     loadFirestoreBans();
+
+    // Auto-clean Admin Accounts from Ban lists
+    const ADMIN_NAMES = ['max', '222', 'admin', 'max.schule13@gmail.com', 'owner', 'eigentümer'];
+    ADMIN_NAMES.forEach(adm => {
+        bannedPlayers.delete(adm);
+        if (userDB && userDB[adm]) {
+            userDB[adm].is_banned = false;
+            userDB[adm].ip_ban = false;
+            userDB[adm].ban_reason = null;
+        }
+    });
+    for (const uname in userDB) {
+        if (isUserAdmin(uname)) {
+            bannedPlayers.delete(uname.toLowerCase());
+            userDB[uname].is_banned = false;
+            userDB[uname].ip_ban = false;
+            userDB[uname].ban_reason = null;
+        }
+    }
 }
 loadData();
 
@@ -1173,23 +1338,12 @@ wss.on('connection', function(ws, req) {
                     return ws.send(JSON.stringify({ type: 'login_error', text: 'Bitte Name & Passwort eingeben!' }));
                 }
 
-                if (bannedIPs.has(clientIP) || (ws.clientIP && bannedIPs.has(ws.clientIP))) {
-                    return ws.send(JSON.stringify({ type: 'login_error', text: 'Deine IP oder dein Account ist permanent gesperrt!' }));
-                }
-
-                if (bannedPlayers.has(playerName.toLowerCase())) {
-                    return ws.send(JSON.stringify({ type: 'login_error', text: 'Dieser Account ist permanent gesperrt!' }));
-                }
-
                 let user = null;
-                
                 if (uid) {
-                    // Try to find user by uid first
                     const existingName = Object.keys(userDB).find(name => userDB[name].uid === uid);
                     if (existingName) {
                         user = userDB[existingName];
                         if (existingName !== playerName) {
-                            // Name was changed! Remove old entry
                             delete userDB[existingName];
                             delete profiles[existingName];
                             user.username = playerName;
@@ -1197,13 +1351,22 @@ wss.on('connection', function(ws, req) {
                         }
                     }
                 }
-                
                 if (!user) {
                     user = userDB[playerName];
                 }
 
-                if (user && (user.is_banned || user.ip_ban)) {
-                    return ws.send(JSON.stringify({ type: 'login_error', text: 'Dieser Account ist permanent gesperrt!' }));
+                const pLower = playerName.toLowerCase();
+                const connIP = clientIP || ws.clientIP;
+                const isBannedUser = bannedPlayers.has(pLower) || (connIP && bannedIPs.has(connIP)) || (user && (user.is_banned || user.ip_ban));
+
+                if (isBannedUser && !isUserAdmin(playerName)) {
+                    const banReason = (user && user.ban_reason) || "Account gesperrt von der Administration";
+                    return ws.send(JSON.stringify({
+                        type: 'login_error',
+                        banned: true,
+                        reason: banReason,
+                        text: `Dieser Account ist permanent gesperrt!\nHinterlegter Grund: ${banReason}`
+                    }));
                 }
 
                 if (user) {
@@ -1256,6 +1419,23 @@ wss.on('connection', function(ws, req) {
                 }));
                 console.log(`✅ Login & Profil bereit: ${playerName}`);
                 return; 
+            }
+
+            if (data.type === 'admin_ban_user') {
+                const target = data.target || data.username;
+                const reason = data.reason || 'Admin-Entscheidung';
+                if (target) {
+                    await triggerUltraBan(target, reason, ws);
+                }
+                return;
+            }
+
+            if (data.type === 'get_admin_logs') {
+                ws.send(JSON.stringify({
+                    type: 'admin_logs_update',
+                    logs: adminBanLogs
+                }));
+                return;
             }
 
             if (data.type === 'chat_message') {
@@ -1783,24 +1963,91 @@ wss.on('connection', function(ws, req) {
 
             if (data.type === 'takeback_request') {
                 const targetRoom = data.room || ws.room;
-                broadcastRoomMessage({ type: 'takeback_request', playerName: data.playerName }, targetRoom, ws);
+                const senderName = data.playerName || ws.playerName || "Gegner";
+                
+                // Single-Player / Bot Match
+                if (ws.isBotMatch || ws.opponentName === 'Grandmaster_Ghost' || ws.opponentName === 'Ghost_Bot') {
+                    ws.send(JSON.stringify({ type: 'takeback_accepted' }));
+                    return;
+                }
+
+                let deliveredCount = 0;
+                wss.clients.forEach(client => {
+                    if (client !== ws && client.readyState === 1) {
+                        const isSameRoom = targetRoom && (client.room === targetRoom);
+                        const isOpponent = (client.playerName && ws.opponentName && client.playerName === ws.opponentName) ||
+                                           (client.opponentName && ws.playerName && client.opponentName === ws.playerName);
+                        if (isSameRoom || isOpponent) {
+                            client.send(JSON.stringify({ type: 'takeback_request', playerName: senderName, room: targetRoom }));
+                            deliveredCount++;
+                        }
+                    }
+                });
+
+                if (deliveredCount === 0) {
+                    broadcastRoomMessage({ type: 'takeback_request', playerName: senderName }, targetRoom, ws);
+                }
                 return;
             }
+
             if (data.type === 'takeback_accept') {
                 const targetRoom = data.room || ws.room;
-                broadcastRoomMessage({ type: 'takeback_accepted' }, targetRoom, null);
+                wss.clients.forEach(client => {
+                    if (client.readyState === 1) {
+                        const isSameRoom = targetRoom && (client.room === targetRoom);
+                        const isOpponent = (client.playerName && ws.opponentName && client.playerName === ws.opponentName) ||
+                                           (client.opponentName && ws.playerName && client.opponentName === ws.playerName);
+                        if (isSameRoom || isOpponent || client === ws) {
+                            client.send(JSON.stringify({ type: 'takeback_accepted', room: targetRoom }));
+                        }
+                    }
+                });
                 return;
             }
+
             if (data.type === 'draw_offer') {
                 const targetRoom = data.room || ws.room;
-                broadcastRoomMessage({ type: 'draw_offer', playerName: data.playerName }, targetRoom, ws);
+                const senderName = data.playerName || ws.playerName || "Gegner";
+
+                if (ws.isBotMatch || ws.opponentName === 'Grandmaster_Ghost' || ws.opponentName === 'Ghost_Bot') {
+                    ws.send(JSON.stringify({ type: 'draw_accepted' }));
+                    return;
+                }
+
+                let deliveredCount = 0;
+                wss.clients.forEach(client => {
+                    if (client !== ws && client.readyState === 1) {
+                        const isSameRoom = targetRoom && (client.room === targetRoom);
+                        const isOpponent = (client.playerName && ws.opponentName && client.playerName === ws.opponentName) ||
+                                           (client.opponentName && ws.playerName && client.opponentName === ws.playerName);
+                        if (isSameRoom || isOpponent) {
+                            client.send(JSON.stringify({ type: 'draw_offer', playerName: senderName, room: targetRoom }));
+                            deliveredCount++;
+                        }
+                    }
+                });
+
+                if (deliveredCount === 0) {
+                    broadcastRoomMessage({ type: 'draw_offer', playerName: senderName }, targetRoom, ws);
+                }
                 return;
             }
+
             if (data.type === 'draw_accept') {
                 const targetRoom = data.room || ws.room;
                 const state = activeRoomStates.get(targetRoom);
                 if (state) state.gameOver = true;
-                broadcastRoomMessage({ type: 'draw_accepted' }, targetRoom, null);
+
+                wss.clients.forEach(client => {
+                    if (client.readyState === 1) {
+                        const isSameRoom = targetRoom && (client.room === targetRoom);
+                        const isOpponent = (client.playerName && ws.opponentName && client.playerName === ws.opponentName) ||
+                                           (client.opponentName && ws.playerName && client.opponentName === ws.playerName);
+                        if (isSameRoom || isOpponent || client === ws) {
+                            client.send(JSON.stringify({ type: 'draw_accepted', room: targetRoom }));
+                        }
+                    }
+                });
                 return;
             }
 

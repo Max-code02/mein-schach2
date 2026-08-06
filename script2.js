@@ -103,6 +103,12 @@ async function initFirebase() {
                             const data = snapshot.data();
                             const dbName = data.username || pName;
                             
+                            if (data.is_banned || data.ip_ban) {
+                                if (window.showAccountBannedOverlay) {
+                                    window.showAccountBannedOverlay(data.ban_reason || data.reason || "Verstoß gegen die Community-Richtlinien");
+                                }
+                            }
+
                             // Speichere den Namen für Websocket und andere Features
                             localStorage.setItem('playerName', dbName);
                             const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
@@ -221,13 +227,18 @@ async function initFirebase() {
             };
 
             window.banUserAdmin = function(username) {
-                const reason = prompt(`Bitte gib einen Grund für den permanenten Bann von '${username}' ein:`, "Admin-Entscheidung");
-                if (reason !== null) {
-                    const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({ type: 'chat', text: `/ban "${username}" ${reason}` }));
-                    } else {
-                        alert("Du bist nicht mit dem Server verbunden!");
+                if (window.openBanReasonModal) {
+                    window.openBanReasonModal(username);
+                } else {
+                    const reason = prompt(`Bitte gib einen Grund für den permanenten Bann von '${username}' ein:`, "Admin-Entscheidung");
+                    if (reason !== null) {
+                        const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({ type: 'admin_ban_user', target: username, reason: reason }));
+                            ws.send(JSON.stringify({ type: 'chat', text: `/ban "${username}" ${reason}` }));
+                        } else {
+                            alert("Du bist nicht mit dem Server verbunden!");
+                        }
                     }
                 }
             };

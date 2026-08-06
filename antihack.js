@@ -68,6 +68,26 @@ function validateSecurity(data, ws, bannedIPs, triggerUltraBan) {
 
     // Hilfsfunktion um Ban + Firebase + Discord auszulösen
     const executeBan = (reason) => {
+        // --- 🛡️ HARD-CODED ADMIN & OWNER IMMUNITÄT ---
+        const ADMIN_LIST = ['max', '222', 'admin', 'max.schule13@gmail.com', 'owner', 'eigentümer'];
+        const isNameAdmin = name && ADMIN_LIST.includes(String(name).toLowerCase().trim());
+        const isEmailAdmin = ws.userEmail && ADMIN_LIST.includes(String(ws.userEmail).toLowerCase().trim());
+        const isWsAdmin = ws.isAdmin || ws.is_owner || ws.role === 'admin';
+        
+        if (isNameAdmin || isEmailAdmin || isWsAdmin) {
+            console.warn(`🛡️ ADMIN-CONFLICT INTERCEPTED in antihack.js: User '${name}' (${ip}) triggered '${reason}'.`);
+            if (typeof global.logAdminConflict === 'function') {
+                global.logAdminConflict(ws, name, reason);
+            }
+            if (ws.readyState === 1) {
+                ws.send(JSON.stringify({
+                    type: 'system_alert',
+                    message: `🛡️ ADMIN-CONFLICT 🛡️\n\nAnti-Cheat Trigger (${reason}) für Administrator/Eigentümer '${name}' abgefangen und protokolliert.`
+                }));
+            }
+            return true; // Admin schützt den Request - kein Ban!
+        }
+
         console.error(`⛔ ANTI-HACK TRIGGER: User: ${name} | IP: ${ip} | Grund: ${reason}`);
 
         // Firebase-Protokollierung
@@ -175,9 +195,11 @@ function validateSecurity(data, ws, bannedIPs, triggerUltraBan) {
         if (gameTime < 10) return executeBan("Speed-Win-Hack (Sieg unter 10 Sek)");
     }
 
-    // Room-Hijacking
-    if (ws.room && data.room && ws.room !== data.room) {
-        return executeBan("Cross-Room-Injection (Fremder Raumzugriff)");
+    // Room-Hilfsprüfung (Spectators und Raum-Wechsel sind 100% erlaubt!)
+    const ALLOWED_CROSS_ROOM_TYPES = ['spectate', 'spectate_join', 'spectate_leave', 'join', 'join_room', 'switch_room', 'get_room_state', 'chat', 'chat_message', 'get_active_games', 'takeback_request', 'takeback_accept', 'draw_offer', 'draw_accept'];
+    if (ws.room && data.room && ws.room !== data.room && !ws.isSpectator && !ALLOWED_CROSS_ROOM_TYPES.includes(data.type)) {
+        // Keinen Ban auslösen, sondern Raum synchronisieren oder ignorieren
+        console.log(`ℹ️ Raum-Wechsel/Cross-Room Event von ${ws.playerName}: ws.room (${ws.room}) -> data.room (${data.room}) für Typ ${data.type}`);
     }
 
     // Emojis-Flut (Browser-Crash verhindern, Grenze auf komfortable 30 Emojis angehoben)

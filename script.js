@@ -131,6 +131,238 @@ if (localStorage.getItem('banned') === 'true') {
     });
 }
 
+// --- IN-APP BENACHRICHTIGUNGEN & ADMIN-PANEL HELFER ---
+window.showInAppConfirmToast = function(title, message, onAccept, onDecline) {
+    const container = document.getElementById('in-app-toast-container');
+    if (!container) {
+        if (confirm(`${title}\n${message}`)) {
+            if (onAccept) onAccept();
+        } else {
+            if (onDecline) onDecline();
+        }
+        return;
+    }
+
+    const toast = document.createElement('div');
+    toast.style.pointerEvents = 'auto';
+    toast.style.background = '#1e2836';
+    toast.style.borderLeft = '5px solid #f39c12';
+    toast.style.border = '1px solid rgba(243, 156, 18, 0.5)';
+    toast.style.borderRadius = '8px';
+    toast.style.padding = '12px 15px';
+    toast.style.color = '#fff';
+    toast.style.boxShadow = '0 10px 25px rgba(0,0,0,0.5)';
+    toast.style.transition = 'all 0.3s ease';
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-10px)';
+
+    const toastId = 'confirm_toast_' + Date.now();
+    toast.id = toastId;
+
+    toast.innerHTML = `
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="font-weight: bold; font-size: 0.9em; color: #f39c12;">${title || 'Anfrage'}</div>
+            <div style="font-size: 0.85em; color: #e0e0e0; line-height: 1.4;">${message || ''}</div>
+            <div style="display: flex; gap: 8px; margin-top: 4px;">
+                <button id="${toastId}_accept" style="flex: 1; background: #27ae60; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.85em;">✅ Akzeptieren</button>
+                <button id="${toastId}_decline" style="flex: 1; background: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 0.85em;">❌ Ablehnen</button>
+            </div>
+        </div>
+    `;
+
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+    }, 10);
+
+    const acceptBtn = document.getElementById(`${toastId}_accept`);
+    const declineBtn = document.getElementById(`${toastId}_decline`);
+
+    if (acceptBtn) {
+        acceptBtn.onclick = () => {
+            toast.remove();
+            if (typeof onAccept === 'function') onAccept();
+        };
+    }
+    if (declineBtn) {
+        declineBtn.onclick = () => {
+            toast.remove();
+            if (typeof onDecline === 'function') onDecline();
+        };
+    }
+};
+
+window.showInAppNotification = function(title, message, level = 'info') {
+    const container = document.getElementById('in-app-toast-container');
+    if (!container) {
+        console.log(`[In-App Notification] ${title}: ${message}`);
+        return;
+    }
+
+    const toast = document.createElement('div');
+    toast.style.pointerEvents = 'auto';
+    toast.style.background = level === 'warning' ? '#2c1515' : '#1e2836';
+    toast.style.borderLeft = level === 'warning' ? '5px solid #e74c3c' : '5px solid #3498db';
+    toast.style.border = level === 'warning' ? '1px solid rgba(231,76,60,0.5)' : '1px solid rgba(52,152,219,0.5)';
+    toast.style.borderRadius = '8px';
+    toast.style.padding = '12px 15px';
+    toast.style.color = '#fff';
+    toast.style.boxShadow = '0 10px 25px rgba(0,0,0,0.5)';
+    toast.style.transition = 'all 0.3s ease';
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-10px)';
+
+    toast.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
+            <div>
+                <div style="font-weight: bold; font-size: 0.9em; color: ${level === 'warning' ? '#ff6b6b' : '#5db0e6'}; margin-bottom: 4px;">${title || 'System-Benachrichtigung'}</div>
+                <div style="font-size: 0.85em; color: #e0e0e0; line-height: 1.4;">${message || ''}</div>
+            </div>
+            <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; color: #888; cursor: pointer; font-size: 1.1em; line-height: 1;">&times;</button>
+        </div>
+    `;
+
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+    }, 10);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-10px)';
+        setTimeout(() => toast.remove(), 300);
+    }, 7000);
+};
+
+window.showAccountBannedOverlay = function(reason) {
+    const modal = document.getElementById('account-banned-modal');
+    const reasonEl = document.getElementById('account-banned-reason-text');
+    if (reasonEl) {
+        reasonEl.innerText = reason || "Verstoß gegen die Community-Richtlinien / Admin-Entscheidung";
+    }
+    if (modal) {
+        modal.style.display = 'flex';
+    } else {
+        alert("⛔ ACCOUNT GESPERRT!\nGrund: " + (reason || "Admin-Entscheidung"));
+    }
+};
+
+window.openBanReasonModal = function(username) {
+    const modal = document.getElementById('ban-reason-modal');
+    const targetText = document.getElementById('ban-reason-target-name');
+    const targetInput = document.getElementById('ban-reason-target-input');
+    const reasonInput = document.getElementById('ban-reason-text-input');
+
+    if (targetText) targetText.innerText = username;
+    if (targetInput) targetInput.value = username;
+    if (reasonInput) reasonInput.value = '';
+
+    if (modal) {
+        modal.style.display = 'flex';
+        if (reasonInput) reasonInput.focus();
+    } else {
+        const reason = prompt(`Bitte gib einen Grund für den permanenten Bann von '${username}' ein:`, "Admin-Entscheidung");
+        if (reason !== null) {
+            window.executeBanUser(username, reason);
+        }
+    }
+};
+
+window.closeBanReasonModal = function() {
+    const modal = document.getElementById('ban-reason-modal');
+    if (modal) modal.style.display = 'none';
+};
+
+window.submitBanWithReasonModal = function() {
+    const targetInput = document.getElementById('ban-reason-target-input');
+    const reasonInput = document.getElementById('ban-reason-text-input');
+    const username = targetInput ? targetInput.value : '';
+    const reason = reasonInput ? reasonInput.value.trim() || 'Admin-Entscheidung' : 'Admin-Entscheidung';
+
+    if (!username) return;
+
+    window.executeBanUser(username, reason);
+    window.closeBanReasonModal();
+};
+
+window.executeBanUser = function(username, reason) {
+    const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            type: 'admin_ban_user',
+            target: username,
+            reason: reason
+        }));
+        ws.send(JSON.stringify({ type: 'chat', text: `/ban "${username}" ${reason}` }));
+    } else {
+        alert("Du bist nicht mit dem Server verbunden!");
+    }
+};
+
+window.banUserAdmin = function(username) {
+    window.openBanReasonModal(username);
+};
+
+window.toggleAdminLogsPanel = function() {
+    const container = document.getElementById('admin-logs-container');
+    const arrow = document.getElementById('admin-logs-arrow');
+    if (!container) return;
+
+    if (container.style.display === 'none' || !container.style.display) {
+        container.style.display = 'block';
+        if (arrow) arrow.innerText = '▲';
+        window.requestAdminLogsRefresh();
+    } else {
+        container.style.display = 'none';
+        if (arrow) arrow.innerText = '▼';
+    }
+};
+
+window.requestAdminLogsRefresh = function() {
+    const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'get_admin_logs' }));
+    }
+};
+
+window.renderAdminLogs = function(logs) {
+    const listEl = document.getElementById('admin-logs-list');
+    if (!listEl) return;
+
+    if (!logs || !Array.isArray(logs) || logs.length === 0) {
+        listEl.innerHTML = '<div style="color: #aaa; text-align: center; font-style: italic; padding: 10px 0;">Keine verdächtigen Bann-Versuche protokolliert.</div>';
+        return;
+    }
+
+    listEl.innerHTML = '';
+    logs.forEach(log => {
+        const div = document.createElement('div');
+        div.style.background = 'rgba(231, 76, 60, 0.12)';
+        div.style.borderLeft = '3px solid #e74c3c';
+        div.style.padding = '8px 10px';
+        div.style.borderRadius = '4px';
+        div.style.display = 'flex';
+        div.style.flexDirection = 'column';
+        div.style.gap = '2px';
+
+        div.innerHTML = `
+            <div style="display: flex; justify-content: space-between; font-weight: bold; color: #ff6b6b;">
+                <span>🛡️ Angriff auf Admin: ${log.targetAdminId || 'Admin'}</span>
+                <span style="font-size: 0.75em; color: #aaa; font-weight: normal;">${log.formattedTime || log.timestamp || ''}</span>
+            </div>
+            <div style="color: #ddd; font-size: 0.85em;">
+                <strong>Verursacher (User-ID):</strong> ${log.executorId || log.executorName || 'Unbekannt'}
+            </div>
+            <div style="color: #bbb; font-size: 0.8em;">
+                <strong>Grund / Parameter:</strong> ${log.reason || 'Keine Angabe'}
+            </div>
+        `;
+        listEl.appendChild(div);
+    });
+};
+
 // --- GLOBALE VARIABLEN & SHIM (KÖNIG- & TEXTUR-DEFINITIONEN) ---
 function findKing(turnColor) {
     if (typeof board === 'undefined' || !board || !Array.isArray(board)) return null;
@@ -1249,13 +1481,41 @@ socket.onmessage = (e) => {
             return;
         }
         if (data.type === 'takeback_request') {
-            if (confirm(`Gegner ${data.playerName} möchte einen Zug zurücknehmen. Akzeptieren?`)) {
+            const sender = data.playerName || "Dein Gegner";
+            addChat("System", `↩️ ${sender} bittet um eine Zug-Rücknahme!`, "system");
+            if (typeof window.showInAppConfirmToast === 'function') {
+                window.showInAppConfirmToast(
+                    "↩️ Zug-Rücknahme angefordert",
+                    `Gegner ${sender} möchte den letzten Zug zurücknehmen.`,
+                    () => {
+                        socket.send(JSON.stringify({ type: 'takeback_accept', room: onlineRoom, playerName: getMyName() }));
+                        addChat("System", "Du hast die Zug-Rücknahme akzeptiert.", "system");
+                    },
+                    () => {
+                        addChat("System", "Du hast die Zug-Rücknahme abgelehnt.", "system");
+                    }
+                );
+            } else if (confirm(`Gegner ${sender} möchte einen Zug zurücknehmen. Akzeptieren?`)) {
                 socket.send(JSON.stringify({ type: 'takeback_accept', room: onlineRoom, playerName: getMyName() }));
             }
             return;
         }
         if (data.type === 'draw_offer') {
-            if (confirm(`Gegner ${data.playerName} bietet Remis an. Akzeptieren?`)) {
+            const sender = data.playerName || "Dein Gegner";
+            addChat("System", `🤝 ${sender} bietet ein Remis an!`, "system");
+            if (typeof window.showInAppConfirmToast === 'function') {
+                window.showInAppConfirmToast(
+                    "🤝 Remis-Angebot",
+                    `Gegner ${sender} bietet Unentschieden (Remis) an.`,
+                    () => {
+                        socket.send(JSON.stringify({ type: 'draw_accept', room: onlineRoom, playerName: getMyName() }));
+                        addChat("System", "Du hast das Remis-Angebot akzeptiert.", "system");
+                    },
+                    () => {
+                        addChat("System", "Du hast das Remis-Angebot abgelehnt.", "system");
+                    }
+                );
+            } else if (confirm(`Gegner ${sender} bietet Remis an. Akzeptieren?`)) {
                 socket.send(JSON.stringify({ type: 'draw_accept', room: onlineRoom, playerName: getMyName() }));
             }
             return;
@@ -1278,6 +1538,27 @@ socket.onmessage = (e) => {
             addChat("System", "Remis (Draw) wurde akzeptiert. Das Spiel endet unentschieden.", "system");
             showCheckmateModal("Remis", "Das Spiel endete unentschieden.");
             if (timerInterval) clearInterval(timerInterval);
+            return;
+        }
+        if (data.type === 'spectate_init' || data.type === 'spectator_join_success') {
+            isSpectatorMode = true;
+            window.isSpectatorMode = true;
+            onlineRoom = data.room || onlineRoom;
+
+            const banner = document.getElementById('spectating-banner');
+            const text = document.getElementById('spectating-text');
+            if (banner && text) {
+                banner.style.display = 'flex';
+                text.innerText = `👁️ Zuschauer-Modus: Raum ${data.room || onlineRoom} (${data.whitePlayer || 'Weiß'} vs ${data.blackPlayer || 'Schwarz'})`;
+            }
+
+            if (data.board) {
+                board = data.board;
+                if (data.turn) turn = data.turn;
+                draw();
+            }
+
+            addChat("System", `👁️ Du schaust jetzt Raum ${data.room || 'dem Spiel'} zu.`, "system");
             return;
         }
         if (data.type === 'time_sync') {
@@ -1328,9 +1609,36 @@ socket.onmessage = (e) => {
             }
             return;
         }
+        if (data.type === 'in_app_notification') {
+            if (window.showInAppNotification) window.showInAppNotification(data.title, data.message, data.level);
+            return;
+        }
+        if (data.type === 'account_banned_overlay') {
+            if (window.showAccountBannedOverlay) window.showAccountBannedOverlay(data.reason);
+            return;
+        }
+        if (data.type === 'admin_logs_update') {
+            if (window.renderAdminLogs) window.renderAdminLogs(data.logs);
+            return;
+        }
+        if (data.type === 'login_error') {
+            addChat("System", "❌ Login-Fehler: " + (data.text || "Zugriff verweigert"), "system");
+            if (data.banned || (data.text && (data.text.includes('gesperrt') || data.text.includes('gebannt')))) {
+                if (window.showAccountBannedOverlay) {
+                    window.showAccountBannedOverlay(data.reason || data.text);
+                }
+            }
+            return;
+        }
         if (data.type === 'system_alert') {
             addChat("SYSTEM ALERT", data.message, "system");
-            if (typeof showBanOverlay === 'function') {
+            if (data.message && (data.message.includes('GESPERRT') || data.message.includes('gebannt'))) {
+                if (window.showAccountBannedOverlay) {
+                    window.showAccountBannedOverlay(data.message);
+                } else if (typeof showBanOverlay === 'function') {
+                    showBanOverlay(data.message);
+                }
+            } else if (typeof showBanOverlay === 'function') {
                 showBanOverlay(data.message);
             } else {
                 alert(data.message);

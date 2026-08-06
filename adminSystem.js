@@ -358,47 +358,13 @@ async function handleAdminCommand(ws, text, context) {
             }
             const reason = resolvedArgs.rest || 'Admin-Entscheidung';
             
-            let targetIsAdmin = false;
-            const lowerTarget = targetName.toLowerCase();
-            if (ADMINS.some(a => a.toLowerCase() === lowerTarget) || lowerTarget === 'max') {
-                targetIsAdmin = true;
-            }
-            wss.clients.forEach(c => {
-                if ((c.playerName && c.playerName.toLowerCase() === lowerTarget) || c.clientIP === targetName) {
-                    if (ADMINS.some(a => a.toLowerCase() === (c.playerName || "").toLowerCase()) || (c.playerName || "").toLowerCase() === 'max' || c.email === 'max.schule13@gmail.com' || (profiles && profiles[c.playerName] && profiles[c.playerName].role === 'admin')) {
-                        targetIsAdmin = true;
-                    }
-                }
-            });
-
-            if (targetIsAdmin) {
-                wss.clients.forEach(c => {
-                    if ((c.playerName && c.playerName.toLowerCase() === lowerTarget) || c.clientIP === targetName) {
-                        c.send(JSON.stringify({ type: 'chat', text: `⚠️ Achtung: ${ws.playerName || 'Ein Admin/System'} hat versucht, dich permanent zu bannen (Schutz aktiv)`, system: true }));
-                    }
-                });
-                ws.send(JSON.stringify({ type: 'chat', text: `🛡️ "${targetName}" ist ein Admin und kann nicht gebannt werden!`, system: true }));
-                return true;
-            }
-
-            // check if target is IP
-            const isIP = targetName.match(/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/);
-            if (isIP) {
-                if (bannedIPs) bannedIPs.add(targetName);
+            if (typeof banPlayer === 'function') {
+                await banPlayer(targetName, reason, ws);
             } else {
                 if (bannedPlayers) bannedPlayers.add(targetName.toLowerCase());
-                if (typeof banPlayer === 'function') await banPlayer(targetName, reason);
             }
             
-            wss.clients.forEach(c => {
-                if ((c.playerName && c.playerName.toLowerCase() === targetName.toLowerCase()) || c.clientIP === targetName) {
-                    if (bannedIPs && c.clientIP) bannedIPs.add(c.clientIP);
-                    c.send(JSON.stringify({ type: 'login_error', text: `Du wurdest gebannt! Grund: ${reason}` }));
-                    c.send(JSON.stringify({ type: 'chat', text: `🔨 Du wurdest gebannt! Grund: ${reason}`, system: true }));
-                    c.close();
-                }
-            });
-            ws.send(JSON.stringify({ type: 'chat', text: `🔨 "${targetName}" wurde permanent gebannt!`, system: true }));
+            ws.send(JSON.stringify({ type: 'chat', text: `🔨 Vorgang für "${targetName}" abgeschlossen! (Grund: ${reason})`, system: true }));
             break;
 
         // --- BANLIST ---
