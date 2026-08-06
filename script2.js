@@ -158,6 +158,7 @@ async function initFirebase() {
                                                 <button onclick="window.setRole('${uDoc.id}', 'admin')" style="background: #e74c3c; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8em;">Admin</button>
                                                 <button onclick="window.setRole('${uDoc.id}', 'moderator')" style="background: #2ecc71; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8em;">Mod</button>
                                                 <button onclick="window.setRole('${uDoc.id}', 'user')" style="background: #7f8c8d; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8em;">User</button>
+                                                <button onclick="window.banUserAdmin('${uName}')" style="background: #c0392b; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8em;">Ban</button>
                                             </div>
                                         `;
                                         listEl.appendChild(div);
@@ -216,6 +217,18 @@ async function initFirebase() {
                     await setDoc(doc(fbDb, 'players', uid), { role: role }, { merge: true });
                 } catch(e) {
                     console.error("Fehler beim Ändern der Rolle", e);
+                }
+            };
+
+            window.banUserAdmin = function(username) {
+                const reason = prompt(`Bitte gib einen Grund für den permanenten Bann von '${username}' ein:`, "Admin-Entscheidung");
+                if (reason !== null) {
+                    const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'chat', text: `/ban "${username}" ${reason}` }));
+                    } else {
+                        alert("Du bist nicht mit dem Server verbunden!");
+                    }
                 }
             };
             

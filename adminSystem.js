@@ -266,7 +266,7 @@ async function handleAdminCommand(ws, text, context) {
             if (tbanTargetIsAdmin) {
                 wss.clients.forEach(c => {
                     if (c.playerName && c.playerName.toLowerCase() === lowerTBanTarget) {
-                        c.send(JSON.stringify({ type: 'chat', text: `⚠️ du wärst jetzt gebannt worden (Schutz aktiv - Tempban abgewendet)`, system: true }));
+                        c.send(JSON.stringify({ type: 'chat', text: `⚠️ Achtung: ${ws.playerName || 'Ein Admin/System'} hat versucht, dich temporär zu bannen (Schutz aktiv - Tempban abgewendet)`, system: true }));
                     }
                 });
                 ws.send(JSON.stringify({ type: 'chat', text: `🛡️ "${targetName}" ist ein Admin und kann nicht gebannt werden!`, system: true }));
@@ -277,6 +277,7 @@ async function handleAdminCommand(ws, text, context) {
             
             wss.clients.forEach(c => {
                 if (c.playerName && c.playerName.toLowerCase() === targetName.toLowerCase()) {
+                    c.send(JSON.stringify({ type: 'login_error', text: `Du wurdest für ${tbMin} Minuten temporär gebannt!` }));
                     c.send(JSON.stringify({ type: 'chat', text: `⏳ Du wurdest für ${tbMin} Minuten temporär gebannt!`, system: true }));
                     c.close();
                 }
@@ -316,7 +317,7 @@ async function handleAdminCommand(ws, text, context) {
             if (kickTargetIsAdmin) {
                 wss.clients.forEach(c => {
                     if (c.playerName && c.playerName.toLowerCase() === lowerKTarget) {
-                        c.send(JSON.stringify({ type: 'chat', text: `⚠️ du wärst jetzt gebannt worden (Schutz aktiv - Kick abgewendet)`, system: true }));
+                        c.send(JSON.stringify({ type: 'chat', text: `⚠️ Achtung: ${ws.playerName || 'Ein Admin/System'} hat versucht, dich zu kicken (Schutz aktiv - Kick abgewendet)`, system: true }));
                     }
                 });
                 ws.send(JSON.stringify({ type: 'chat', text: `🛡️ "${targetName}" ist ein Admin und kann nicht gekickt werden!`, system: true }));
@@ -373,7 +374,7 @@ async function handleAdminCommand(ws, text, context) {
             if (targetIsAdmin) {
                 wss.clients.forEach(c => {
                     if ((c.playerName && c.playerName.toLowerCase() === lowerTarget) || c.clientIP === targetName) {
-                        c.send(JSON.stringify({ type: 'chat', text: `⚠️ du wärst jetzt gebannt worden (Schutz aktiv)`, system: true }));
+                        c.send(JSON.stringify({ type: 'chat', text: `⚠️ Achtung: ${ws.playerName || 'Ein Admin/System'} hat versucht, dich permanent zu bannen (Schutz aktiv)`, system: true }));
                     }
                 });
                 ws.send(JSON.stringify({ type: 'chat', text: `🛡️ "${targetName}" ist ein Admin und kann nicht gebannt werden!`, system: true }));
@@ -392,6 +393,7 @@ async function handleAdminCommand(ws, text, context) {
             wss.clients.forEach(c => {
                 if ((c.playerName && c.playerName.toLowerCase() === targetName.toLowerCase()) || c.clientIP === targetName) {
                     if (bannedIPs && c.clientIP) bannedIPs.add(c.clientIP);
+                    c.send(JSON.stringify({ type: 'login_error', text: `Du wurdest gebannt! Grund: ${reason}` }));
                     c.send(JSON.stringify({ type: 'chat', text: `🔨 Du wurdest gebannt! Grund: ${reason}`, system: true }));
                     c.close();
                 }
