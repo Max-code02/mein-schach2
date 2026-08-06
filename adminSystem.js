@@ -112,7 +112,7 @@ async function handleAdminCommand(ws, text, context) {
     const resolvedArgs = resolveTargetNameAndRest(cleanTokens, wss, profiles);
     const targetName = resolvedArgs.target;
 
-    const PUBLIC_COMMANDS = ['watch', 'spectate', 'unwatch', 'leave', 'help', 'befehle', 'befhel', '?'];
+    const PUBLIC_COMMANDS = ['watch', 'spectate', 'unwatch', 'leave', 'help', 'befehle', 'befhel', '?', 'myip', 'mypi', 'mipy', 'mypu'];
     const HELPER_COMMANDS = ['kick', 'mute', 'unmute', 'warn', 'info', 'list', 'online', 'players'];
 
     // Check user identities & roles
@@ -544,6 +544,9 @@ async function handleAdminCommand(ws, text, context) {
             ws.send(JSON.stringify({ type: 'chat', text: `👥 **Radar (${wss.clients.size} Online):**\n• ${online || 'Niemand'}`, system: true }));
             break;
 
+        case 'mypi':
+        case 'mipy':
+        case 'mypu':
         case 'myip':
             ws.send(JSON.stringify({ type: 'chat', text: `🌐 Deine aktuelle IP: ${ws.clientIP || 'Unbekannt'}`, system: true }));
             break;

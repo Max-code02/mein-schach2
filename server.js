@@ -49,6 +49,9 @@ try { startAutoMessages = require('./autoMessages').startAutoMessages || startAu
 let handleAdminCommand = async () => false;
 try { handleAdminCommand = require('./adminSystem').handleAdminCommand || handleAdminCommand; } catch (e) {}
 
+let startAutoTestBot = () => {};
+try { startAutoTestBot = require('./adminTestBot').startAutoTestBot || startAutoTestBot; } catch (e) {}
+
 let runBackup = () => {}, startBackupScheduler = () => {};
 try {
     const backup = require('./autoBackup');
@@ -1098,6 +1101,7 @@ wss.on('connection', function(ws, req) {
                 });
 
                 if (!isHandled) {
+                    console.log(`Command [${data.text}] not found`);
                     ws.send(JSON.stringify({ 
                         type: 'chat', 
                         text: '❓ Unbekannter Befehl. Nutze !help oder /help für Hilfe.', 
@@ -1250,6 +1254,7 @@ wss.on('connection', function(ws, req) {
                         roomStates: activeRoomStates
                     });
                     if (!isHandled) {
+                        console.log(`Command [${content}] not found`);
                         ws.send(JSON.stringify({ 
                             type: 'chat', 
                             text: '❓ Unbekannter Befehl. Nutze !help oder /help für Hilfe.', 
@@ -1929,6 +1934,9 @@ server.listen(PORT, '0.0.0.0', async function() {
     if (typeof startAutoMessages === 'function') {
         startAutoMessages(wss); 
         console.log("🤖 Info-Bot (AutoMessages) wurde gestartet.");
+    }
+    if (typeof startAutoTestBot === 'function') {
+        startAutoTestBot({ wss, db: firestoreDb, profiles: userDB }, 5);
     }
 
     console.log("✅ MASTER-SERVER READY AUF PORT " + PORT);
