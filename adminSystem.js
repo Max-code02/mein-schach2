@@ -249,6 +249,30 @@ async function handleAdminCommand(ws, text, context) {
                 ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /tempban "Name" [Minuten]', system: true }));
                 return true;
             }
+
+            let tbanTargetIsAdmin = false;
+            const lowerTBanTarget = targetName.toLowerCase();
+            if (ADMINS.some(a => a.toLowerCase() === lowerTBanTarget) || lowerTBanTarget === 'max') {
+                tbanTargetIsAdmin = true;
+            }
+            wss.clients.forEach(c => {
+                if (c.playerName && c.playerName.toLowerCase() === lowerTBanTarget) {
+                    if (ADMINS.some(a => a.toLowerCase() === (c.playerName || "").toLowerCase()) || (c.playerName || "").toLowerCase() === 'max' || c.email === 'max.schule13@gmail.com' || (profiles && profiles[c.playerName] && profiles[c.playerName].role === 'admin')) {
+                        tbanTargetIsAdmin = true;
+                    }
+                }
+            });
+
+            if (tbanTargetIsAdmin) {
+                wss.clients.forEach(c => {
+                    if (c.playerName && c.playerName.toLowerCase() === lowerTBanTarget) {
+                        c.send(JSON.stringify({ type: 'chat', text: `⚠️ du wärst jetzt gebannt worden (Schutz aktiv - Tempban abgewendet)`, system: true }));
+                    }
+                });
+                ws.send(JSON.stringify({ type: 'chat', text: `🛡️ "${targetName}" ist ein Admin und kann nicht gebannt werden!`, system: true }));
+                return true;
+            }
+
             if (bannedPlayers) bannedPlayers.add(targetName.toLowerCase());
             
             wss.clients.forEach(c => {
@@ -274,6 +298,31 @@ async function handleAdminCommand(ws, text, context) {
             }
             const kReason = resolvedArgs.rest || 'Vom Admin gekickt';
             let kickedCount = 0;
+            let kickTargetIsAdmin = false;
+            
+            const lowerKTarget = targetName.toLowerCase();
+            if (ADMINS.some(a => a.toLowerCase() === lowerKTarget) || lowerKTarget === 'max') {
+                kickTargetIsAdmin = true;
+            }
+
+            wss.clients.forEach(c => { 
+                if (c.playerName && c.playerName.toLowerCase() === lowerKTarget) { 
+                    if (ADMINS.some(a => a.toLowerCase() === (c.playerName || "").toLowerCase()) || (c.playerName || "").toLowerCase() === 'max' || c.email === 'max.schule13@gmail.com' || (profiles && profiles[c.playerName] && profiles[c.playerName].role === 'admin')) {
+                        kickTargetIsAdmin = true;
+                    }
+                }
+            });
+
+            if (kickTargetIsAdmin) {
+                wss.clients.forEach(c => {
+                    if (c.playerName && c.playerName.toLowerCase() === lowerKTarget) {
+                        c.send(JSON.stringify({ type: 'chat', text: `⚠️ du wärst jetzt gebannt worden (Schutz aktiv - Kick abgewendet)`, system: true }));
+                    }
+                });
+                ws.send(JSON.stringify({ type: 'chat', text: `🛡️ "${targetName}" ist ein Admin und kann nicht gekickt werden!`, system: true }));
+                return true;
+            }
+
             wss.clients.forEach(c => { 
                 if (c.playerName && c.playerName.toLowerCase() === targetName.toLowerCase()) { 
                     c.send(JSON.stringify({ type: 'chat', text: `🚪 Du wurdest gekickt! Grund: ${kReason}`, system: true })); 
@@ -308,6 +357,29 @@ async function handleAdminCommand(ws, text, context) {
             }
             const reason = resolvedArgs.rest || 'Admin-Entscheidung';
             
+            let targetIsAdmin = false;
+            const lowerTarget = targetName.toLowerCase();
+            if (ADMINS.some(a => a.toLowerCase() === lowerTarget) || lowerTarget === 'max') {
+                targetIsAdmin = true;
+            }
+            wss.clients.forEach(c => {
+                if ((c.playerName && c.playerName.toLowerCase() === lowerTarget) || c.clientIP === targetName) {
+                    if (ADMINS.some(a => a.toLowerCase() === (c.playerName || "").toLowerCase()) || (c.playerName || "").toLowerCase() === 'max' || c.email === 'max.schule13@gmail.com' || (profiles && profiles[c.playerName] && profiles[c.playerName].role === 'admin')) {
+                        targetIsAdmin = true;
+                    }
+                }
+            });
+
+            if (targetIsAdmin) {
+                wss.clients.forEach(c => {
+                    if ((c.playerName && c.playerName.toLowerCase() === lowerTarget) || c.clientIP === targetName) {
+                        c.send(JSON.stringify({ type: 'chat', text: `⚠️ du wärst jetzt gebannt worden (Schutz aktiv)`, system: true }));
+                    }
+                });
+                ws.send(JSON.stringify({ type: 'chat', text: `🛡️ "${targetName}" ist ein Admin und kann nicht gebannt werden!`, system: true }));
+                return true;
+            }
+
             // check if target is IP
             const isIP = targetName.match(/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/);
             if (isIP) {

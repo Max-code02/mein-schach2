@@ -262,9 +262,11 @@ let premove = null;
 
 let whiteTime = 600;
 let blackTime = 600;
+let timeInc = 0;
 let timerInterval = null;
 
 function formatTime(secs) {
+    if (secs === Infinity || secs === 'unlimited') return '∞';
     const m = Math.floor(secs / 60);
     const s = secs % 60;
     return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
@@ -725,6 +727,11 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
         sendeAnAnalyse(fr, fc, tr, tc, piece, isCapture);
         addMoveToSidebar(fr, fc, tr, tc, piece, isCapture);
 
+        if (timeInc > 0 && (!onlineRoom || onlineRoom === 'global' || !socket || socket.readyState !== WebSocket.OPEN)) {
+            if (turn === "white") whiteTime += timeInc;
+            else blackTime += timeInc;
+        }
+
         turn = turn === "white" ? "black" : "white";
 
         if (statusEl) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug";
@@ -772,12 +779,13 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
 
         if (gameModeSelect) {
             if (gameModeSelect.value === "bot" && turn === "black") {
-                myEngineWorker.postMessage({ board, turn, fen: boardToFEN() });
-            } else if (gameModeSelect.value === "stockfish" && turn === "black") {
+                const diffSelect = document.getElementById("botDifficulty");
+                const level = diffSelect ? parseInt(diffSelect.value) : 5;
                 const fen = typeof boardToFEN === 'function' ? boardToFEN() : "";
                 if (fen) {
+                    stockfishWorker.postMessage('setoption name Skill Level value ' + (level * 2));
                     stockfishWorker.postMessage(`position fen ${fen}`);
-                    stockfishWorker.postMessage("go depth 15");
+                    stockfishWorker.postMessage(`go depth ${level * 2}`);
                 }
             }
         }
@@ -786,7 +794,7 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
             const pm = premove;
             premove = null;
             if (board[pm.fr][pm.fc] && isOwn(board[pm.fr][pm.fc], turn) && canMoveLogic(pm.fr, pm.fc, pm.tr, pm.tc) && isSafeMove(pm.fr, pm.fc, pm.tr, pm.tc)) {
-                setTimeout(() => doMove(pm.fr, pm.fc, pm.tr, pm.tc), 200);
+                setTimeout(() => doMove(pm.fr, pm.fc, pm.tr, pm.tc), 10);
             }
         }
     }, animationDuration);
@@ -821,8 +829,25 @@ function resetGame() {
     lastMove = null;
     premove = null;
     
-    whiteTime = 600;
-    blackTime = 600;
+    const tcSelect = document.getElementById("timeControl");
+    const tc = tcSelect ? tcSelect.value : "unlimited";
+    
+    let tSecs = 600;
+    timeInc = 0;
+    if (tc !== 'unlimited') {
+        if (tc.includes('+')) {
+            const pts = tc.split('+');
+            tSecs = parseInt(pts[0]) * 60;
+            timeInc = parseInt(pts[1]);
+        } else {
+            tSecs = parseInt(tc) * 60;
+        }
+    } else {
+        tSecs = Infinity;
+    }
+    
+    whiteTime = tSecs;
+    blackTime = tSecs;
     updateTimerUI();
     startTimer();
 
@@ -1104,16 +1129,42 @@ window.addEventListener('DOMContentLoaded', () => {
             const roomId = roomInput ? roomInput.value.trim() : "";
             if (roomId) {
                 onlineRoom = roomId;
+                const tcSelect = document.getElementById("timeControl");
+                const timeControl = tcSelect ? tcSelect.value : "unlimited";
                 if (socket && socket.readyState === WebSocket.OPEN) {
                     socket.send(JSON.stringify({
                         type: 'find_random',
                         room: roomId,
-                        playerName: getMyName()
+                        playerName: getMyName(),
+                        timeControl: timeControl
                     }));
                 }
                 addChat("System", "Raum '" + roomId + "' beigetreten.", "system");
             } else {
                 alert("Bitte eine Raum-ID eingeben.");
+            }
+        };
+    }
+    
+    const createTournamentBtn = document.getElementById("createTournamentBtn");
+    if (createTournamentBtn) {
+        createTournamentBtn.onclick = () => {
+            const tNameInput = document.getElementById("tournamentName");
+            const tName = tNameInput ? tNameInput.value.trim() : "";
+            if (tName) {
+                const tcSelect = document.getElementById("timeControl");
+                const timeControl = tcSelect ? tcSelect.value : "unlimited";
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({
+                        type: 'create_tournament',
+                        tournamentName: tName,
+                        playerName: getMyName(),
+                        timeControl: timeControl
+                    }));
+                }
+                addChat("System", "Turnier '" + tName + "' erstellt.", "system");
+            } else {
+                alert("Bitte einen Turniernamen eingeben.");
             }
         };
     }
@@ -1126,9 +1177,18 @@ window.addEventListener('DOMContentLoaded', () => {
             const puzzleStatus = document.getElementById("puzzle-status");
             if (puzzleStatus) puzzleStatus.innerText = "";
             const mode = gameModeSelect.value;
+            
+            const botDiff = document.getElementById("bot-difficulty-container");
+            if (botDiff) botDiff.style.display = (mode === "bot") ? "block" : "none";
+            
+            const timeCtrl = document.getElementById("time-control-container");
+            if (timeCtrl) timeCtrl.style.display = (mode === "online" || mode === "random" || mode === "local" || mode === "bot") ? "block" : "none";
+
             if (mode === "random") {
+                const tcSelect = document.getElementById("timeControl");
+                const timeControl = tcSelect ? tcSelect.value : "unlimited";
                 if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify({ type: 'find_random', playerName: getMyName() }));
+                    socket.send(JSON.stringify({ type: 'find_random', playerName: getMyName(), timeControl: timeControl }));
                     addChat("System", "Suche nach einem zufälligen Gegner...", "system");
                 } else {
                     addChat("System", "Nicht mit dem Server verbunden.", "system");
@@ -1186,6 +1246,43 @@ socket.onmessage = (e) => {
             addChat("System", data.text || "Spiel beendet.", "system");
             showCheckmateModal("Gegner", data.text || "Spiel beendet!");
             if (timerInterval) clearInterval(timerInterval);
+            return;
+        }
+        if (data.type === 'takeback_request') {
+            if (confirm(`Gegner ${data.playerName} möchte einen Zug zurücknehmen. Akzeptieren?`)) {
+                socket.send(JSON.stringify({ type: 'takeback_accept', room: onlineRoom, playerName: getMyName() }));
+            }
+            return;
+        }
+        if (data.type === 'draw_offer') {
+            if (confirm(`Gegner ${data.playerName} bietet Remis an. Akzeptieren?`)) {
+                socket.send(JSON.stringify({ type: 'draw_accept', room: onlineRoom, playerName: getMyName() }));
+            }
+            return;
+        }
+        if (data.type === 'takeback_accepted') {
+            addChat("System", "Zug-Rücknahme wurde akzeptiert.", "system");
+            if (history.length > 0) {
+                const lastState = history.pop();
+                board = lastState.board;
+                turn = lastState.turn;
+                hasMoved = lastState.hasMoved || hasMoved;
+                enPassantTarget = lastState.enPassantTarget || null;
+                halfMoveClock = lastState.halfMoveClock || 0;
+                if (statusEl) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug (Rückgängig)";
+                draw();
+            }
+            return;
+        }
+        if (data.type === 'draw_accepted') {
+            addChat("System", "Remis (Draw) wurde akzeptiert. Das Spiel endet unentschieden.", "system");
+            showCheckmateModal("Remis", "Das Spiel endete unentschieden.");
+            if (timerInterval) clearInterval(timerInterval);
+            return;
+        }
+        if (data.type === 'time_sync') {
+            if (data.timeWhite !== undefined) document.getElementById('time-white').textContent = formatTime(data.timeWhite);
+            if (data.timeBlack !== undefined) document.getElementById('time-black').textContent = formatTime(data.timeBlack);
             return;
         }
         if (data.type === 'chat') {
@@ -1652,7 +1749,15 @@ function handleSquareClick(r, c) {
 
 const undoBtn = document.getElementById("undoBtn");
 if (undoBtn) {
-    undoBtn.onclick = () => { 
+    undoBtn.onclick = () => {
+        if (gameModeSelect && (gameModeSelect.value === 'online' || gameModeSelect.value === 'random')) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'takeback_request', room: onlineRoom, playerName: getMyName() }));
+                addChat("System", "Zug-Rücknahme (Takeback) angefragt...", "system");
+            }
+            return;
+        }
+        
         if (history.length > 0) {
             const lastState = history.pop();
             board = lastState.board;
@@ -1662,6 +1767,20 @@ if (undoBtn) {
             halfMoveClock = lastState.halfMoveClock || 0;
             if (statusEl) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug (Rückgängig)";
             draw();
+        }
+    };
+}
+
+const offerDrawBtn = document.getElementById("offerDrawBtn");
+if (offerDrawBtn) {
+    offerDrawBtn.onclick = () => {
+        if (gameModeSelect && (gameModeSelect.value === 'online' || gameModeSelect.value === 'random')) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'draw_offer', room: onlineRoom, playerName: getMyName() }));
+                addChat("System", "Remis (Draw) angeboten...", "system");
+            }
+        } else {
+            alert("Remis ist nur in Multiplayer-Partien verfügbar.");
         }
     };
 }
@@ -1705,7 +1824,7 @@ stockfishWorker.onmessage = (e) => {
     const line = e.data;
     if (typeof line === 'string' && line.includes("bestmove")) {
         const match = line.match(/bestmove\s([a-h][1-8])([a-h][1-8])(q|r|b|n)?/);
-        if (match && turn === "black" && gameModeSelect && gameModeSelect.value === "stockfish") {
+        if (match && turn === "black" && gameModeSelect && gameModeSelect.value === "bot") {
             const cols = "abcdefgh";
             const fr = 8 - parseInt(match[1][1]);
             const fc = cols.indexOf(match[1][0]);

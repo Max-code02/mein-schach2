@@ -347,7 +347,8 @@
             <img src="schach-vorschau.jpg" alt="Max' Schach Live - Online Schachspiel Vorschau" style="display:none;">
 
             <div class="control-row">
-                <button id="undoBtn">↩️ Rückgängig</button>
+                <button id="undoBtn">↩️ Zug-Rücknahme</button>
+                <button id="offerDrawBtn">🤝 Remis anbieten</button>
                 <button id="resetBtn">🆕 Neues Spiel</button>
                 <button id="resignBtn">🚩 Aufgeben</button>
                 <button id="fullscreenBtn">📺 Vollbild</button>
@@ -422,19 +423,48 @@
             <!-- TAB 1: GAME & LOBBY -->
             <div id="tab-game" class="sidebar-tab-content active">
                 <div class="glass-panel">
-                    <div class="mode-select">
+                    <div class="mode-select" style="margin-bottom: 10px;">
                         <span>🎮 <strong>Spielmodus</strong></span>
                         <select id="gameMode">
                             <option value="local">Lokal (2 Spieler am Gerät)</option>
-                            <option value="bot">Gegen den Bot (Smart)</option>
-                            <option value="stockfish">Gegen Bot (Extrem 🔥)</option>
+                            <option value="bot">Gegen den Computer (KI)</option>
                             <option value="random">Zufälliger Gegner (Suche)</option>
                             <option value="online">Online (Privat)</option>
                         </select>
                     </div>
+                    
+                    <div id="bot-difficulty-container" style="display: none; margin-bottom: 10px;">
+                        <span>🤖 <strong>Bot Schwierigkeit</strong></span>
+                        <select id="botDifficulty">
+                            <option value="1">Leicht (Anfänger)</option>
+                            <option value="3">Mittel (Fortgeschritten)</option>
+                            <option value="5">Schwer (Profi)</option>
+                            <option value="10">Meister (Stockfish 🔥)</option>
+                        </select>
+                    </div>
+
+                    <div id="time-control-container" style="margin-bottom: 10px;">
+                        <span>⏱️ <strong>Zeitkontrolle</strong></span>
+                        <select id="timeControl">
+                            <option value="unlimited">Unbegrenzt</option>
+                            <option value="1">Bullet (1 min)</option>
+                            <option value="3+2">Blitz (3 min + 2s)</option>
+                            <option value="5+3">Blitz (5 min + 3s)</option>
+                            <option value="10">Rapid (10 min)</option>
+                        </select>
+                    </div>
+
                     <div class="room-controls">
                         <input type="text" id="roomID" placeholder="Raum ID eingeben">
                         <button id="connectMP">Beitreten</button>
+                    </div>
+                    
+                    <div style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 15px;">
+                        <span>🏆 <strong>Turniermodus</strong></span>
+                        <div style="display: flex; gap: 5px; margin-top: 8px;">
+                            <input type="text" id="tournamentName" placeholder="Turniername" style="flex: 1; padding: 5px; border-radius: 4px; border: 1px solid #444; background: #222; color: white;">
+                            <button id="createTournamentBtn" style="background: #e67e22; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-weight: bold;">Erstellen</button>
+                        </div>
                     </div>
                 </div>
 

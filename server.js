@@ -456,6 +456,29 @@ let blockedIPs = new Map();
 const activeRoomStates = new Map();
 const SERVER_INSTANCE_ID = Math.random().toString(36).substring(2, 9);
 
+setInterval(() => {
+    for (const [roomID, state] of activeRoomStates.entries()) {
+        if (state.timeControl && state.timeControl !== 'unlimited' && !state.gameOver) {
+            if (state.turn === 'white') {
+                state.timeWhite -= 1;
+                if (state.timeWhite <= 0) {
+                    state.gameOver = true;
+                    broadcastRoomMessage({ type: 'game_over', text: 'Zeit abgelaufen! Schwarz gewinnt.' }, roomID);
+                }
+            } else {
+                state.timeBlack -= 1;
+                if (state.timeBlack <= 0) {
+                    state.gameOver = true;
+                    broadcastRoomMessage({ type: 'game_over', text: 'Zeit abgelaufen! Weiß gewinnt.' }, roomID);
+                }
+            }
+            if (!state.gameOver) {
+                broadcastRoomMessage({ type: 'time_sync', timeWhite: state.timeWhite, timeBlack: state.timeBlack }, roomID);
+            }
+        }
+    }
+}, 1000);
+
 function broadcastGlobalMessage(msgObj) {
     const msgStr = JSON.stringify(msgObj);
     wss.clients.forEach(client => {
@@ -1406,7 +1429,7 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'find_random' || data.type === 'findGame') {
-                if (waitingPlayer && waitingPlayer !== ws && waitingPlayer.readyState === 1) {
+                if (waitingPlayer && waitingPlayer !== ws && waitingPlayer.readyState === 1 && waitingPlayer.timeControl === data.timeControl) {
                     if (waitingPlayer.botTimeout) {
                         clearTimeout(waitingPlayer.botTimeout);
                         console.log("🛑 Bot-Timer gestoppt - Menschlicher Gegner gefunden!");
@@ -1420,11 +1443,29 @@ wss.on('connection', function(ws, req) {
                     ws.opponentName = waitingPlayer.playerName || "Spieler 1";
                     waitingPlayer.opponentName = ws.playerName || "Spieler 2";
                     
+                    let tc = data.timeControl || 'unlimited';
+                    let tSecs = 0;
+                    let tInc = 0;
+                    if (tc !== 'unlimited') {
+                        if (tc.includes('+')) {
+                            const pts = tc.split('+');
+                            tSecs = parseInt(pts[0]) * 60;
+                            tInc = parseInt(pts[1]);
+                        } else {
+                            tSecs = parseInt(tc) * 60;
+                        }
+                    }
+
                     activeRoomStates.set(roomID, {
                         board: null,
                         turn: 'white',
                         whitePlayer: waitingPlayer.playerName || "Spieler 1",
-                        blackPlayer: ws.playerName || "Spieler 2"
+                        blackPlayer: ws.playerName || "Spieler 2",
+                        timeControl: tc,
+                        timeWhite: tSecs,
+                        timeBlack: tSecs,
+                        timeInc: tInc,
+                        gameOver: false
                     });
 
                     ws.send(JSON.stringify({ 
@@ -1443,7 +1484,8 @@ wss.on('connection', function(ws, req) {
                     waitingPlayer = null; 
                 } else {
                     waitingPlayer = ws;
-                    console.log(`⏳ ${ws.playerName || "Gast"} sucht ein Spiel...`);
+                    waitingPlayer.timeControl = data.timeControl || 'unlimited';
+                    console.log(`⏳ ${ws.playerName || "Gast"} sucht ein Spiel... (Time: ${waitingPlayer.timeControl})`);
 
                     ws.botTimeout = setTimeout(() => {
                         if (waitingPlayer === ws) {
@@ -1589,12 +1631,25 @@ wss.on('connection', function(ws, req) {
                     captureMoveSnapshot(targetRoom, data.board, moveCounters[targetRoom]);
                     ws.lastBoardState = data.board; 
 
-                    const roomState = {
-                        board: data.board,
-                        turn: data.turn,
-                        whitePlayer: ws.color === 'white' ? (ws.playerName || 'Weiß') : (ws.opponentName || 'Weiß'),
-                        blackPlayer: ws.color === 'black' ? (ws.playerName || 'Schwarz') : (ws.opponentName || 'Schwarz')
-                    };
+                    let roomState = activeRoomStates.get(targetRoom);
+                    if (!roomState) {
+                        roomState = {
+                            whitePlayer: ws.color === 'white' ? (ws.playerName || 'Weiß') : (ws.opponentName || 'Weiß'),
+                            blackPlayer: ws.color === 'black' ? (ws.playerName || 'Schwarz') : (ws.opponentName || 'Schwarz')
+                        };
+                    }
+                    roomState.board = data.board;
+                    roomState.turn = data.turn;
+
+                    // Add increment for the player who just moved
+                    if (roomState.timeControl && roomState.timeControl !== 'unlimited') {
+                        if (data.turn === 'black') {
+                            roomState.timeWhite += roomState.timeInc;
+                        } else {
+                            roomState.timeBlack += roomState.timeInc;
+                        }
+                    }
+
                     activeRoomStates.set(targetRoom, roomState);
 
                     if (typeof broadcastToSpectators === 'function') {
@@ -1723,6 +1778,39 @@ wss.on('connection', function(ws, req) {
                         text: `ℹ️ Du hast das heutige Rätsel bereits gelöst!`
                     }));
                 }
+                return;
+            }
+
+            if (data.type === 'takeback_request') {
+                const targetRoom = data.room || ws.room;
+                broadcastRoomMessage({ type: 'takeback_request', playerName: data.playerName }, targetRoom, ws);
+                return;
+            }
+            if (data.type === 'takeback_accept') {
+                const targetRoom = data.room || ws.room;
+                broadcastRoomMessage({ type: 'takeback_accepted' }, targetRoom, null);
+                return;
+            }
+            if (data.type === 'draw_offer') {
+                const targetRoom = data.room || ws.room;
+                broadcastRoomMessage({ type: 'draw_offer', playerName: data.playerName }, targetRoom, ws);
+                return;
+            }
+            if (data.type === 'draw_accept') {
+                const targetRoom = data.room || ws.room;
+                const state = activeRoomStates.get(targetRoom);
+                if (state) state.gameOver = true;
+                broadcastRoomMessage({ type: 'draw_accepted' }, targetRoom, null);
+                return;
+            }
+
+            if (data.type === 'create_tournament') {
+                const tName = data.tournamentName;
+                const tc = data.timeControl;
+                ws.room = tName;
+                ws.timeControl = tc;
+                // Currently just making them join a specific room named after the tournament
+                broadcastGlobalMessage({ type: 'chat', text: `🏆 Turnier '${tName}' (${tc}) wurde von ${data.playerName} erstellt. Tritt bei mit Raum-ID: ${tName}`, system: true });
                 return;
             }
 
