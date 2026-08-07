@@ -1,22 +1,28 @@
-// antispam.js - ULTIMATE DEFENSE EDITION
-const userStatus = new Map(); 
+// antispam.js - ADVANCED REAL-TIME CHAT & COMMAND PROTECTION SYSTEM
+const userStatus = new Map();
 
-// --- ERWEITERTE KONFIGURATION (20 NEUE FEATURES) ---
+// --- CONFIGURATION ENGINE ---
 const CONFIG = {
-    MSG_LIMIT: 5,               
-    TIME_WINDOW: 5000,          
-    BASE_MUTE: 30000,           
-    MAX_MUTE: 3600000,          
-    SAME_MSG_PROTECTION: true,
-    VIOLATION_THRESHOLD: 3,
-    // --- NEUE KONFIGS ---
-    MAX_CHARS_PER_MSG: 500,     // 1. Zeichenlimit
+    MSG_LIMIT: 5,               // Max messages within TIME_WINDOW
+    TIME_WINDOW: 5000,          // Time window in ms (5 seconds)
+    BASE_MUTE: 30000,           // Base mute duration (30 seconds)
+    MAX_MUTE: 3600000,          // Max mute duration (1 hour)
+    SAME_MSG_PROTECTION: true,  // Detect duplicate or fuzzy-duplicate messages
+    SIMILARITY_THRESHOLD: 0.85,  // Text similarity limit (85%)
+    VIOLATION_THRESHOLD: 3,     // Escalation trigger limit
+    MAX_CHARS_PER_MSG: 450,     // Character limit per message
+    REPEAT_CHAR_LIMIT: 12,      // Max consecutive identical characters (e.g. "aaaaa...")
+    CAPS_LOCK_LIMIT: 0.75,      // Max percentage of uppercase characters
+    CMD_LIMIT: 4,               // Max /commands in 10 seconds
+    
+    ADMIN_IPS: ['127.0.0.1', '::1'],
+    
     BANNED_WORDS: [
-        // --- 1. Politisch / Hassrede / Extremismus ---
+        // Politisch / Hassrede / Extremismus
         'nazi', 'hitler', 'heil', 'ss-marsch', 'hakenkreuz', 'neger', 'nigger', 'kanacke', 
         'jude', 'moslem', 'christ', 'zigeuner', 'faschist', 'vergasen', 'holocaust',
 
-        // --- 2. Harte Beleidigungen ---
+        // Harte Beleidigungen
         'hure', 'nutte', 'schlampe', 'miststück', 'wichser', 'wixxer', 'wixx', 'ficker', 
         'ficken', 'fotze', 'fotz', 'pimmel', 'schwanz', 'vagina', 'penis', 'hurensohn', 
         'huso', 'hurre', 'arsch', 'ass', 'bastard', 'missgeburt', 'missi', 'spaßt', 
@@ -24,33 +30,67 @@ const CONFIG = {
         'kack', 'scheiß', 'verpiss', 'haltssmaul', 'fresse', 'maul', 'depp', 'trottel', 
         'dulli', 'vollidiot', 'schwul', 'lesbe', 'transe', 'schwuchtel',
 
-        // --- 3. System-Schutz ---
-        'free-elo', 'hack', 'cheat', 'generator',
+        // System & Hack Schutz
+        'free-elo', 'cheat-engine', 'exploit', 'token-grabber',
 
-        // --- 4. Werbung & Links ---
-        'discord.gg', 'http', 'https', '.com', '.de', '.net', '.gg/', 'paypal', 
-        'kauf', 'shop', 'free-elo', 'hack', 'cheat', 'generator',
+        // Werbung & Phishing Links
+        'discord.gg', 'http://', 'https://', '.com/', '.net/', '.gg/', 'paypal.me', 
+        'free-elo', 'cheat-bot',
 
-        // --- 5. Englisch ---
-        'fuck', 'bitch', 'shits', 'asshole', 'dick', 'cunt', 'retard', 'gay', 
-        'stfu', 'faggot', 'pussy', 'slut'
-    ],
-    CMD_LIMIT: 3,               // 3. Limit für /Befehle
-    ADMIN_IPS: ['127.0.0.1'],   // 4. Admin-Whitelist
-    WARN_BEFORE_KICK: true,     // 5. Vorwarn-System
-    LOG_TO_FILE: true,          // 6. Sicherheits-Logging
-    SLOW_MODE: false,           // 7. Globaler Slow-Mode
-    CAPS_LOCK_LIMIT: 0.8        // 8. Anti-Schrei-Schutz (Caps Lock)
+        // Englisch
+        'fuck', 'bitch', 'shits', 'asshole', 'dick', 'cunt', 'retard', 'stfu', 'faggot', 'pussy', 'slut'
+    ]
 };
 
+// Periodic Cleanup Task: Remove stale IP entries every 15 minutes
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, data] of userStatus.entries()) {
+        if (now - data.lastActivity > 15 * 60 * 1000 && now > data.mutedUntil) {
+            userStatus.delete(ip);
+        }
+    }
+}, 15 * 60 * 1000);
+
+/**
+ * Calculates string similarity ratio (0.0 to 1.0)
+ */
+function calculateSimilarity(str1, str2) {
+    if (!str1 || !str2) return 0;
+    if (str1 === str2) return 1.0;
+    const len1 = str1.length;
+    const len2 = str2.length;
+    if (Math.abs(len1 - len2) > 15) return 0;
+
+    let matches = 0;
+    const minLen = Math.min(len1, len2);
+    for (let i = 0; i < minLen; i++) {
+        if (str1[i] === str2[i]) matches++;
+    }
+    return matches / Math.max(len1, len2);
+}
+
+/**
+ * Checks for character repetitions like "hahahahaha" or "aaaaaaa"
+ */
+function hasExcessiveRepetition(text) {
+    const repeatRegex = /(.)\1{11,}/g; // 12 or more identical chars
+    return repeatRegex.test(text);
+}
+
+/**
+ * Main Antispam Guard Function
+ */
 function isSpamming(ws, messageText = "") {
-    // 9. ADMIN-IMMUNITÄT: Admins dürfen alles
+    if (!ws) return false;
+
+    // Admin Immunity Check
     const ip = ws.clientIP || (ws._socket ? ws._socket.remoteAddress : "unknown");
-    if (CONFIG.ADMIN_IPS.includes(ip)) return false;
+    if (CONFIG.ADMIN_IPS.includes(ip) || ws.isAdmin) return false;
 
     const now = Date.now();
 
-    // 1. Initialisiere Profi-Daten
+    // Initialize tracking profile
     if (!userStatus.has(ip)) {
         userStatus.set(ip, { 
             lastMessages: [], 
@@ -69,125 +109,166 @@ function isSpamming(ws, messageText = "") {
     data.totalMessagesSent++;
     data.lastActivity = now;
 
-    // 2. CHECK: Ist der User gerade stummgeschaltet?
+    // 1. MUTE CHECK: Currently muted?
     if (now < data.mutedUntil) {
-        const remaining = Math.ceil((data.mutedUntil - now) / 1000);
-        let timeText = remaining > 60 
-            ? `${Math.ceil(remaining / 60)} Minuten` 
-            : `${remaining} Sekunden`;
+        const remainingSec = Math.ceil((data.mutedUntil - now) / 1000);
+        const timeText = remainingSec > 60 
+            ? `${Math.ceil(remainingSec / 60)} Minute(n)` 
+            : `${remainingSec} Sekunde(n)`;
 
         if (ws.readyState === 1) {
             ws.send(JSON.stringify({ 
                 type: 'chat', 
-                text: `🚫 STOPP! Du bist noch für ${timeText} gesperrt. Provokation führt zum Kick.`, 
+                text: `🚫 STOPP! Du bist noch für ${timeText} gesperrt.`, 
                 system: true 
             }));
         }
-        
-        data.mutedUntil += 2000; 
+        data.mutedUntil += 1000; // Penalty for trying during mute
         return true;
     }
 
-    // 13. CHECK: Zeichen-Limit (Flood-Schutz)
+    // 2. CHARACTER LENGTH CHECK
     if (messageText.length > CONFIG.MAX_CHARS_PER_MSG) {
         if (ws.readyState === 1) {
-            ws.send(JSON.stringify({ type: 'chat', text: "⚠️ Nachricht zu lang! (Max 500 Zeichen)", system: true }));
+            ws.send(JSON.stringify({ 
+                type: 'chat', 
+                text: `⚠️ Nachricht zu lang! Maximum: ${CONFIG.MAX_CHARS_PER_MSG} Zeichen.`, 
+                system: true 
+            }));
         }
         return true;
     }
 
-    // 14. CHECK: Caps-Lock Schutz (Anti-Rage)
-    const capsCount = (messageText.match(/[A-Z]/g) || []).length;
-    if (messageText.length > 10 && capsCount / messageText.length > CONFIG.CAPS_LOCK_LIMIT) {
+    // 3. REPETITIVE CHARACTERS CHECK
+    if (hasExcessiveRepetition(messageText)) {
         if (ws.readyState === 1) {
-            ws.send(JSON.stringify({ type: 'chat', text: "⚠️ Bitte schrei nicht so (Caps Lock aus!)", system: true }));
+            ws.send(JSON.stringify({ 
+                type: 'chat', 
+                text: "⚠️ Zu viele aufeinanderfolgende gleiche Zeichen!", 
+                system: true 
+            }));
         }
         return true;
     }
 
-    // 15. CHECK: Wortfilter (Blacklist) - Befehle & Admin-Passwörter ausnehmen
+    // 4. CAPS LOCK CHECK
+    if (messageText.length > 12) {
+        const capsCount = (messageText.match(/[A-Z]/g) || []).length;
+        if (capsCount / messageText.length > CONFIG.CAPS_LOCK_LIMIT) {
+            if (ws.readyState === 1) {
+                ws.send(JSON.stringify({ 
+                    type: 'chat', 
+                    text: "⚠️ Bitte deaktiviere CAPS LOCK (Grossschreibung)!", 
+                    system: true 
+                }));
+            }
+            return true;
+        }
+    }
+
+    // 5. WORD FILTER (Blacklist) - Exclude Admin passwords or special system commands
     const trimmedMsg = messageText.trim();
     const isCmd = trimmedMsg.startsWith('/') || trimmedMsg.startsWith('!') || trimmedMsg.startsWith('?');
     const hasAdminPass = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'Maxi'].some(pw => messageText.includes(pw));
-    
+
     if (!isCmd && !hasAdminPass) {
-        const hasBannedWord = CONFIG.BANNED_WORDS.some(word => messageText.toLowerCase().includes(word));
+        const lowerMsg = messageText.toLowerCase();
+        const hasBannedWord = CONFIG.BANNED_WORDS.some(word => lowerMsg.includes(word));
         if (hasBannedWord) {
             data.warnings++;
+            console.warn(`[ANTISPAM WARNING] IP: ${ip} | Warning #${data.warnings}`);
+
             if (ws.readyState === 1) {
-                ws.send(JSON.stringify({ type: 'chat', text: `🔞 Beleidigungen sind verboten! Verwarnung: ${data.warnings}/3`, system: true }));
+                ws.send(JSON.stringify({ 
+                    type: 'chat', 
+                    text: `🔞 Beleidigungen / verbotene Ausdrücke! Verwarnung ${data.warnings}/3`, 
+                    system: true 
+                }));
             }
+
             if (data.warnings >= 3) {
-                data.mutedUntil = now + (CONFIG.BASE_MUTE * 10);
+                data.mutedUntil = now + (CONFIG.BASE_MUTE * 10); // 5 Min Mute
                 if (ws.readyState === 1) {
-                    ws.send(JSON.stringify({ type: 'chat', text: "🚨 Zu mehere Verwarnungen! 5 Min Sperre.", system: true }));
+                    ws.send(JSON.stringify({ 
+                        type: 'chat', 
+                        text: "🚨 3 Verwarnungen erreicht! 5 Minuten Chat-Sperre.", 
+                        system: true 
+                    }));
                 }
             }
             return true;
         }
     }
 
-    // 16. CHECK: Befehls-Spam-Schutz
-    if (messageText.startsWith('/')) {
+    // 6. COMMAND SPAM CHECK
+    if (isCmd) {
         data.cmdCount.push(now);
         data.cmdCount = data.cmdCount.filter(t => now - t < 10000);
         if (data.cmdCount.length > CONFIG.CMD_LIMIT) {
             if (ws.readyState === 1) {
-                ws.send(JSON.stringify({ type: 'chat', text: "⚠️ Zu viele Befehle! Warte kurz.", system: true }));
-            }
-            return true;
-        }
-    }
-
-    // 3. CHECK: Identische Nachrichten
-    if (CONFIG.SAME_MSG_PROTECTION && messageText.length > 3) {
-        if (messageText.trim().toLowerCase() === data.lastText) {
-            if (ws.readyState === 1) {
                 ws.send(JSON.stringify({ 
                     type: 'chat', 
-                    text: `⚠️ Bitte schicke nicht zweimal exakt das Gleiche!`, 
+                    text: "⚠️ Zu viele Befehle gesendet! Bitte warte kurz.", 
                     system: true 
                 }));
             }
             return true;
         }
-        data.lastText = messageText.trim().toLowerCase();
     }
 
-    // 4. Zeit-Analyse
+    // 7. DUPLICATE & FUZZY REPETITION CHECK
+    if (CONFIG.SAME_MSG_PROTECTION && messageText.length > 3) {
+        const cleanMsg = messageText.trim().toLowerCase();
+        const similarity = calculateSimilarity(cleanMsg, data.lastText);
+        if (similarity >= CONFIG.SIMILARITY_THRESHOLD) {
+            if (ws.readyState === 1) {
+                ws.send(JSON.stringify({ 
+                    type: 'chat', 
+                    text: "⚠️ Wiederhole bitte nicht mehrmals den gleichen Satz!", 
+                    system: true 
+                }));
+            }
+            return true;
+        }
+        data.lastText = cleanMsg;
+    }
+
+    // 8. FREQUENCY TIME-WINDOW CHECK
     data.lastMessages.push(now);
     data.lastMessages = data.lastMessages.filter(time => now - time < CONFIG.TIME_WINDOW);
 
-    // 5. Eskalations-Logik
     if (data.lastMessages.length > CONFIG.MSG_LIMIT) {
         data.violationCount++;
-        
         const multiplier = Math.pow(2, data.violationCount - 1);
         const currentMute = Math.min(CONFIG.BASE_MUTE * multiplier, CONFIG.MAX_MUTE);
         
         data.mutedUntil = now + currentMute;
-        data.lastMessages = []; 
+        data.lastMessages = [];
 
         const durationText = currentMute >= 60000 
-            ? `${currentMute / 60000} Min` 
-            : `${currentMute / 1000} Sek`;
+            ? `${Math.round(currentMute / 60000)} Minute(n)` 
+            : `${Math.round(currentMute / 1000)} Sekunde(n)`;
 
-        console.warn(`[SECURITY] Spam-Sperre #${data.violationCount} für IP: ${ip}`);
+        console.warn(`[SECURITY] Anti-Spam Mute #${data.violationCount} for IP: ${ip}`);
 
         if (ws.readyState === 1) {
             ws.send(JSON.stringify({ 
                 type: 'chat', 
-                text: `🚨 SPAM-ALARM! Du wurdest zum ${data.violationCount}. Mal gesperrt. Dauer: ${durationText}`, 
+                text: `🚨 SPAM-ALARM! Du wurdest gesperrt. Dauer: ${durationText}`, 
                 system: true 
             }));
         }
 
-        if (data.violationCount >= 5) {
+        if (data.violationCount >= 6) {
             if (ws.readyState === 1) {
-                ws.send(JSON.stringify({ type: 'chat', text: "❌ Verbindung getrennt: Systematisches Spamming.", system: true }));
+                ws.send(JSON.stringify({ 
+                    type: 'chat', 
+                    text: "❌ Verbindung getrennt aufgrund von persistentem Spamming.", 
+                    system: true 
+                }));
             }
-            data.isBanned = true; 
-            setTimeout(() => { if (ws.readyState === 1) ws.terminate(); }, 1000);
+            data.isBanned = true;
+            setTimeout(() => { if (ws.readyState === 1) ws.terminate(); }, 800);
         }
 
         return true;
@@ -196,4 +277,18 @@ function isSpamming(ws, messageText = "") {
     return false;
 }
 
-module.exports = { isSpamming };
+/**
+ * Helper to un-mute a player manually (e.g. by Admin command)
+ */
+function unmutePlayer(ip) {
+    if (userStatus.has(ip)) {
+        const data = userStatus.get(ip);
+        data.mutedUntil = 0;
+        data.warnings = 0;
+        data.violationCount = 0;
+        return true;
+    }
+    return false;
+}
+
+module.exports = { isSpamming, unmutePlayer, CONFIG };
