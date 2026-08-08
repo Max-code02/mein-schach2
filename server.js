@@ -450,6 +450,7 @@ function createGhostPlayer() {
 
 let serverConfig = { globalMute: false };
 let waitingPlayer = null;
+const roomWaitingMap = new Map();
 
 const server = http.createServer(app); 
 const wss = new WebSocket.Server({ server });
@@ -1438,6 +1439,84 @@ wss.on('connection', function(ws, req) {
                 return;
             }
 
+            if (data.type === 'get_admin_users') {
+                const allUsers = [];
+                const seenNames = new Set();
+
+                // 1. Online WebSocket Users
+                wss.clients.forEach(c => {
+                    if (c.playerName) {
+                        seenNames.add(c.playerName.toLowerCase());
+                        const uData = userDB[c.playerName] || {};
+                        allUsers.push({
+                            id: c.playerName,
+                            username: c.playerName,
+                            role: uData.role || (isUserAdmin(c.playerName) ? 'admin' : 'user'),
+                            elo: uData.elo || 1200,
+                            wins: uData.wins || 0,
+                            losses: uData.losses || 0,
+                            is_banned: !!(bannedPlayers.has(c.playerName.toLowerCase()) || uData.is_banned),
+                            is_online: true,
+                            ip_address: c.clientIP || uData.ip_address || '127.0.0.1'
+                        });
+                    }
+                });
+
+                // 2. Offline Registered Users in userDB
+                for (const uname in userDB) {
+                    if (!seenNames.has(uname.toLowerCase())) {
+                        const uData = userDB[uname];
+                        allUsers.push({
+                            id: uname,
+                            username: uname,
+                            role: uData.role || (isUserAdmin(uname) ? 'admin' : 'user'),
+                            elo: uData.elo || 1200,
+                            wins: uData.wins || 0,
+                            losses: uData.losses || 0,
+                            is_banned: !!(bannedPlayers.has(uname.toLowerCase()) || uData.is_banned),
+                            is_online: false,
+                            ip_address: uData.ip_address || 'Unbekannt'
+                        });
+                    }
+                }
+
+                ws.send(JSON.stringify({
+                    type: 'admin_users_update',
+                    users: allUsers
+                }));
+                return;
+            }
+
+            if (data.type === 'set_user_role') {
+                const { target, role } = data;
+                if (target && role) {
+                    if (!userDB[target]) userDB[target] = { username: target, elo: 1200 };
+                    userDB[target].role = role;
+                    saveAll(target);
+                    ws.send(JSON.stringify({ type: 'chat', text: `✅ Rolle von '${target}' auf '${role}' gesetzt.`, system: true }));
+                    
+                    // Send updated user list to all admins
+                    const updateList = [];
+                    for (const uname in userDB) {
+                        updateList.push({
+                            id: uname,
+                            username: uname,
+                            role: userDB[uname].role || 'user',
+                            elo: userDB[uname].elo || 1200,
+                            wins: userDB[uname].wins || 0,
+                            losses: userDB[uname].losses || 0,
+                            is_banned: !!(bannedPlayers.has(uname.toLowerCase()) || userDB[uname].is_banned)
+                        });
+                    }
+                    wss.clients.forEach(c => {
+                        if (c.readyState === 1 && (isUserAdmin(c.playerName) || c.role === 'admin')) {
+                            c.send(JSON.stringify({ type: 'admin_users_update', users: updateList }));
+                        }
+                    });
+                }
+                return;
+            }
+
             if (data.type === 'chat_message') {
                 const { username, content } = data;
                 const containsPw = ADMIN_PASSWORDS_LIST.some(pw => content.includes(pw));
@@ -2051,13 +2130,146 @@ wss.on('connection', function(ws, req) {
                 return;
             }
 
+            if (data.type === 'join_room' || data.type === 'join_tournament') {
+                const roomName = (data.room || data.tournamentName || "global_tournament").trim();
+                const playerName = data.playerName || ws.playerName || "Gast";
+                ws.room = roomName;
+                ws.playerName = playerName;
+
+                if (!roomWaitingMap.has(roomName)) {
+                    roomWaitingMap.set(roomName, []);
+                }
+                let waitingList = roomWaitingMap.get(roomName).filter(c => c !== ws && c.readyState === 1);
+
+                if (waitingList.length > 0) {
+                    // Match found in room! Pair human vs human!
+                    const opponent = waitingList.shift();
+                    roomWaitingMap.set(roomName, waitingList);
+
+                    if (opponent.botTimeout) clearTimeout(opponent.botTimeout);
+                    if (ws.botTimeout) clearTimeout(ws.botTimeout);
+
+                    ws.color = 'black';
+                    opponent.color = 'white';
+                    ws.opponentName = opponent.playerName || "Spieler 1";
+                    opponent.opponentName = ws.playerName || "Spieler 2";
+                    ws.isBotMatch = false;
+                    opponent.isBotMatch = false;
+
+                    const timeControl = data.timeControl || opponent.timeControl || '10+0';
+
+                    let tSecs = 600;
+                    let tInc = 0;
+                    if (timeControl !== 'unlimited') {
+                        if (timeControl.includes('+')) {
+                            const pts = timeControl.split('+');
+                            tSecs = parseInt(pts[0]) * 60;
+                            tInc = parseInt(pts[1]);
+                        } else {
+                            tSecs = parseInt(timeControl) * 60;
+                        }
+                    }
+
+                    activeRoomStates.set(roomName, {
+                        board: null,
+                        turn: 'white',
+                        whitePlayer: opponent.playerName || "Spieler 1",
+                        blackPlayer: ws.playerName || "Spieler 2",
+                        timeControl: timeControl,
+                        timeWhite: tSecs,
+                        timeBlack: tSecs,
+                        timeInc: tInc,
+                        gameOver: false
+                    });
+
+                    ws.send(JSON.stringify({
+                        type: 'gameStart',
+                        room: roomName,
+                        color: 'black',
+                        opponent: ws.opponentName,
+                        isBotMatch: false,
+                        timeControl: timeControl
+                    }));
+
+                    opponent.send(JSON.stringify({
+                        type: 'gameStart',
+                        room: roomName,
+                        color: 'white',
+                        opponent: opponent.opponentName,
+                        isBotMatch: false,
+                        timeControl: timeControl
+                    }));
+
+                    broadcastGlobalMessage({
+                        type: 'chat',
+                        text: `⚔️ Match gestartet in Raum '${roomName}': ${opponent.playerName} (Weiß) vs. ${ws.playerName} (Schwarz)`,
+                        system: true
+                    });
+                } else {
+                    waitingList.push(ws);
+                    roomWaitingMap.set(roomName, waitingList);
+                    ws.timeControl = data.timeControl || '10+0';
+
+                    ws.send(JSON.stringify({
+                        type: 'room_joined',
+                        room: roomName,
+                        text: `⏳ Raum '${roomName}' beigetreten. Warte auf menschliche(n) Mitspieler...`
+                    }));
+
+                    // In tournament/custom rooms, bot fallback is ONLY executed if explicitly enabled!
+                    if (data.allowBotFallback === true) {
+                        ws.botTimeout = setTimeout(() => {
+                            let currList = roomWaitingMap.get(roomName) || [];
+                            if (currList.includes(ws)) {
+                                currList = currList.filter(c => c !== ws);
+                                roomWaitingMap.set(roomName, currList);
+
+                                const botName = ghostNames[Math.floor(Math.random() * ghostNames.length)];
+                                ws.isBotMatch = true;
+                                ws.opponentName = botName;
+
+                                ws.send(JSON.stringify({
+                                    type: 'gameStart',
+                                    opponent: botName,
+                                    isBotMatch: true,
+                                    room: roomName,
+                                    color: 'white'
+                                }));
+                            }
+                        }, 15000);
+                    }
+                }
+                return;
+            }
+
             if (data.type === 'create_tournament') {
-                const tName = data.tournamentName;
-                const tc = data.timeControl;
+                const tName = data.tournamentName || "Turnier_" + Math.floor(Math.random() * 1000);
+                const tc = data.timeControl || "10+0";
+                const creator = data.playerName || ws.playerName || "Gast";
+                
                 ws.room = tName;
                 ws.timeControl = tc;
-                // Currently just making them join a specific room named after the tournament
-                broadcastGlobalMessage({ type: 'chat', text: `🏆 Turnier '${tName}' (${tc}) wurde von ${data.playerName} erstellt. Tritt bei mit Raum-ID: ${tName}`, system: true });
+                
+                // Add creator to waiting list for this tournament room
+                if (!roomWaitingMap.has(tName)) {
+                    roomWaitingMap.set(tName, []);
+                }
+                const currentList = roomWaitingMap.get(tName).filter(c => c !== ws && c.readyState === 1);
+                currentList.push(ws);
+                roomWaitingMap.set(tName, currentList);
+
+                // Broadcast structured tournament creation event so all connected users get a modal pop-up!
+                wss.clients.forEach(c => {
+                    if (c.readyState === 1) {
+                        c.send(JSON.stringify({
+                            type: 'tournament_created',
+                            tournamentName: tName,
+                            timeControl: tc,
+                            creator: creator,
+                            text: `🏆 Neues Turnier '${tName}' (${tc}) von ${creator} erstellt!`
+                        }));
+                    }
+                });
                 return;
             }
 

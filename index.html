@@ -256,6 +256,23 @@
     <!-- In-App Notification Toast Container -->
     <div id="in-app-toast-container" style="position: fixed; top: 20px; right: 20px; z-index: 2000000; display: flex; flex-direction: column; gap: 10px; max-width: 380px; width: 90%; pointer-events: none;"></div>
 
+    <!-- Prominent Game Action Request Modal (Remis, Rematch, Tournament, Takeback, Challenges) -->
+    <div id="game-request-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(5px); z-index: 2500000; justify-content: center; align-items: center; padding: 20px;">
+        <div style="background: #1e2836; border: 2px solid #f39c12; border-radius: 12px; padding: 25px; width: 100%; max-width: 420px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); text-align: center; color: white; animation: popIn 0.3s ease;">
+            <div id="game-request-icon" style="font-size: 3.2em; margin-bottom: 10px;">🤝</div>
+            <h3 id="game-request-title" style="margin: 0 0 10px 0; color: #f39c12; font-size: 1.3em;">Remis-Angebot erhalten!</h3>
+            <p id="game-request-message" style="color: #ddd; font-size: 0.95em; margin-bottom: 22px; line-height: 1.5;">Dein Gegner bietet ein Unentschieden (Remis) an.</p>
+            <div style="display: flex; gap: 12px; justify-content: center;">
+                <button id="game-request-accept-btn" style="flex: 1; background: #27ae60; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1em; transition: 0.2s;">
+                    ✅ Annehmen
+                </button>
+                <button id="game-request-decline-btn" style="flex: 1; background: #c0392b; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1em; transition: 0.2s;">
+                    ❌ Ablehnen
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Account Gesperrt Modal Overlay -->
     <div id="account-banned-modal" class="modal-overlay" style="display: none; z-index: 1000000; background: rgba(15, 5, 5, 0.95);">
         <div class="modal-box" style="max-width: 480px; width: 90%; border: 2px solid #e74c3c; background: #1a0c0c; box-shadow: 0 0 30px rgba(231, 76, 60, 0.4); text-align: center;">
@@ -591,10 +608,13 @@
                 </div>
 
                 <div class="glass-panel" id="admin-panel" style="display: none;">
-                    <span>🛡️ <strong>Benutzerverwaltung</strong> (Admin)</span>
-                    <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin-top: 10px; max-height: 250px; overflow-y: auto;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span>🛡️ <strong>Benutzerverwaltung</strong> (Admin)</span>
+                        <button onclick="requestAdminUsersRefresh()" style="background: #2980b9; color: white; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8em; font-weight: bold; transition: 0.2s;">🔄 Spieler laden</button>
+                    </div>
+                    <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin-top: 5px; max-height: 280px; overflow-y: auto;">
                         <div id="admin-user-list" style="display: flex; flex-direction: column; gap: 8px;">
-                            <div style="color: #aaa; font-style: italic; text-align: center; font-size: 0.85em; padding: 10px 0;">Lädt Benutzer...</div>
+                            <div style="color: #aaa; font-style: italic; text-align: center; font-size: 0.85em; padding: 10px 0;">Klicke auf 'Spieler laden' oder warte auf automatische Verbindung...</div>
                         </div>
                     </div>
 

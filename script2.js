@@ -198,43 +198,45 @@ async function initFirebase() {
                                 adminPanel.style.display = data.role === 'admin' ? 'block' : 'none';
                             }
                             
-                            if (data.role === 'admin') {
-                                // Load all users for admin console
+                            if (data.role === 'admin' || isUserAdmin(dbName)) {
+                                if (adminPanel) adminPanel.style.display = 'block';
+                                
+                                // Call server WebSocket admin refresh
+                                setTimeout(() => {
+                                    if (typeof window.requestAdminUsersRefresh === 'function') {
+                                        window.requestAdminUsersRefresh();
+                                    }
+                                }, 300);
+
+                                // Load Firestore users as fallback / secondary
                                 adminUnsubscribe = onSnapshot(collection(fbDb, 'players'), (usersSnap) => {
-                                    const listEl = document.getElementById('admin-user-list');
-                                    if (!listEl) return;
-                                    listEl.innerHTML = '';
-                                    usersSnap.forEach(uDoc => {
-                                        const u = uDoc.data();
-                                        const uName = u.username || uDoc.id;
-                                        const uRole = u.role || 'user';
-                                        
-                                        const div = document.createElement('div');
-                                        div.style.display = 'flex';
-                                        div.style.justifyContent = 'space-between';
-                                        div.style.alignItems = 'center';
-                                        div.style.background = 'rgba(0,0,0,0.3)';
-                                        div.style.padding = '8px';
-                                        div.style.borderRadius = '5px';
-                                        
-                                        let roleColor = '#aaa';
-                                        if (uRole === 'admin') roleColor = '#e74c3c';
-                                        if (uRole === 'moderator') roleColor = '#2ecc71';
-                                        
-                                        div.innerHTML = `
-                                            <div>
-                                                <span style="color: #fff; font-weight: bold;">${uName}</span>
-                                                <span style="font-size: 0.8em; color: ${roleColor}; margin-left: 5px;">[${uRole}]</span>
-                                            </div>
-                                            <div style="display: flex; gap: 5px;">
-                                                <button onclick="window.setRole('${uDoc.id}', 'admin')" style="background: #e74c3c; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8em;">Admin</button>
-                                                <button onclick="window.setRole('${uDoc.id}', 'moderator')" style="background: #2ecc71; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8em;">Mod</button>
-                                                <button onclick="window.setRole('${uDoc.id}', 'user')" style="background: #7f8c8d; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8em;">User</button>
-                                                <button onclick="window.banUserAdmin('${uName}')" style="background: #c0392b; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8em;">Ban</button>
-                                            </div>
-                                        `;
-                                        listEl.appendChild(div);
-                                    });
+                                    if (!usersSnap.empty) {
+                                        const listEl = document.getElementById('admin-user-list');
+                                        if (!listEl) return;
+                                        // If firestore has items, update list
+                                        const firestoreUsers = [];
+                                        usersSnap.forEach(uDoc => {
+                                            const u = uDoc.data();
+                                            firestoreUsers.push({
+                                                id: uDoc.id,
+                                                username: u.username || uDoc.id,
+                                                role: u.role || 'user',
+                                                elo: u.elo || 1200,
+                                                wins: u.wins || 0,
+                                                losses: u.losses || 0,
+                                                is_banned: u.is_banned || false,
+                                                is_online: true
+                                            });
+                                        });
+                                        if (window.handleAdminUsersUpdate) {
+                                            window.handleAdminUsersUpdate(firestoreUsers);
+                                        }
+                                    }
+                                }, (err) => {
+                                    console.log("Firestore admin listener fallback to WS:", err);
+                                    if (typeof window.requestAdminUsersRefresh === 'function') {
+                                        window.requestAdminUsersRefresh();
+                                    }
                                 });
                             }
                         }

@@ -249,6 +249,133 @@ window.showAccountBannedOverlay = function(reason) {
     }
 };
 
+window.showGameRequestModal = function(icon, title, message, acceptText, declineText, onAccept, onDecline) {
+    const modal = document.getElementById('game-request-modal');
+    if (!modal) {
+        if (typeof window.showInAppConfirmToast === 'function') {
+            window.showInAppConfirmToast(title, message, onAccept, onDecline);
+        }
+        return;
+    }
+
+    const iconEl = document.getElementById('game-request-icon');
+    const titleEl = document.getElementById('game-request-title');
+    const msgEl = document.getElementById('game-request-message');
+    const acceptBtn = document.getElementById('game-request-accept-btn');
+    const declineBtn = document.getElementById('game-request-decline-btn');
+
+    if (iconEl) iconEl.textContent = icon || '🤝';
+    if (titleEl) titleEl.textContent = title || 'Anfrage erhalten!';
+    if (msgEl) msgEl.textContent = message || '';
+    if (acceptBtn) acceptBtn.innerHTML = acceptText || '✅ Annehmen';
+    if (declineBtn) declineBtn.innerHTML = declineText || '❌ Ablehnen';
+
+    modal.style.display = 'flex';
+
+    if (typeof playCheckSound === 'function') {
+        try { playCheckSound(); } catch(e) {}
+    }
+
+    if (acceptBtn) {
+        acceptBtn.onclick = () => {
+            modal.style.display = 'none';
+            if (typeof onAccept === 'function') onAccept();
+        };
+    }
+
+    if (declineBtn) {
+        declineBtn.onclick = () => {
+            modal.style.display = 'none';
+            if (typeof onDecline === 'function') onDecline();
+        };
+    }
+};
+
+window.requestAdminUsersRefresh = function() {
+    const listEl = document.getElementById('admin-user-list');
+    if (listEl) {
+        listEl.innerHTML = `<div style="color: #3498db; text-align: center; font-size: 0.85em; padding: 10px 0;">🔄 Lade Benutzerliste vom Server...</div>`;
+    }
+    if (socket && socket.readyState === 1) {
+        socket.send(JSON.stringify({ type: 'get_admin_users' }));
+    } else {
+        if (listEl) {
+            listEl.innerHTML = `<div style="color: #e74c3c; text-align: center; font-size: 0.85em; padding: 10px 0;">❌ Keine Serververbindung aktiv. Bitte verbinde dich neu.</div>`;
+        }
+    }
+};
+
+window.handleAdminUsersUpdate = function(users) {
+    const listEl = document.getElementById('admin-user-list');
+    if (!listEl) return;
+
+    if (!users || users.length === 0) {
+        listEl.innerHTML = `<div style="color: #aaa; text-align: center; font-size: 0.85em; padding: 10px 0;">Keine Benutzer gefunden.</div>`;
+        return;
+    }
+
+    listEl.innerHTML = users.map(u => {
+        const isOnline = u.is_online ? '🟢 Online' : '⚪ Offline';
+        const role = u.role || 'user';
+        const isBanned = u.is_banned;
+        
+        let roleBadge = '<span style="background: #34495e; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75em;">User</span>';
+        if (role === 'admin' || role === 'Admin') roleBadge = '<span style="background: #e74c3c; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; font-weight: bold;">👑 Admin</span>';
+        else if (role === 'moderator' || role === 'Mod') roleBadge = '<span style="background: #f39c12; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75em;">🛡️ Mod</span>';
+
+        let banBtn = `<button onclick="adminBanUser('${u.username}')" style="background: #c0392b; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;">⛔ Ban</button>`;
+        if (isBanned) {
+            banBtn = `<button onclick="adminUnbanUser('${u.username}')" style="background: #27ae60; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;">🔓 Entbannen</button>`;
+        }
+
+        return `
+            <div style="background: rgba(255,255,255,0.05); padding: 8px 10px; border-radius: 6px; display: flex; flex-direction: column; gap: 4px; border: 1px solid rgba(255,255,255,0.1);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-weight: bold; font-size: 0.9em; color: white;">
+                        ${u.username} ${roleBadge} <span style="font-size: 0.75em; color: ${u.is_online ? '#2ecc71' : '#7f8c8d'}; margin-left: 5px;">${isOnline}</span>
+                    </div>
+                    <div style="font-size: 0.8em; color: #f39c12; font-weight: bold;">${u.elo || 1200} ELO</div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75em; color: #aaa; margin-top: 2px;">
+                    <div>IP: ${u.ip_address || '127.0.0.1'} | Siege: ${u.wins || 0}</div>
+                    <div style="display: flex; gap: 4px;">
+                        <button onclick="setUserRole('${u.username}', 'admin')" style="background: #8e44ad; color: white; border: none; padding: 3px 6px; border-radius: 3px; font-size: 0.7em; cursor: pointer;">👑 Admin</button>
+                        <button onclick="setUserRole('${u.username}', 'moderator')" style="background: #d35400; color: white; border: none; padding: 3px 6px; border-radius: 3px; font-size: 0.7em; cursor: pointer;">🛡️ Mod</button>
+                        ${banBtn}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+};
+
+window.setUserRole = function(username, role) {
+    if (socket && socket.readyState === 1) {
+        socket.send(JSON.stringify({ type: 'set_user_role', target: username, role: role }));
+        window.showInAppNotification("Admin", `Rolle von ${username} auf ${role} geändert.`, "success");
+    }
+};
+
+window.adminBanUser = function(username) {
+    if (typeof openBanReasonModal === 'function') {
+        openBanReasonModal(username);
+    } else {
+        const reason = prompt(`Bann-Grund für ${username}:`, "Admin-Entscheidung");
+        if (reason && socket && socket.readyState === 1) {
+            socket.send(JSON.stringify({ type: 'admin_ban_user', target: username, reason: reason }));
+            window.showInAppNotification("Admin", `Bann für ${username} gesendet.`, "warning");
+        }
+    }
+};
+
+window.adminUnbanUser = function(username) {
+    if (socket && socket.readyState === 1) {
+        socket.send(JSON.stringify({ type: 'chat_message', username: getMyName(), content: `/unban ${username}` }));
+        window.showInAppNotification("Admin", `Entbannungs-Befehl für ${username} gesendet.`, "info");
+        setTimeout(window.requestAdminUsersRefresh, 500);
+    }
+};
+
 window.openBanReasonModal = function(username) {
     const modal = document.getElementById('ban-reason-modal');
     const targetText = document.getElementById('ban-reason-target-name');
@@ -1525,13 +1652,47 @@ socket.onmessage = (e) => {
             if (timerInterval) clearInterval(timerInterval);
             return;
         }
+        if (data.type === 'admin_users_update') {
+            if (window.handleAdminUsersUpdate) {
+                window.handleAdminUsersUpdate(data.users);
+            }
+            return;
+        }
+        if (data.type === 'tournament_created') {
+            const tName = data.tournamentName;
+            const creator = data.creator || "Ein Spieler";
+            addChat("System", `🏆 Turnier '${tName}' (${data.timeControl || '10+0'}) wurde von ${creator} erstellt!`, "system");
+            
+            if (creator !== getMyName() && window.showGameRequestModal) {
+                window.showGameRequestModal(
+                    "🏆",
+                    "Neues Turnier gestartet!",
+                    `Spieler '${creator}' hat das Turnier '${tName}' (${data.timeControl || '10+0'}) erstellt. Möchtest du beitreten?`,
+                    "🏆 Jetzt Beitreten",
+                    "Schließen",
+                    () => {
+                        socket.send(JSON.stringify({
+                            type: 'join_tournament',
+                            tournamentName: tName,
+                            playerName: getMyName()
+                        }));
+                        window.showInAppNotification("Turnier", `Dem Turnier '${tName}' beigetreten! Warte auf Gegner...`, "success");
+                    },
+                    () => {}
+                );
+            }
+            return;
+        }
         if (data.type === 'takeback_request') {
             const sender = data.playerName || "Dein Gegner";
             addChat("System", `↩️ ${sender} bittet um eine Zug-Rücknahme!`, "system");
-            if (typeof window.showInAppConfirmToast === 'function') {
-                window.showInAppConfirmToast(
-                    "↩️ Zug-Rücknahme angefordert",
-                    `Gegner ${sender} möchte den letzten Zug zurücknehmen.`,
+            if (window.showGameRequestModal) {
+                window.showGameRequestModal(
+                    "↩️",
+                    "Zug-Rücknahme angefordert",
+                    `Gegner '${sender}' möchte den letzten Zug zurücknehmen.`,
+                    "✅ Zug erlauben",
+                    "❌ Ablehnen",
                     () => {
                         socket.send(JSON.stringify({ type: 'takeback_accept', room: onlineRoom, playerName: getMyName() }));
                         addChat("System", "Du hast die Zug-Rücknahme akzeptiert.", "system");
@@ -1540,18 +1701,19 @@ socket.onmessage = (e) => {
                         addChat("System", "Du hast die Zug-Rücknahme abgelehnt.", "system");
                     }
                 );
-            } else if (confirm(`Gegner ${sender} möchte einen Zug zurücknehmen. Akzeptieren?`)) {
-                socket.send(JSON.stringify({ type: 'takeback_accept', room: onlineRoom, playerName: getMyName() }));
             }
             return;
         }
         if (data.type === 'draw_offer') {
             const sender = data.playerName || "Dein Gegner";
             addChat("System", `🤝 ${sender} bietet ein Remis an!`, "system");
-            if (typeof window.showInAppConfirmToast === 'function') {
-                window.showInAppConfirmToast(
-                    "🤝 Remis-Angebot",
-                    `Gegner ${sender} bietet Unentschieden (Remis) an.`,
+            if (window.showGameRequestModal) {
+                window.showGameRequestModal(
+                    "🤝",
+                    "Remis-Angebot (Unentschieden)",
+                    `Gegner '${sender}' bietet ein Unentschieden (Remis) an.`,
+                    "✅ Remis Akzeptieren",
+                    "❌ Weiterspielen",
                     () => {
                         socket.send(JSON.stringify({ type: 'draw_accept', room: onlineRoom, playerName: getMyName() }));
                         addChat("System", "Du hast das Remis-Angebot akzeptiert.", "system");
@@ -1560,8 +1722,6 @@ socket.onmessage = (e) => {
                         addChat("System", "Du hast das Remis-Angebot abgelehnt.", "system");
                     }
                 );
-            } else if (confirm(`Gegner ${sender} bietet Remis an. Akzeptieren?`)) {
-                socket.send(JSON.stringify({ type: 'draw_accept', room: onlineRoom, playerName: getMyName() }));
             }
             return;
         }
