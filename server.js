@@ -922,9 +922,8 @@ async function triggerUltraBan(targetOrReason, possibleReason = null, ws = null)
 
     // HARD-CODED ADMIN & OWNER IMMUNITY CHECK
     const isTargetAdmin = isUserAdmin(cleanTarget);
-    const isWsAdmin = ws && (isUserAdmin(ws.playerName) || isUserAdmin(ws.userEmail) || ws.isAdmin || ws.is_owner || ws.role === 'admin');
-
-    if (isTargetAdmin || isWsAdmin) {
+    
+    if (isTargetAdmin) {
         console.warn(`🛡️ ADMIN-CONFLICT INTERCEPTED: target='${cleanTarget}', ws='${ws?.playerName}'. Ban cancelled.`);
         logAdminConflict(ws, cleanTarget, reason);
         if (ws && ws.readyState === 1) {
@@ -1423,6 +1422,10 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'admin_ban_user') {
+                if (!isUserAdmin(ws.playerName) && ws.role !== 'admin' && ws.role !== 'moderator') {
+                    ws.send(JSON.stringify({ type: 'system_alert', message: 'Keine Berechtigung, um Spieler zu bannen.' }));
+                    return;
+                }
                 const target = data.target || data.username;
                 const reason = data.reason || 'Admin-Entscheidung';
                 if (target) {
