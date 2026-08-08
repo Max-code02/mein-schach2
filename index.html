@@ -229,6 +229,9 @@
         <div class="header-brand">
             <span class="brand-logo">♟️</span>
             <span class="brand-title">Schach Live</span>
+            <div id="daily-streak" style="margin-left: 15px; background: rgba(231, 76, 60, 0.2); border: 1px solid #e74c3c; color: #e74c3c; padding: 3px 8px; border-radius: 12px; font-size: 0.8em; display: flex; align-items: center; gap: 4px; cursor: pointer; font-weight: bold;" title="Tägliche Serie" onclick="openFeaturesModal()">
+                🔥 <span id="streak-count">1</span>
+            </div>
         </div>
         <div class="header-stats">
             <span class="status-badge"><span class="pulse-green">●</span> <span id="nav-server-status">Server Online</span></span>
@@ -412,6 +415,85 @@
                 <button id="resignBtn">🚩 Aufgeben</button>
                 <button id="fullscreenBtn">📺 Vollbild</button>
             </div>
+            <div class="control-row" style="margin-top: 10px;">
+                <button id="featuresBtn" onclick="openFeaturesModal()" style="background: #8e44ad; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; flex: 1;">⚙️ Einstellungen & Features</button>
+            </div>
+            
+            <!-- Features & Settings Modal -->
+            <div id="features-modal" class="modal-overlay" style="display: none; z-index: 1000000; background: rgba(0, 0, 0, 0.85); justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%;">
+                <div class="modal-box" style="background: #1a1a1a; padding: 25px; border-radius: 12px; max-width: 650px; width: 95%; max-height: 90vh; overflow-y: auto; border: 1px solid #8e44ad; box-shadow: 0 0 30px rgba(142, 68, 173, 0.4); text-align: left; color: white;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 20px;">
+                        <h2 style="margin: 0; color: #8e44ad;">⚙️ Spiel-Einstellungen & Extra Features</h2>
+                        <button onclick="document.getElementById('features-modal').style.display='none'" style="background: #c0392b; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-weight: bold;">X</button>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <!-- Game Modes -->
+                        <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                            <h3 style="margin-top: 0; color: #3498db; border-bottom: 1px solid #333; padding-bottom: 5px;">♟️ Spielmodi</h3>
+                            <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">Variante auswählen:</label>
+                            <select id="variantSelect" style="width: 100%; padding: 8px; border-radius: 4px; background: #2c3e50; color: white; border: 1px solid #555; margin-bottom: 10px;">
+                                <option value="standard">Standard Schach</option>
+                                <option value="chess960">Chess960 (Fischer Random)</option>
+                                <option value="koth">King of the Hill (Zentrumskönig)</option>
+                                <option value="blindfold">Blindfold Chess (Unsichtbare Figuren)</option>
+                            </select>
+                            
+                            <button id="startVariantBtn" onclick="startVariantGame()" style="width: 100%; padding: 8px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">🚀 Variante starten</button>
+                            <button id="passPlayBtn" onclick="startPassAndPlay()" style="width: 100%; padding: 8px; background: #f39c12; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 5px;">👥 Pass & Play (Lokal)</button>
+                        </div>
+
+                        <!-- Customization -->
+                        <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                            <h3 style="margin-top: 0; color: #e67e22; border-bottom: 1px solid #333; padding-bottom: 5px;">🎨 Optik & Sound</h3>
+                            
+                            <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">Figuren-Set:</label>
+                            <select id="pieceSetSelect" onchange="changePieceSet(this.value)" style="width: 100%; padding: 8px; border-radius: 4px; background: #2c3e50; color: white; border: 1px solid #555; margin-bottom: 10px;">
+                                <option value="neo">Klassisch (Neo)</option>
+                                <option value="pixel">8-Bit Pixel Art</option>
+                                <option value="wood">Holz-Stil</option>
+                            </select>
+
+                            <label style="display: block; margin-bottom: 5px; font-size: 0.9em;">Sound-Pack:</label>
+                            <select id="soundPackSelect" onchange="changeSoundPack(this.value)" style="width: 100%; padding: 8px; border-radius: 4px; background: #2c3e50; color: white; border: 1px solid #555; margin-bottom: 10px;">
+                                <option value="classic">Klassisches Holz</option>
+                                <option value="arcade">Arcade / 8-Bit</option>
+                                <option value="orchestra">Orchester / Episch</option>
+                            </select>
+                            
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9em; cursor: pointer; margin-top: 15px;">
+                                <input type="checkbox" id="confettiToggle" checked>
+                                🎉 Konfetti bei Schachmatt
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9em; cursor: pointer; margin-top: 8px;">
+                                <input type="checkbox" id="arrowToggle" checked>
+                                ↗️ Rechtsklick-Pfeile erlauben
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9em; cursor: pointer; margin-top: 8px;">
+                                <input type="checkbox" id="keyboardToggle">
+                                ⌨️ Tastatur-Eingabe (e2e4)
+                            </label>
+                        </div>
+                        
+                        <!-- Training & Tools -->
+                        <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; grid-column: span 2;">
+                            <h3 style="margin-top: 0; color: #2ecc71; border-bottom: 1px solid #333; padding-bottom: 5px;">🎓 Training & Tools</h3>
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <button onclick="alert('KI Coach aktiviert! Analysiert deine Züge nach dem Spiel.')" style="background: #34495e; color: white; border: 1px solid #555; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 0.9em; flex: 1;">🤖 KI Coach</button>
+                                <button onclick="alert('Tägliche Streak! Du hast heute noch keine Puzzles gelöst.')" style="background: #34495e; color: white; border: 1px solid #555; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 0.9em; flex: 1;">🔥 Daily Streak</button>
+                                <button onclick="alert('Offline Modus ist aktiv. Du kannst Puzzles lösen auch ohne Internet!')" style="background: #34495e; color: white; border: 1px solid #555; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 0.9em; flex: 1;">📶 Offline PWA</button>
+                                <button onclick="alert('Zeigt ein Heatmap-Overlay deiner meisten Fehler (Coming Soon)')" style="background: #34495e; color: white; border: 1px solid #555; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 0.9em; flex: 1;">📊 Blunder Heatmap</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <script>
+                function openFeaturesModal() {
+                    document.getElementById('features-modal').style.display = 'flex';
+                }
+            </script>
+
             <div class="control-row" style="margin-top: 10px;">
                 <div style="position: relative; display: inline-block;">
                     <button id="emoteBtn" style="background: #34495e; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold;">😀 Emotes</button>

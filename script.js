@@ -698,6 +698,10 @@ function showCheckmateModal(winnerName, reason = "Schachmatt!") {
         title.innerText = reason;
         winnerText.innerText = `${winnerName} gewinnt das Spiel.`;
         modal.style.display = 'flex';
+        
+        if (typeof showConfetti === 'function') {
+            showConfetti();
+        }
     }
 }
 
@@ -2683,6 +2687,239 @@ function applyThemes(boardTheme, pieceTheme) {
     if (typeof draw === 'function') draw();
 }
 window.applyThemes = applyThemes;
+
+window.changePieceSet = function(theme) {
+    if (typeof applyThemes === 'function') {
+        applyThemes(localStorage.getItem('board_theme') || 'classic', theme);
+        localStorage.setItem('piece_theme', theme);
+    }
+};
+
+window.changeSoundPack = function(pack) {
+    localStorage.setItem('sound_pack', pack);
+    if (pack === 'arcade') {
+        if (sounds) sounds.move = new Audio('https://s3.amazonaws.com/freecodecamp/simonSound1.mp3');
+        if (sounds) sounds.cap = new Audio('https://s3.amazonaws.com/freecodecamp/simonSound2.mp3');
+    } else {
+        if (sounds) sounds.move = new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/move-self.mp3');
+        if (sounds) sounds.cap = new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/capture.mp3');
+    }
+    if (typeof playMoveSound === 'function') playMoveSound();
+};
+
+window.startVariantGame = function() {
+    const variant = document.getElementById('variantSelect').value;
+    document.getElementById('features-modal').style.display = 'none';
+    if (variant === 'blindfold') {
+        document.getElementById('chess-board').style.opacity = '0.1'; // simple hack for blindfold
+    } else {
+        document.getElementById('chess-board').style.opacity = '1';
+    }
+    window.showInAppNotification("Spiel", "Neue Variante gestartet: " + variant, "info");
+    if (socket && socket.readyState === 1) {
+        socket.send(JSON.stringify({ type: 'find_random', playerName: getMyName(), timeControl: '10+0', variant: variant }));
+    }
+};
+
+window.startPassAndPlay = function() {
+    document.getElementById('features-modal').style.display = 'none';
+    game = new Chess();
+    if (typeof draw === 'function') draw();
+    window.showInAppNotification("Lokal", "Pass & Play Modus gestartet", "success");
+    // disconnect socket temporarily for local play
+    if (socket) socket.close();
+};
+
+let keyboardMoveInput = "";
+window.addEventListener('keydown', (e) => {
+    const kbdToggle = document.getElementById('keyboardToggle');
+    if (!kbdToggle || !kbdToggle.checked) return;
+    
+    // exclude input fields
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    if (e.key.length === 1 && /[a-h1-8]/.test(e.key.toLowerCase())) {
+        keyboardMoveInput += e.key.toLowerCase();
+        
+        const statusEl = document.getElementById('voice-move-status');
+        if (statusEl) statusEl.textContent = "Tastatur: " + keyboardMoveInput;
+
+        if (keyboardMoveInput.length === 4) {
+            const from = keyboardMoveInput.substring(0, 2);
+            const to = keyboardMoveInput.substring(2, 4);
+            const move = game.move({ from, to, promotion: 'q' });
+            keyboardMoveInput = "";
+            
+            if (move) {
+                if (statusEl) statusEl.textContent = "Gezogen: " + from + "-" + to;
+                if (typeof draw === 'function') draw();
+                if (typeof handleUserMove === 'function') handleUserMove(move);
+            } else {
+                if (statusEl) {
+                    statusEl.textContent = "Ungültiger Zug: " + from + "-" + to;
+                    setTimeout(() => { statusEl.textContent = ""; }, 2000);
+                }
+            }
+        }
+    } else if (e.key === 'Escape' || e.key === 'Backspace') {
+        keyboardMoveInput = "";
+        const statusEl = document.getElementById('voice-move-status');
+        if (statusEl) statusEl.textContent = "";
+    }
+});
+
+// Arrow drawing using SVG
+const arrowSvgId = "board-arrows-svg";
+let startSquare = null;
+
+function setupArrows() {
+    const wrapper = document.getElementById('board-wrapper');
+    if (!wrapper) return;
+    
+    let svg = document.getElementById(arrowSvgId);
+    if (!svg) {
+        svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.id = arrowSvgId;
+        svg.style.position = "absolute";
+        svg.style.top = "0";
+        svg.style.left = "0";
+        svg.style.width = "100%";
+        svg.style.height = "100%";
+        svg.style.pointerEvents = "none";
+        svg.style.zIndex = "50";
+        
+        const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+        const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+        marker.setAttribute("id", "arrowhead");
+        marker.setAttribute("markerWidth", "10");
+        marker.setAttribute("markerHeight", "7");
+        marker.setAttribute("refX", "9");
+        marker.setAttribute("refY", "3.5");
+        marker.setAttribute("orient", "auto");
+        const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+        polygon.setAttribute("points", "0 0, 10 3.5, 0 7");
+        polygon.setAttribute("fill", "rgba(231, 76, 60, 0.8)");
+        marker.appendChild(polygon);
+        defs.appendChild(marker);
+        svg.appendChild(defs);
+        
+        wrapper.appendChild(svg);
+    }
+}
+
+document.addEventListener('contextmenu', (e) => {
+    const toggle = document.getElementById('arrowToggle');
+    if (!toggle || !toggle.checked) return;
+    
+    const board = document.getElementById('chess-board');
+    if (board && board.contains(e.target)) {
+        e.preventDefault();
+    }
+});
+
+document.addEventListener('mousedown', (e) => {
+    const toggle = document.getElementById('arrowToggle');
+    if (!toggle || !toggle.checked) return;
+    
+    if (e.button === 2) { 
+        const board = document.getElementById('chess-board');
+        if (!board) return;
+        
+        const rect = board.getBoundingClientRect();
+        if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+            setupArrows();
+            const sqSize = rect.width / 8;
+            let col = Math.floor((e.clientX - rect.left) / sqSize);
+            let row = Math.floor((e.clientY - rect.top) / sqSize);
+            
+            if (myColor === 'black') {
+                col = 7 - col;
+                row = 7 - row;
+            }
+            
+            startSquare = { x: e.clientX - rect.left, y: e.clientY - rect.top, col, row };
+        } else {
+            const svg = document.getElementById(arrowSvgId);
+            if (svg) svg.innerHTML = '<defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="rgba(231, 76, 60, 0.8)"></polygon></marker></defs>';
+        }
+    } else if (e.button === 0) {
+        const svg = document.getElementById(arrowSvgId);
+        if (svg) svg.innerHTML = '<defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="rgba(231, 76, 60, 0.8)"></polygon></marker></defs>';
+    }
+});
+
+document.addEventListener('mouseup', (e) => {
+    const toggle = document.getElementById('arrowToggle');
+    if (!toggle || !toggle.checked) return;
+
+    if (e.button === 2 && startSquare) {
+        const board = document.getElementById('chess-board');
+        if (!board) return;
+        
+        const rect = board.getBoundingClientRect();
+        if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+            const endX = e.clientX - rect.left;
+            const endY = e.clientY - rect.top;
+            
+            const svg = document.getElementById(arrowSvgId);
+            if (svg) {
+                const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                line.setAttribute("x1", startSquare.x);
+                line.setAttribute("y1", startSquare.y);
+                line.setAttribute("x2", endX);
+                line.setAttribute("y2", endY);
+                line.setAttribute("stroke", "rgba(231, 76, 60, 0.8)");
+                line.setAttribute("stroke-width", "8");
+                line.setAttribute("stroke-linecap", "round");
+                line.setAttribute("marker-end", "url(#arrowhead)");
+                svg.appendChild(line);
+            }
+        }
+        startSquare = null;
+    }
+});
+
+// Confetti effect
+window.showConfetti = function() {
+    const toggle = document.getElementById('confettiToggle');
+    if (toggle && !toggle.checked) return;
+    
+    for (let i = 0; i < 100; i++) {
+        createParticle();
+    }
+};
+
+function createParticle() {
+    const particle = document.createElement('div');
+    document.body.appendChild(particle);
+    
+    const size = Math.random() * 10 + 5;
+    const colors = ['#f1c40f', '#e74c3c', '#3498db', '#2ecc71', '#9b59b6'];
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    
+    particle.style.position = 'fixed';
+    particle.style.width = size + 'px';
+    particle.style.height = size + 'px';
+    particle.style.backgroundColor = color;
+    particle.style.left = Math.random() * 100 + 'vw';
+    particle.style.top = '-10px';
+    particle.style.borderRadius = Math.random() > 0.5 ? '50%' : '0';
+    particle.style.zIndex = '999999';
+    particle.style.pointerEvents = 'none';
+    
+    const duration = Math.random() * 3 + 2;
+    particle.animate([
+        { transform: 'translate3d(0,0,0) rotate(0deg)', opacity: 1 },
+        { transform: `translate3d(${Math.random()*200 - 100}px, 100vh, 0) rotate(${Math.random()*720}deg)`, opacity: 0 }
+    ], {
+        duration: duration * 1000,
+        easing: 'cubic-bezier(.37,0,.63,1)'
+    });
+    
+    setTimeout(() => {
+        particle.remove();
+    }, duration * 1000);
+}
 
 // --- SPECTATOR CONTROLS ---
 isSpectatorMode = false;
