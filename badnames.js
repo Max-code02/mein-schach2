@@ -1,48 +1,72 @@
-// badnames.js - Namensfilter für Max' Server
+// badnames.js - EXTENDED BAD NAME & SPOOFING PROTECTION FILTER
 
-// Hier kannst du alle Namen eintragen, die verboten sein sollen
 const FORBIDDEN_NAMES = [
     "admin",
     "administrator",
     "moderator",
-    "mod",      // Damit sich niemand als du ausgeben kann
+    "mod",
     "system",
     "root",
     "server",
-    "support"
+    "support",
+    "official",
+    "owner",
+    "eigentümer",
+    "chesslive",
+    "ghostplayer",
+    "bot"
 ];
 
-// Hier kannst du Schimpfwörter ergänzen
 const BAD_WORDS = [
     "idiot",
     "hacker",
-    "cheater"
-    // Füge hier weitere Wörter hinzu, die im Namen nicht vorkommen dürfen
+    "cheater",
+    "nigger",
+    "neger",
+    "hurensohn",
+    "spast",
+    "hitler",
+    "nazi",
+    "fotze",
+    "wichser"
 ];
 
 /**
- * Prüft, ob ein Name erlaubt ist
+ * Validiert Benutzernamen gegen Namensfälschung, Homoglyphen und Schimpfwörter
  * @param {string} name - Der gewählte Name
- * @returns {boolean} - true wenn okay, false wenn verboten
+ * @returns {boolean} - true wenn erlaubt, false wenn abgelehnt
  */
 function isNameAllowed(name) {
     if (!name || typeof name !== 'string') return false;
     
-    const lowerName = name.toLowerCase().trim();
+    const trimmed = name.trim();
+    if (trimmed.length < 2 || trimmed.length > 20) return false;
 
-    // 1. Exakte Treffer (z.B. jemand nennt sich genau "Admin")
-    if (FORBIDDEN_NAMES.includes(lowerName)) return false;
+    // 1. Homoglyphen & Zero-Width Spaces verhindern (Invisible Unicode)
+    if (/[\u200B-\u200D\uFEFF\u00A0]/.test(name)) return false;
 
-    // 2. Enthaltene Schimpfwörter (z.B. "IchBinEinIdiot")
+    const lowerName = trimmed.toLowerCase();
+
+    // 2. Exakte Übereinstimmungen mit verbotenen System-Namen
+    if (FORBIDDEN_NAMES.some(forbidden => lowerName === forbidden)) {
+        return false;
+    }
+
+    // 3. Verbotene Wörter in Kombination prüfen
     for (let word of BAD_WORDS) {
         if (lowerName.includes(word)) return false;
     }
 
-    // 3. Sonderzeichen-Schutz (Nur Buchstaben und Zahlen erlauben)
-    const regex = /^[a-zA-Z0-9_ ]+$/;
-    if (!regex.test(lowerName)) return false;
+    // 4. Keine gefälschten [System] oder [Admin] Präfixe im Namen
+    if (lowerName.startsWith('[admin]') || lowerName.startsWith('[system]') || lowerName.startsWith('👑')) {
+        return false;
+    }
+
+    // 5. Erlaubte Zeichen: Buchstaben, Zahlen, Bindestrich, Unterstrich und Leerzeichen
+    const validRegex = /^[a-zA-Z0-9_\- ]+$/;
+    if (!validRegex.test(trimmed)) return false;
 
     return true;
 }
 
-module.exports = { isNameAllowed };
+module.exports = { isNameAllowed, FORBIDDEN_NAMES, BAD_WORDS };
