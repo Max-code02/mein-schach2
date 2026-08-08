@@ -192,13 +192,15 @@ async function initFirebase() {
                             updateProfileDisplay(dbName, data.elo || 1200, data.wins || 0, data.losses || 0, data.level || 1, data.xp || 0, data.achievements || []);
                             
                             // Check admin role
-                            const isAdmin = (data.role === 'admin' || data.role === 'moderator'); // Let's just make both see it for now, or just admin
+                            const isAdminList = ['max', '222', 'admin', 'max.schule13@gmail.com', 'owner', 'eigentümer'];
+                            const isUserAdminClient = isAdminList.includes(dbName.toLowerCase());
+                            const isAdmin = (data.role === 'admin' || data.role === 'moderator' || isUserAdminClient);
                             const adminPanel = document.getElementById('admin-panel');
                             if (adminPanel) {
-                                adminPanel.style.display = data.role === 'admin' ? 'block' : 'none';
+                                adminPanel.style.display = (data.role === 'admin' || isUserAdminClient) ? 'block' : 'none';
                             }
                             
-                            if (data.role === 'admin' || isUserAdmin(dbName)) {
+                            if (data.role === 'admin' || isUserAdminClient) {
                                 if (adminPanel) adminPanel.style.display = 'block';
                                 
                                 // Call server WebSocket admin refresh
@@ -777,7 +779,8 @@ window.addEventListener('load', () => {
                         updateProfileDisplay(data.name, data.elo, data.wins, data.losses || 0, data.level || 1, data.xp || 0, data.achievements || []);
                         
                         // Show admin panel if admin
-                        const isAdminUser = data.role === 'admin' || (data.name && data.name.toLowerCase() === 'max');
+                        const isAdminList = ['max', '222', 'admin', 'max.schule13@gmail.com', 'owner', 'eigentümer'];
+                        const isAdminUser = data.role === 'admin' || (data.name && isAdminList.includes(data.name.toLowerCase()));
                         const adminPanel = document.getElementById('admin-panel');
                         if (adminPanel) {
                             adminPanel.style.display = isAdminUser ? 'block' : 'none';
