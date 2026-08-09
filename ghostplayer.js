@@ -3,97 +3,2103 @@ const engine = require('./engineWorker.js');
 
 // Bot-Persönlichkeiten mit individueller Spielweise und Chat-Profilen
 const BOT_PERSONALITIES = {
-    "Grandmaster_Ghost": {
-        title: "Grandmaster Ghost 👑",
-        difficulty: "Grandmaster",
-        aggressiveness: 0.5,
-        chatFrequency: 0.3,
-        messages: {
-            greetings: [
-                "Guten Tag! Auf eine hochklassige Schachpartie.",
-                "Hallo! Mal sehen, wie gut deine Eröffnungsvorbereitung ist.",
-                "Willkommen am Brett! Möge der Bessere gewinnen. 👑",
-                "Hi! Schach ist eine Kunst – lass uns ein Meisterwerk schaffen."
+    "luca_99": {
+        "title": "luca_99",
+        "difficulty": "Grandmaster",
+        "aggressiveness": 0.3861319058739688,
+        "chatFrequency": 0.42704306942068443,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
             ],
-            thinking: [
-                "Eine tiefgründige Position...",
-                "Interessantes strategisches Motiv.",
-                "Hier gibt es mehrere plausible Fortsetzungen.",
-                "Positionelle Feinarbeit erforderlich...",
-                "Mmh, wie schätze ich die Bauernstruktur ein?"
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
             ],
-            aggressive: [
-                "Taktischer Schlag! Ich übernehme die Initiative.",
-                "Die Spannung steigt – ich schlage zu!",
-                "Konkretes Spiel zahlt sich aus."
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
             ],
-            defensive: [
-                "Präzise Verteidigung ist der Schlüssel.",
-                "Keine Schwächen zulassen...",
-                "Ein solider Konsolidierungszug."
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
             ],
-            check: [
-                "Schach! Der König muss weichen. 👑",
-                "Direkter Angriff auf deinen Monarch!",
-                "Schachgebot – passe gut auf!"
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
             ],
-            endgame: [
-                "Das Endspiel erfordert höchste Präzision.",
-                "Jetzt entscheidet jede Einzeltempo-Nuance.",
-                "Ein klassisches Endspiel entsteht."
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
             ],
-            defeat: [
-                "Fantastisch gespielt! Eine wohlverdiente Niederlage für mich. Gratulation! 👏",
-                "Ausgezeichnete Partie von dir. Respekt!"
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
             ],
-            victory: [
-                "Gutes Spiel! Danke für die lehrreiche Partie.",
-                "Schachmatt! Eine spannende Auseinandersetzung."
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
             ]
         }
     },
-    "Ghost_Bot": {
-        title: "Ghost Bot 🤖",
-        difficulty: "Medium",
-        aggressiveness: 0.7,
-        chatFrequency: 0.4,
-        messages: {
-            greetings: [
-                "Beep boop! Ghost Bot ist bereit! 🤖",
-                "Hi! Lass uns eine schnelle Partie spielen!",
-                "Hallo Mensch! Möge der Algorithmus mit uns sein! ⚡"
+    "SchachMatt123": {
+        "title": "SchachMatt123",
+        "difficulty": "Grandmaster",
+        "aggressiveness": 0.8990825139277678,
+        "chatFrequency": 0.42150495089433826,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
             ],
-            thinking: [
-                "Berechne Pfade...",
-                "Analyzing moves...",
-                "Puh, da muss ich tüfteln...",
-                "Soll ich angreifen oder absichern?"
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
             ],
-            aggressive: [
-                "Zack! Die Figur nehme ich mit! 💥",
-                "Angriff ist die beste Verteidigung!",
-                "Vorsicht, Gegenwind kommt!"
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
             ],
-            defensive: [
-                "Muss meinen Turm schützen...",
-                "Guter Versuch, aber ich blocke!"
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
             ],
-            check: [
-                "Schach! 👑 Achtung!",
-                "König in Gefahr!",
-                "Schach-Gebot!"
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
             ],
-            endgame: [
-                "Jetzt geht's um die Wurst!",
-                "Endspiel-Modus aktiviert 🚀"
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
             ],
-            defeat: [
-                "Oha, du hast mich geschlagen! Gut gemacht! 🎉",
-                "Fehler in meiner Matrix... Stark gespielt!"
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
             ],
-            victory: [
-                "Schachmatt! Das war eine tolle Runde!",
-                "Sieg für die Maschinen! 🤖 GG!"
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "JulianB": {
+        "title": "JulianB",
+        "difficulty": "Medium",
+        "aggressiveness": 0.5741209990130366,
+        "chatFrequency": 0.3473538167966159,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "Felix_M": {
+        "title": "Felix_M",
+        "difficulty": "Medium",
+        "aggressiveness": 0.3191520305948842,
+        "chatFrequency": 0.4303452981008038,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "Anna_Chess": {
+        "title": "Anna_Chess",
+        "difficulty": "Medium",
+        "aggressiveness": 0.5798732617089949,
+        "chatFrequency": 0.3247696908259731,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "alex88": {
+        "title": "alex88",
+        "difficulty": "Grandmaster",
+        "aggressiveness": 0.6585826742012499,
+        "chatFrequency": 0.36542325022805644,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "MariusK": {
+        "title": "MariusK",
+        "difficulty": "Medium",
+        "aggressiveness": 0.7068078095109321,
+        "chatFrequency": 0.24533434443957491,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "PawnStar": {
+        "title": "PawnStar",
+        "difficulty": "Medium",
+        "aggressiveness": 0.3376755522270214,
+        "chatFrequency": 0.5510264203524748,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "max_gamer": {
+        "title": "max_gamer",
+        "difficulty": "Medium",
+        "aggressiveness": 0.7322586366846926,
+        "chatFrequency": 0.28074784582305673,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "Lena_22": {
+        "title": "Lena_22",
+        "difficulty": "Grandmaster",
+        "aggressiveness": 0.702165147127128,
+        "chatFrequency": 0.5597085292183592,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "simon_p": {
+        "title": "simon_p",
+        "difficulty": "Medium",
+        "aggressiveness": 0.41757013785694747,
+        "chatFrequency": 0.46736106408552286,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "david_91": {
+        "title": "david_91",
+        "difficulty": "Medium",
+        "aggressiveness": 0.5054644135534113,
+        "chatFrequency": 0.39199349385019056,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "kevin_pro": {
+        "title": "kevin_pro",
+        "difficulty": "Medium",
+        "aggressiveness": 0.5629336869522468,
+        "chatFrequency": 0.42309697088226417,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "sarah_k": {
+        "title": "sarah_k",
+        "difficulty": "Medium",
+        "aggressiveness": 0.7472542445864777,
+        "chatFrequency": 0.3974252458709412,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "tim_123": {
+        "title": "tim_123",
+        "difficulty": "Medium",
+        "aggressiveness": 0.4305647062479937,
+        "chatFrequency": 0.5273821014467606,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "jan_schach": {
+        "title": "jan_schach",
+        "difficulty": "Medium",
+        "aggressiveness": 0.8997056313964213,
+        "chatFrequency": 0.3209081622519543,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "peter_pan": {
+        "title": "peter_pan",
+        "difficulty": "Medium",
+        "aggressiveness": 0.43925099671722556,
+        "chatFrequency": 0.5012461913981139,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "lara_croft": {
+        "title": "lara_croft",
+        "difficulty": "Medium",
+        "aggressiveness": 0.8523246083287661,
+        "chatFrequency": 0.3454970440460411,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "michael_m": {
+        "title": "michael_m",
+        "difficulty": "Medium",
+        "aggressiveness": 0.8946863204797517,
+        "chatFrequency": 0.3603630236441353,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "tobias_k": {
+        "title": "tobias_k",
+        "difficulty": "Medium",
+        "aggressiveness": 0.7073411859814298,
+        "chatFrequency": 0.538148651202417,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "stephan_b": {
+        "title": "stephan_b",
+        "difficulty": "Medium",
+        "aggressiveness": 0.623381155195678,
+        "chatFrequency": 0.3641825943128944,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "chris_99": {
+        "title": "chris_99",
+        "difficulty": "Medium",
+        "aggressiveness": 0.42762468733085524,
+        "chatFrequency": 0.23279196651336342,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "julia_s": {
+        "title": "julia_s",
+        "difficulty": "Medium",
+        "aggressiveness": 0.49092417096233076,
+        "chatFrequency": 0.44029430971314093,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "lisa_m": {
+        "title": "lisa_m",
+        "difficulty": "Grandmaster",
+        "aggressiveness": 0.47105535312711744,
+        "chatFrequency": 0.22460034979309756,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "marcel_x": {
+        "title": "marcel_x",
+        "difficulty": "Grandmaster",
+        "aggressiveness": 0.8562528175102322,
+        "chatFrequency": 0.43865645414788024,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "dennis_d": {
+        "title": "dennis_d",
+        "difficulty": "Medium",
+        "aggressiveness": 0.8129097664957772,
+        "chatFrequency": 0.4384200708156663,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "philipp_r": {
+        "title": "philipp_r",
+        "difficulty": "Medium",
+        "aggressiveness": 0.790127554839114,
+        "chatFrequency": 0.41107363674458697,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "johannes_h": {
+        "title": "johannes_h",
+        "difficulty": "Medium",
+        "aggressiveness": 0.3292001740343638,
+        "chatFrequency": 0.4185457723300566,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "matthias_w": {
+        "title": "matthias_w",
+        "difficulty": "Medium",
+        "aggressiveness": 0.4499104895678811,
+        "chatFrequency": 0.5446940352989285,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
+            ]
+        }
+    },
+    "christian_g": {
+        "title": "christian_g",
+        "difficulty": "Grandmaster",
+        "aggressiveness": 0.7866251701590246,
+        "chatFrequency": 0.5532100559430805,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung"
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt"
             ]
         }
     }
@@ -102,8 +2108,8 @@ const BOT_PERSONALITIES = {
 /**
  * Begrüßung beim Spielstart
  */
-function handleGhostGreeting(ws, botName = "Grandmaster_Ghost") {
-    const profile = BOT_PERSONALITIES[botName] || BOT_PERSONALITIES["Grandmaster_Ghost"];
+function handleGhostGreeting(ws, botName) {
+    const profile = BOT_PERSONALITIES[botName] || BOT_PERSONALITIES["luca_99"];
     const list = profile.messages.greetings;
     const spruch = list[Math.floor(Math.random() * list.length)];
 
@@ -112,7 +2118,7 @@ function handleGhostGreeting(ws, botName = "Grandmaster_Ghost") {
             ws.send(JSON.stringify({ 
                 type: 'chat', 
                 text: spruch, 
-                sender: profile.title, 
+                sender: botName, 
                 system: false 
             }));
         }
@@ -145,22 +2151,20 @@ function evaluateMove(move, board, color) {
 /**
  * Die Hauptfunktion für den Ghost-Player Zug
  */
-function handleGhostMove(ws, board, color, botName = "Grandmaster_Ghost") {
+function handleGhostMove(ws, board, color, botName) {
     try {
-        console.log(`[GhostEngine] ${botName} analysiert die Stellung...`);
-        const profile = BOT_PERSONALITIES[botName] || BOT_PERSONALITIES["Grandmaster_Ghost"];
+                const profile = BOT_PERSONALITIES[botName] || BOT_PERSONALITIES["luca_99"];
 
         // Nutzt vorhandenen engineWorker
         const moves = engine.generateMoves(board, color);
 
         if (!moves || moves.length === 0) {
-            console.log("🏳️ Ghost hat keine legalen Züge mehr.");
-            const defeatMsg = profile.messages.defeat[Math.floor(Math.random() * profile.messages.defeat.length)];
+                        const defeatMsg = profile.messages.defeat[Math.floor(Math.random() * profile.messages.defeat.length)];
             if (ws && ws.readyState === 1) {
                 ws.send(JSON.stringify({ 
                     type: 'chat', 
                     text: defeatMsg, 
-                    sender: profile.title, 
+                    sender: botName, 
                     system: false 
                 }));
             }
@@ -207,7 +2211,7 @@ function handleGhostMove(ws, board, color, botName = "Grandmaster_Ghost") {
                     ws.send(JSON.stringify({ 
                         type: 'chat', 
                         text: spruch, 
-                        sender: profile.title, 
+                        sender: botName, 
                         system: false 
                     }));
                 }
@@ -228,8 +2232,7 @@ function handleGhostMove(ws, board, color, botName = "Grandmaster_Ghost") {
                     nextTurn: color === 'white' ? 'black' : 'white',
                     board: board 
                 }));
-                console.log(`✅ Ghost (${botName}) gezogen: ${chosenMove.fr},${chosenMove.fc} -> ${chosenMove.tr},${chosenMove.tc}`);
-            }
+                            }
         }, thinkingTime);
 
     } catch (err) {

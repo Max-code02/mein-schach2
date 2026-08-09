@@ -3,30 +3,87 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Datenschutzerklärung - Schach Pro</title>
+    <title>Datenschutzerklärung - Schach Live</title>
     <style>
-        body { font-family: sans-serif; line-height: 1.6; padding: 20px; max-width: 800px; margin: auto; }
-        h1 { color: #333; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0a0a0a;
+            color: #eeeeee;
+            line-height: 1.6;
+            padding: 40px 20px;
+            max-width: 900px;
+            margin: auto;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 30px;
+            border-radius: 15px;
+            border: 1px solid #3498db;
+            box-shadow: 0 0 20px rgba(52, 152, 219, 0.2);
+        }
+        h1 {
+            color: #3498db;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #2ecc71;
+            margin-top: 30px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 5px;
+        }
+        p, ul {
+            margin-bottom: 15px;
+            color: #ccc;
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 30px;
+            color: #3498db;
+            text-decoration: none;
+            font-weight: bold;
+            border: 1px solid #3498db;
+            padding: 10px 20px;
+            border-radius: 8px;
+            transition: 0.3s;
+        }
+        .back-link:hover {
+            background: #3498db;
+            color: white;
+        }
     </style>
 </head>
 <body>
-    <h1>Datenschutzerklärung für Schach Pro</h1>
-    <p>Diese Datenschutzerklärung klärt Sie über die Art, den Umfang und Zweck der Verarbeitung von personenbezogenen Daten innerhalb der App <strong>Schach Pro</strong> auf.</p>
-    
-    <h2>1. Verantwortlicher</h2>
-    <p>Verantwortlich für diese App ist:<br>
-    Maxcode01<br>
-    E-Mail: max.schule13@gmail.com</p>
+    <div class="container">
+        <h1>Datenschutzerklärung</h1>
+        <p>Diese Datenschutzerklärung klärt Sie über die Art, den Umfang und Zweck der Verarbeitung von personenbezogenen Daten innerhalb der App <strong>Schach Live</strong> auf.</p>
+        
+        <h2>1. Verantwortlicher</h2>
+        <p>Verantwortlich für diese Plattform ist:<br>
+        Max<br>
+        E-Mail: max.schule13@gmail.com</p>
 
-    <h2>2. Erhebung von Daten</h2>
-    <p>Die App "Schach Pro" erhebt, speichert oder verarbeitet <strong>keine</strong> personenbezogenen Daten der Nutzer. Es werden keine  Standortdaten oder Kontakte abgefragt.</p>
+        <h2>2. Erhebung von Daten</h2>
+        <p>Wenn du unsere Plattform nutzt, verarbeiten wir folgende Daten:</p>
+        <ul>
+            <li><strong>Spielerprofile:</strong> Gewählte Benutzernamen, Elo-Zahlen und Spielstatistiken.</li>
+            <li><strong>Verbindungsdaten:</strong> IP-Adressen werden ausschließlich für Sicherheitszwecke (Bans & Anti-Cheat) temporär verarbeitet.</li>
+            <li><strong>Chat-Logs:</strong> Öffentliche Nachrichten werden kurzfristig gespeichert, um Moderatoren die Überprüfung bei Regelverstößen zu ermöglichen.</li>
+        </ul>
+        <p>Wir verkaufen <strong>keine</strong> Daten an Dritte.</p>
 
-    <h2>3. Drittanbieter (Werbung)</h2>
-    <p>Da die App Werbung enthalten kann, können Drittanbieter (wie Werbenetzwerke) anonyme Kennungen Ihres Geräts nutzen, um Werbung anzuzeigen. Diese Daten sind nicht Ihrer Person zugeordnet.</p>
+        <h2>3. Local Storage & Cookies</h2>
+        <p>Wir verwenden Local Storage in deinem Browser, um deine Themes, deine Elo-Historie und dein Login-Token zu speichern. Es werden keine Tracking-Cookies eingesetzt.</p>
 
-    <h2>4. Rechte der Nutzer</h2>
-    <p>Da keine personenbezogenen Daten gespeichert werden, entstehen keine Ansprüche auf Auskunft, Löschung oder Sperrung gegenüber dem Entwickler.</p>
-    
-    <p>Stand: Februar 2026</p>
+        <h2>4. Drittanbieter</h2>
+        <p>Aktuell nutzen wir Firebase für die optionale persistente Authentifizierung und Datenbank (sofern du einen dauerhaften Account erstellst). Firebase unterliegt den Datenschutzbestimmungen von Google.</p>
+
+        <h2>5. Deine Rechte</h2>
+        <p>Du hast jederzeit das Recht auf Auskunft, Löschung oder Sperrung deiner bei uns gespeicherten Daten. Sende uns dazu einfach eine E-Mail oder nutze das In-Game Ticket-System.</p>
+        
+        <p>Stand: August 2026</p>
+        
+        <a href="index.html" class="back-link">← Zurück zum Spiel</a>
+    </div>
 </body>
 </html>

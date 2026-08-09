@@ -422,8 +422,8 @@ Berechne die Genauigkeit (0 bis 100), Aggressivitätsgesamtindex (0 bis 100) und
 });
 
 // Ghost Player configuration
-const ghostNames = ["ChessMaster99", "Lukas_Pro", "QueenGambit", "DarkKnight", "Susi_Sunshine", "CheckMate", "KingOfKings", "Master_88"];
-const ghostSentences = ["Hallo!", "Viel Glück!", "Gutes Spiel!", "Lust auf eine Revanche?", "Puh, das war knapp!", "Respekt!", "Moin moin", "Schach!", "Gleich hab ich dich!"];
+const ghostNames = ["luca_99", "SchachMatt123", "JulianB", "Felix_M", "Anna_Chess", "alex88", "MariusK", "PawnStar", "max_gamer", "Lena_22", "simon_p", "david_91", "kevin_pro", "sarah_k", "tim_123", "jan_schach", "peter_pan", "lara_croft", "michael_m", "tobias_k", "stephan_b", "chris_99", "julia_s", "lisa_m", "marcel_x", "dennis_d", "philipp_r", "johannes_h", "matthias_w", "christian_g"];
+const ghostSentences = ["hi", "moin", "gl hf", "hi :)", "viel glück", "hallo"];
 
 function createGhostPlayer() {
     const randomName = ghostNames[Math.floor(Math.random() * ghostNames.length)];
@@ -440,7 +440,7 @@ function createGhostPlayer() {
     setTimeout(() => {
         broadcast({ 
             type: 'chat', 
-            text: `${randomName}: ${ghostSentences[Math.floor(Math.random() * ghostSentences.length)]}`, 
+            text: ghostSentences[Math.floor(Math.random() * ghostSentences.length)], 
             playerName: randomName 
         });
     }, Math.random() * 5000 + 3000);
@@ -1660,6 +1660,7 @@ wss.on('connection', function(ws, req) {
                     activeRoomStates.set(roomID, {
                         board: null,
                         turn: 'white',
+                        isGhostMatch: ws.isGhostMatch || false,
                         whitePlayer: ws.playerName,
                         blackPlayer: targetWs.playerName
                     });
@@ -1694,7 +1695,7 @@ wss.on('connection', function(ws, req) {
                 if (waitingPlayer && waitingPlayer !== ws && waitingPlayer.readyState === 1 && waitingPlayer.timeControl === data.timeControl) {
                     if (waitingPlayer.botTimeout) {
                         clearTimeout(waitingPlayer.botTimeout);
-                        console.log("🛑 Bot-Timer gestoppt - Menschlicher Gegner gefunden!");
+                        console.log("🛑 Timer gestoppt - Menschlicher Gegner gefunden!");
                     }
 
                     const roomID = "room_" + Math.random().toString(36).substr(2, 9);
@@ -1721,6 +1722,7 @@ wss.on('connection', function(ws, req) {
                     activeRoomStates.set(roomID, {
                         board: null,
                         turn: 'white',
+                        isGhostMatch: ws.isGhostMatch || false,
                         whitePlayer: waitingPlayer.playerName || "Spieler 1",
                         blackPlayer: ws.playerName || "Spieler 2",
                         timeControl: tc,
@@ -1751,34 +1753,37 @@ wss.on('connection', function(ws, req) {
 
                     ws.botTimeout = setTimeout(() => {
                         if (waitingPlayer === ws) {
-                            const roomID = "bot_room_" + Date.now();
+                            const roomID = "room_" + Date.now();
                             const botName = ghostNames[Math.floor(Math.random() * ghostNames.length)];
+                            if (!userDB[botName]) {
+                                userDB[botName] = { 
+                                    level: 1 + Math.floor(Math.random() * 5), 
+                                    xp: Math.floor(Math.random() * 100), 
+                                    wins: Math.floor(Math.random() * 20), 
+                                    losses: Math.floor(Math.random() * 20), 
+                                    elo: 1000 + Math.floor(Math.random() * 500), 
+                                    role: 'user' 
+                                };
+                            }
 
                             ws.room = roomID;
-                            ws.isBotMatch = true;
+                            ws.isGhostMatch = true;
                             ws.opponentName = botName; 
                             waitingPlayer = null; 
 
                             ws.send(JSON.stringify({ 
                                 type: 'gameStart', 
                                 opponent: botName, 
-                                isBotMatch: true, 
+                                 
                                 room: roomID, 
                                 color: 'white' 
                             }));
 
-                            console.log(`🤖 Bot-Match erstellt: ${botName} vs. ${ws.playerName}`);
+                            console.log(`🎮 Match erstellt: ${botName} vs. ${ws.playerName}`);
 
-                            setTimeout(() => {
-                                if (ws.readyState === 1) {
-                                    ws.send(JSON.stringify({ 
-                                        type: 'chat', 
-                                        text: "Gutes spiel", 
-                                        sender: botName, 
-                                        system: false 
-                                    }));
-                                }
-                            }, 1000);
+                            if (typeof ghost !== 'undefined' && ghost && ghost.handleGhostGreeting) {
+                                ghost.handleGhostGreeting(ws, botName);
+                            }
                         }
                     }, 5000); 
                 }
@@ -1827,9 +1832,18 @@ wss.on('connection', function(ws, req) {
                         userDB[loser].losses = (userDB[loser].losses || 0) + 1;
                     }
                     saveAll(winner);
-                    if (userDB[loser]) saveAll(loser);
-                    sendLeaderboardUpdate();
+                } else if (ws.isGhostMatch && userDB[loser]) {
+                    const winnerElo = 1500; // Ghost bot is 1500
+                    const loserElo = userDB[loser].elo || 1200;
+                    const expectedLoser = 1 / (1 + Math.pow(10, (winnerElo - loserElo) / 400));
+                    
+                    const k = 16;
+                    userDB[loser].elo = Math.round(loserElo + k * (0 - expectedLoser));
+                    userDB[loser].losses = (userDB[loser].losses || 0) + 1;
                 }
+                
+                if (userDB[loser]) saveAll(loser);
+                sendLeaderboardUpdate();
 
                 console.log(`[GAME] ${loser} hat in Raum ${room} aufgegeben.`);
                 return; 
@@ -1898,7 +1912,7 @@ wss.on('connection', function(ws, req) {
                         roomState = {
                             whitePlayer: ws.color === 'white' ? (ws.playerName || 'Weiß') : (ws.opponentName || 'Weiß'),
                             blackPlayer: ws.color === 'black' ? (ws.playerName || 'Schwarz') : (ws.opponentName || 'Schwarz')
-                        };
+                        , isGhostMatch: ws.isGhostMatch || false };
                     }
                     roomState.board = data.board;
                     roomState.turn = data.turn;
@@ -1928,7 +1942,7 @@ wss.on('connection', function(ws, req) {
                     data.blackPlayer = roomState.blackPlayer;
                     broadcastRoomMessage(data, targetRoom, ws);
 
-                    if (ws.isBotMatch) {
+                    if (ws.isGhostMatch) {
                         const currentBotName = ws.opponentName || "Grandmaster_Ghost";
                         setTimeout(() => {
                             if (typeof ghost !== 'undefined' && ghost && ghost.handleGhostMove) {
@@ -2048,7 +2062,7 @@ wss.on('connection', function(ws, req) {
                 const senderName = data.playerName || ws.playerName || "Gegner";
                 
                 // Single-Player / Bot Match
-                if (ws.isBotMatch || ws.opponentName === 'Grandmaster_Ghost' || ws.opponentName === 'Ghost_Bot') {
+                if (ws.isGhostMatch) {
                     ws.send(JSON.stringify({ type: 'takeback_accepted' }));
                     return;
                 }
@@ -2091,7 +2105,7 @@ wss.on('connection', function(ws, req) {
                 const targetRoom = data.room || ws.room;
                 const senderName = data.playerName || ws.playerName || "Gegner";
 
-                if (ws.isBotMatch || ws.opponentName === 'Grandmaster_Ghost' || ws.opponentName === 'Ghost_Bot') {
+                if (ws.isGhostMatch) {
                     ws.send(JSON.stringify({ type: 'draw_accepted' }));
                     return;
                 }
@@ -2156,8 +2170,8 @@ wss.on('connection', function(ws, req) {
                     opponent.color = 'white';
                     ws.opponentName = opponent.playerName || "Spieler 1";
                     opponent.opponentName = ws.playerName || "Spieler 2";
-                    ws.isBotMatch = false;
-                    opponent.isBotMatch = false;
+                    ws.isGhostMatch = false;
+                    opponent.isGhostMatch = false;
 
                     const timeControl = data.timeControl || opponent.timeControl || '10+0';
 
@@ -2190,7 +2204,7 @@ wss.on('connection', function(ws, req) {
                         room: roomName,
                         color: 'black',
                         opponent: ws.opponentName,
-                        isBotMatch: false,
+                        
                         timeControl: timeControl
                     }));
 
@@ -2199,7 +2213,7 @@ wss.on('connection', function(ws, req) {
                         room: roomName,
                         color: 'white',
                         opponent: opponent.opponentName,
-                        isBotMatch: false,
+                        
                         timeControl: timeControl
                     }));
 
@@ -2228,16 +2242,29 @@ wss.on('connection', function(ws, req) {
                                 roomWaitingMap.set(roomName, currList);
 
                                 const botName = ghostNames[Math.floor(Math.random() * ghostNames.length)];
-                                ws.isBotMatch = true;
+                            if (!userDB[botName]) {
+                                userDB[botName] = { 
+                                    level: 1 + Math.floor(Math.random() * 5), 
+                                    xp: Math.floor(Math.random() * 100), 
+                                    wins: Math.floor(Math.random() * 20), 
+                                    losses: Math.floor(Math.random() * 20), 
+                                    elo: 1000 + Math.floor(Math.random() * 500), 
+                                    role: 'user' 
+                                };
+                            }
+                                ws.isGhostMatch = true;
                                 ws.opponentName = botName;
 
                                 ws.send(JSON.stringify({
                                     type: 'gameStart',
                                     opponent: botName,
-                                    isBotMatch: true,
+                                    
                                     room: roomName,
                                     color: 'white'
                                 }));
+                                if (typeof ghost !== 'undefined' && ghost && ghost.handleGhostGreeting) {
+                                    ghost.handleGhostGreeting(ws, botName);
+                                }
                             }
                         }, 15000);
                     }
@@ -2307,7 +2334,7 @@ wss.on('connection', function(ws, req) {
                     userDB[name].elo = Math.round(winnerElo + k * (1 - expectedWinner));
                     userDB[oppName].elo = Math.round(loserElo + k * (0 - expectedLoser));
                     userDB[oppName].losses = (userDB[oppName].losses || 0) + 1;
-                } else if (ws.isBotMatch) {
+                } else if (ws.isGhostMatch) {
                     // Win against bot gives smaller elo boost
                     const winnerElo = userDB[name].elo || 1200;
                     const loserElo = 1500; // Assume ghost bot is 1500
@@ -2414,9 +2441,7 @@ wss.on('connection', function(ws, req) {
                         ws.opponentName = roomState.blackPlayer || 'Gegner';
                     }
 
-                    if (roomState.isBotMatch || (ws.opponentName && (ws.opponentName.includes('Ghost') || ws.opponentName.includes('Bot')))) {
-                        ws.isBotMatch = true;
-                    }
+                    if (roomState.isGhostMatch) { ws.isGhostMatch = true; }
 
                     ws.send(JSON.stringify({
                         type: 'rejoin_success',
