@@ -5,9 +5,11 @@ const engine = require('./engineWorker.js');
 const BOT_PERSONALITIES = {
     "luca_99": {
         "title": "luca_99",
-        "difficulty": "Grandmaster",
-        "aggressiveness": 0.3861319058739688,
-        "chatFrequency": 0.42704306942068443,
+        "difficulty": "Medium",
+        "speedPreference": "rapid",
+        "playstyle": "aggressive",
+        "aggressiveness": 0.9,
+        "chatFrequency": 0.26833573078482587,
         "messages": {
             "greetings": [
                 "moin",
@@ -17,7 +19,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -26,7 +29,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -34,7 +38,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -42,7 +48,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -62,22 +69,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "SchachMatt123": {
         "title": "SchachMatt123",
         "difficulty": "Grandmaster",
-        "aggressiveness": 0.8990825139277678,
-        "chatFrequency": 0.42150495089433826,
+        "speedPreference": "rapid",
+        "playstyle": "defensive",
+        "aggressiveness": 0.3,
+        "chatFrequency": 0.18756667562494572,
         "messages": {
             "greetings": [
                 "moin",
@@ -87,7 +98,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -96,7 +108,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -104,7 +117,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -112,7 +127,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -132,22 +148,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "JulianB": {
         "title": "JulianB",
-        "difficulty": "Medium",
-        "aggressiveness": 0.5741209990130366,
-        "chatFrequency": 0.3473538167966159,
+        "difficulty": "Grandmaster",
+        "speedPreference": "bullet",
+        "playstyle": "aggressive",
+        "aggressiveness": 0.9,
+        "chatFrequency": 0.3850006916838923,
         "messages": {
             "greetings": [
                 "moin",
@@ -157,7 +177,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -166,7 +187,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -174,7 +196,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -182,7 +206,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -202,22 +227,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "Felix_M": {
         "title": "Felix_M",
-        "difficulty": "Medium",
-        "aggressiveness": 0.3191520305948842,
-        "chatFrequency": 0.4303452981008038,
+        "difficulty": "Grandmaster",
+        "speedPreference": "bullet",
+        "playstyle": "aggressive",
+        "aggressiveness": 0.9,
+        "chatFrequency": 0.31902903125232507,
         "messages": {
             "greetings": [
                 "moin",
@@ -227,7 +256,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -236,7 +266,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -244,7 +275,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -252,7 +285,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -272,22 +306,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "Anna_Chess": {
         "title": "Anna_Chess",
-        "difficulty": "Medium",
-        "aggressiveness": 0.5798732617089949,
-        "chatFrequency": 0.3247696908259731,
+        "difficulty": "Grandmaster",
+        "speedPreference": "balanced",
+        "playstyle": "balanced",
+        "aggressiveness": 0.5327331684677318,
+        "chatFrequency": 0.3084458500099959,
         "messages": {
             "greetings": [
                 "moin",
@@ -297,7 +335,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -306,7 +345,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -314,7 +354,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -322,7 +364,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -342,22 +385,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "alex88": {
         "title": "alex88",
-        "difficulty": "Grandmaster",
-        "aggressiveness": 0.6585826742012499,
-        "chatFrequency": 0.36542325022805644,
+        "difficulty": "Medium",
+        "speedPreference": "blitz",
+        "playstyle": "balanced",
+        "aggressiveness": 0.540935871007649,
+        "chatFrequency": 0.1947063335545677,
         "messages": {
             "greetings": [
                 "moin",
@@ -367,7 +414,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -376,7 +424,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -384,7 +433,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -392,7 +443,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -412,22 +464,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "MariusK": {
         "title": "MariusK",
         "difficulty": "Medium",
-        "aggressiveness": 0.7068078095109321,
-        "chatFrequency": 0.24533434443957491,
+        "speedPreference": "bullet",
+        "playstyle": "aggressive",
+        "aggressiveness": 0.9,
+        "chatFrequency": 0.22760614050039557,
         "messages": {
             "greetings": [
                 "moin",
@@ -437,7 +493,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -446,7 +503,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -454,7 +512,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -462,7 +522,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -482,22 +543,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "PawnStar": {
         "title": "PawnStar",
         "difficulty": "Medium",
-        "aggressiveness": 0.3376755522270214,
-        "chatFrequency": 0.5510264203524748,
+        "speedPreference": "bullet",
+        "playstyle": "balanced",
+        "aggressiveness": 0.6146750795359006,
+        "chatFrequency": 0.17719786754505829,
         "messages": {
             "greetings": [
                 "moin",
@@ -507,7 +572,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -516,7 +582,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -524,7 +591,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -532,7 +601,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -552,22 +622,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "max_gamer": {
         "title": "max_gamer",
         "difficulty": "Medium",
-        "aggressiveness": 0.7322586366846926,
-        "chatFrequency": 0.28074784582305673,
+        "speedPreference": "blitz",
+        "playstyle": "balanced",
+        "aggressiveness": 0.7776823183278554,
+        "chatFrequency": 0.15211773369069403,
         "messages": {
             "greetings": [
                 "moin",
@@ -577,7 +651,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -586,7 +661,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -594,7 +670,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -602,7 +680,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -622,22 +701,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "Lena_22": {
         "title": "Lena_22",
-        "difficulty": "Grandmaster",
-        "aggressiveness": 0.702165147127128,
-        "chatFrequency": 0.5597085292183592,
+        "difficulty": "Medium",
+        "speedPreference": "blitz",
+        "playstyle": "aggressive",
+        "aggressiveness": 0.9,
+        "chatFrequency": 0.10969219595711195,
         "messages": {
             "greetings": [
                 "moin",
@@ -647,7 +730,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -656,7 +740,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -664,7 +749,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -672,7 +759,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -692,22 +780,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "simon_p": {
         "title": "simon_p",
-        "difficulty": "Medium",
-        "aggressiveness": 0.41757013785694747,
-        "chatFrequency": 0.46736106408552286,
+        "difficulty": "Grandmaster",
+        "speedPreference": "balanced",
+        "playstyle": "balanced",
+        "aggressiveness": 0.7087551487100109,
+        "chatFrequency": 0.21708954630585717,
         "messages": {
             "greetings": [
                 "moin",
@@ -717,7 +809,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -726,7 +819,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -734,7 +828,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -742,7 +838,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -762,22 +859,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "david_91": {
         "title": "david_91",
         "difficulty": "Medium",
-        "aggressiveness": 0.5054644135534113,
-        "chatFrequency": 0.39199349385019056,
+        "speedPreference": "blitz",
+        "playstyle": "balanced",
+        "aggressiveness": 0.6572350470482733,
+        "chatFrequency": 0.12526337809504992,
         "messages": {
             "greetings": [
                 "moin",
@@ -787,7 +888,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -796,7 +898,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -804,7 +907,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -812,7 +917,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -832,22 +938,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "kevin_pro": {
         "title": "kevin_pro",
         "difficulty": "Medium",
-        "aggressiveness": 0.5629336869522468,
-        "chatFrequency": 0.42309697088226417,
+        "speedPreference": "rapid",
+        "playstyle": "aggressive",
+        "aggressiveness": 0.9,
+        "chatFrequency": 0.18573546847875458,
         "messages": {
             "greetings": [
                 "moin",
@@ -857,7 +967,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -866,7 +977,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -874,7 +986,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -882,7 +996,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -902,22 +1017,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "sarah_k": {
         "title": "sarah_k",
         "difficulty": "Medium",
-        "aggressiveness": 0.7472542445864777,
-        "chatFrequency": 0.3974252458709412,
+        "speedPreference": "rapid",
+        "playstyle": "balanced",
+        "aggressiveness": 0.5327157253911572,
+        "chatFrequency": 0.3719189401005769,
         "messages": {
             "greetings": [
                 "moin",
@@ -927,7 +1046,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -936,7 +1056,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -944,7 +1065,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -952,7 +1075,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -972,22 +1096,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "tim_123": {
         "title": "tim_123",
-        "difficulty": "Medium",
-        "aggressiveness": 0.4305647062479937,
-        "chatFrequency": 0.5273821014467606,
+        "difficulty": "Grandmaster",
+        "speedPreference": "rapid",
+        "playstyle": "balanced",
+        "aggressiveness": 0.6805200351960466,
+        "chatFrequency": 0.3306473455749541,
         "messages": {
             "greetings": [
                 "moin",
@@ -997,7 +1125,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -1006,7 +1135,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -1014,7 +1144,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -1022,7 +1154,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -1042,22 +1175,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "jan_schach": {
         "title": "jan_schach",
-        "difficulty": "Medium",
-        "aggressiveness": 0.8997056313964213,
-        "chatFrequency": 0.3209081622519543,
+        "difficulty": "Grandmaster",
+        "speedPreference": "balanced",
+        "playstyle": "balanced",
+        "aggressiveness": 0.7212418002476224,
+        "chatFrequency": 0.2843653338988328,
         "messages": {
             "greetings": [
                 "moin",
@@ -1067,7 +1204,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -1076,7 +1214,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -1084,7 +1223,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -1092,7 +1233,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -1112,22 +1254,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "peter_pan": {
         "title": "peter_pan",
         "difficulty": "Medium",
-        "aggressiveness": 0.43925099671722556,
-        "chatFrequency": 0.5012461913981139,
+        "speedPreference": "balanced",
+        "playstyle": "balanced",
+        "aggressiveness": 0.6211814137940295,
+        "chatFrequency": 0.38564488810978115,
         "messages": {
             "greetings": [
                 "moin",
@@ -1137,7 +1283,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -1146,7 +1293,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -1154,7 +1302,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -1162,7 +1312,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -1182,22 +1333,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "lara_croft": {
         "title": "lara_croft",
         "difficulty": "Medium",
-        "aggressiveness": 0.8523246083287661,
-        "chatFrequency": 0.3454970440460411,
+        "speedPreference": "blitz",
+        "playstyle": "balanced",
+        "aggressiveness": 0.6190361868987916,
+        "chatFrequency": 0.15340913494223982,
         "messages": {
             "greetings": [
                 "moin",
@@ -1207,7 +1362,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -1216,7 +1372,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -1224,7 +1381,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -1232,7 +1391,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -1252,22 +1412,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "michael_m": {
         "title": "michael_m",
-        "difficulty": "Medium",
-        "aggressiveness": 0.8946863204797517,
-        "chatFrequency": 0.3603630236441353,
+        "difficulty": "Grandmaster",
+        "speedPreference": "balanced",
+        "playstyle": "balanced",
+        "aggressiveness": 0.6055872796565123,
+        "chatFrequency": 0.37077607351963815,
         "messages": {
             "greetings": [
                 "moin",
@@ -1277,7 +1441,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -1286,7 +1451,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -1294,7 +1460,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -1302,7 +1470,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -1322,22 +1491,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "tobias_k": {
         "title": "tobias_k",
         "difficulty": "Medium",
-        "aggressiveness": 0.7073411859814298,
-        "chatFrequency": 0.538148651202417,
+        "speedPreference": "balanced",
+        "playstyle": "defensive",
+        "aggressiveness": 0.3,
+        "chatFrequency": 0.26067324087672394,
         "messages": {
             "greetings": [
                 "moin",
@@ -1347,7 +1520,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -1356,7 +1530,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -1364,7 +1539,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -1372,7 +1549,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -1392,22 +1570,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "stephan_b": {
         "title": "stephan_b",
-        "difficulty": "Medium",
-        "aggressiveness": 0.623381155195678,
-        "chatFrequency": 0.3641825943128944,
+        "difficulty": "Grandmaster",
+        "speedPreference": "blitz",
+        "playstyle": "defensive",
+        "aggressiveness": 0.3,
+        "chatFrequency": 0.3065477909597104,
         "messages": {
             "greetings": [
                 "moin",
@@ -1417,7 +1599,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -1426,7 +1609,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -1434,7 +1618,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -1442,7 +1628,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -1462,22 +1649,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "chris_99": {
         "title": "chris_99",
         "difficulty": "Medium",
-        "aggressiveness": 0.42762468733085524,
-        "chatFrequency": 0.23279196651336342,
+        "speedPreference": "rapid",
+        "playstyle": "balanced",
+        "aggressiveness": 0.6050681673930248,
+        "chatFrequency": 0.2935514098910838,
         "messages": {
             "greetings": [
                 "moin",
@@ -1487,7 +1678,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -1496,7 +1688,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -1504,7 +1697,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -1512,7 +1707,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -1532,22 +1728,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "julia_s": {
         "title": "julia_s",
-        "difficulty": "Medium",
-        "aggressiveness": 0.49092417096233076,
-        "chatFrequency": 0.44029430971314093,
+        "difficulty": "Grandmaster",
+        "speedPreference": "rapid",
+        "playstyle": "balanced",
+        "aggressiveness": 0.7472194897295678,
+        "chatFrequency": 0.3572898495374158,
         "messages": {
             "greetings": [
                 "moin",
@@ -1557,7 +1757,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -1566,7 +1767,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -1574,7 +1776,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -1582,7 +1786,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -1602,22 +1807,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "lisa_m": {
         "title": "lisa_m",
-        "difficulty": "Grandmaster",
-        "aggressiveness": 0.47105535312711744,
-        "chatFrequency": 0.22460034979309756,
+        "difficulty": "Medium",
+        "speedPreference": "bullet",
+        "playstyle": "aggressive",
+        "aggressiveness": 0.9,
+        "chatFrequency": 0.21185335019461493,
         "messages": {
             "greetings": [
                 "moin",
@@ -1627,7 +1836,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -1636,7 +1846,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -1644,7 +1855,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -1652,7 +1865,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -1672,22 +1886,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "marcel_x": {
         "title": "marcel_x",
-        "difficulty": "Grandmaster",
-        "aggressiveness": 0.8562528175102322,
-        "chatFrequency": 0.43865645414788024,
+        "difficulty": "Medium",
+        "speedPreference": "rapid",
+        "playstyle": "balanced",
+        "aggressiveness": 0.5284479743633309,
+        "chatFrequency": 0.21790362176227968,
         "messages": {
             "greetings": [
                 "moin",
@@ -1697,7 +1915,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -1706,7 +1925,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -1714,7 +1934,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -1722,7 +1944,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -1742,22 +1965,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "dennis_d": {
         "title": "dennis_d",
-        "difficulty": "Medium",
-        "aggressiveness": 0.8129097664957772,
-        "chatFrequency": 0.4384200708156663,
+        "difficulty": "Grandmaster",
+        "speedPreference": "bullet",
+        "playstyle": "balanced",
+        "aggressiveness": 0.7348767239832685,
+        "chatFrequency": 0.11582936261163357,
         "messages": {
             "greetings": [
                 "moin",
@@ -1767,7 +1994,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -1776,7 +2004,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -1784,7 +2013,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -1792,7 +2023,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -1812,22 +2044,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "philipp_r": {
         "title": "philipp_r",
         "difficulty": "Medium",
-        "aggressiveness": 0.790127554839114,
-        "chatFrequency": 0.41107363674458697,
+        "speedPreference": "balanced",
+        "playstyle": "defensive",
+        "aggressiveness": 0.3,
+        "chatFrequency": 0.18513475193757845,
         "messages": {
             "greetings": [
                 "moin",
@@ -1837,7 +2073,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -1846,7 +2083,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -1854,7 +2092,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -1862,7 +2102,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -1882,22 +2123,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "johannes_h": {
         "title": "johannes_h",
-        "difficulty": "Medium",
-        "aggressiveness": 0.3292001740343638,
-        "chatFrequency": 0.4185457723300566,
+        "difficulty": "Grandmaster",
+        "speedPreference": "blitz",
+        "playstyle": "balanced",
+        "aggressiveness": 0.653929038891942,
+        "chatFrequency": 0.23348269891274598,
         "messages": {
             "greetings": [
                 "moin",
@@ -1907,7 +2152,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -1916,7 +2162,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -1924,7 +2171,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -1932,7 +2181,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -1952,22 +2202,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "matthias_w": {
         "title": "matthias_w",
         "difficulty": "Medium",
-        "aggressiveness": 0.4499104895678811,
-        "chatFrequency": 0.5446940352989285,
+        "speedPreference": "balanced",
+        "playstyle": "aggressive",
+        "aggressiveness": 0.9,
+        "chatFrequency": 0.3353218646979712,
         "messages": {
             "greetings": [
                 "moin",
@@ -1977,7 +2231,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -1986,7 +2241,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -1994,7 +2250,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -2002,7 +2260,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -2022,22 +2281,26 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
             ]
         }
     },
     "christian_g": {
         "title": "christian_g",
-        "difficulty": "Grandmaster",
-        "aggressiveness": 0.7866251701590246,
-        "chatFrequency": 0.5532100559430805,
+        "difficulty": "Medium",
+        "speedPreference": "blitz",
+        "playstyle": "balanced",
+        "aggressiveness": 0.5831400986915365,
+        "chatFrequency": 0.19171986245953793,
         "messages": {
             "greetings": [
                 "moin",
@@ -2047,7 +2310,8 @@ const BOT_PERSONALITIES = {
                 "viel glück",
                 "auf ein gutes spiel",
                 "servus",
-                "hey"
+                "hey",
+                "let's go"
             ],
             "thinking": [
                 "hmm",
@@ -2056,7 +2320,8 @@ const BOT_PERSONALITIES = {
                 "mal schauen",
                 "interessant",
                 "muss kurz nachdenken",
-                "schwere stellung"
+                "schwere stellung",
+                "was spiel ich da..."
             ],
             "aggressive": [
                 "bam!",
@@ -2064,7 +2329,9 @@ const BOT_PERSONALITIES = {
                 "ups",
                 "angriff!",
                 "danke",
-                "nice"
+                "nice",
+                "schach und matt bald",
+                "taktik!"
             ],
             "defensive": [
                 "knapp",
@@ -2072,7 +2339,8 @@ const BOT_PERSONALITIES = {
                 "phew",
                 "oh man",
                 "mist",
-                "verteidigen ist schwer"
+                "verteidigen ist schwer",
+                "starker angriff"
             ],
             "check": [
                 "schach",
@@ -2092,14 +2360,648 @@ const BOT_PERSONALITIES = {
                 "ah mist, gg",
                 "gg",
                 "gut gespielt, danke",
-                "ggs"
+                "ggs",
+                "wow, stark"
             ],
             "victory": [
                 "gg",
                 "danke fürs spiel",
                 "schachmatt gg",
                 "ggs",
-                "gut gespielt"
+                "gut gespielt",
+                "war knapp"
+            ]
+        }
+    },
+    "BulletKing": {
+        "title": "BulletKing",
+        "difficulty": "Medium",
+        "speedPreference": "bullet",
+        "playstyle": "balanced",
+        "aggressiveness": 0.6760674165529192,
+        "chatFrequency": 0.28077169044970596,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey",
+                "let's go"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung",
+                "was spiel ich da..."
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice",
+                "schach und matt bald",
+                "taktik!"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer",
+                "starker angriff"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs",
+                "wow, stark"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt",
+                "war knapp"
+            ]
+        }
+    },
+    "blitz_god": {
+        "title": "blitz_god",
+        "difficulty": "Medium",
+        "speedPreference": "blitz",
+        "playstyle": "defensive",
+        "aggressiveness": 0.3,
+        "chatFrequency": 0.12603673253408124,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey",
+                "let's go"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung",
+                "was spiel ich da..."
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice",
+                "schach und matt bald",
+                "taktik!"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer",
+                "starker angriff"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs",
+                "wow, stark"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt",
+                "war knapp"
+            ]
+        }
+    },
+    "rapid_master": {
+        "title": "rapid_master",
+        "difficulty": "Medium",
+        "speedPreference": "blitz",
+        "playstyle": "balanced",
+        "aggressiveness": 0.742632907320925,
+        "chatFrequency": 0.15671760851874966,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey",
+                "let's go"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung",
+                "was spiel ich da..."
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice",
+                "schach und matt bald",
+                "taktik!"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer",
+                "starker angriff"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs",
+                "wow, stark"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt",
+                "war knapp"
+            ]
+        }
+    },
+    "slow_thinker": {
+        "title": "slow_thinker",
+        "difficulty": "Medium",
+        "speedPreference": "rapid",
+        "playstyle": "balanced",
+        "aggressiveness": 0.7011395349427019,
+        "chatFrequency": 0.2604636701753864,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey",
+                "let's go"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung",
+                "was spiel ich da..."
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice",
+                "schach und matt bald",
+                "taktik!"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer",
+                "starker angriff"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs",
+                "wow, stark"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt",
+                "war knapp"
+            ]
+        }
+    },
+    "aggressor_99": {
+        "title": "aggressor_99",
+        "difficulty": "Medium",
+        "speedPreference": "blitz",
+        "playstyle": "aggressive",
+        "aggressiveness": 0.9,
+        "chatFrequency": 0.14297857128451455,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey",
+                "let's go"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung",
+                "was spiel ich da..."
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice",
+                "schach und matt bald",
+                "taktik!"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer",
+                "starker angriff"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs",
+                "wow, stark"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt",
+                "war knapp"
+            ]
+        }
+    },
+    "defend_pro": {
+        "title": "defend_pro",
+        "difficulty": "Grandmaster",
+        "speedPreference": "bullet",
+        "playstyle": "defensive",
+        "aggressiveness": 0.3,
+        "chatFrequency": 0.23320493605551804,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey",
+                "let's go"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung",
+                "was spiel ich da..."
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice",
+                "schach und matt bald",
+                "taktik!"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer",
+                "starker angriff"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs",
+                "wow, stark"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt",
+                "war knapp"
+            ]
+        }
+    },
+    "tactics_fan": {
+        "title": "tactics_fan",
+        "difficulty": "Medium",
+        "speedPreference": "balanced",
+        "playstyle": "balanced",
+        "aggressiveness": 0.6044352665649835,
+        "chatFrequency": 0.1503360175350011,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey",
+                "let's go"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung",
+                "was spiel ich da..."
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice",
+                "schach und matt bald",
+                "taktik!"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer",
+                "starker angriff"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs",
+                "wow, stark"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt",
+                "war knapp"
+            ]
+        }
+    },
+    "endgame_boss": {
+        "title": "endgame_boss",
+        "difficulty": "Medium",
+        "speedPreference": "blitz",
+        "playstyle": "balanced",
+        "aggressiveness": 0.7479757150876961,
+        "chatFrequency": 0.1982295659155286,
+        "messages": {
+            "greetings": [
+                "moin",
+                "hallo",
+                "hi",
+                "hi gl hf",
+                "viel glück",
+                "auf ein gutes spiel",
+                "servus",
+                "hey",
+                "let's go"
+            ],
+            "thinking": [
+                "hmm",
+                "uff",
+                "schwierig",
+                "mal schauen",
+                "interessant",
+                "muss kurz nachdenken",
+                "schwere stellung",
+                "was spiel ich da..."
+            ],
+            "aggressive": [
+                "bam!",
+                "den nehm ich",
+                "ups",
+                "angriff!",
+                "danke",
+                "nice",
+                "schach und matt bald",
+                "taktik!"
+            ],
+            "defensive": [
+                "knapp",
+                "gut gespielt",
+                "phew",
+                "oh man",
+                "mist",
+                "verteidigen ist schwer",
+                "starker angriff"
+            ],
+            "check": [
+                "schach",
+                "schach!",
+                "schach :p",
+                "achtung schach"
+            ],
+            "endgame": [
+                "spannend",
+                "gg coming up",
+                "endspiel zeit",
+                "jetzt wirds ernst"
+            ],
+            "defeat": [
+                "gg wp!",
+                "respekt, gut gespielt",
+                "ah mist, gg",
+                "gg",
+                "gut gespielt, danke",
+                "ggs",
+                "wow, stark"
+            ],
+            "victory": [
+                "gg",
+                "danke fürs spiel",
+                "schachmatt gg",
+                "ggs",
+                "gut gespielt",
+                "war knapp"
             ]
         }
     }
@@ -2116,11 +3018,11 @@ function handleGhostGreeting(ws, botName) {
     setTimeout(() => {
         if (ws && ws.readyState === 1) {
             ws.send(JSON.stringify({ 
-                type: 'chat', 
-                text: spruch, 
-                sender: botName, 
-                system: false 
-            }));
+                 type: 'chat', 
+                 text: spruch, 
+                 sender: botName, 
+                 system: false 
+             }));
         }
     }, 1200 + Math.random() * 800);
 }
@@ -2128,17 +3030,25 @@ function handleGhostGreeting(ws, botName) {
 /**
  * Einfache Stellungsbewertung für kluge Zugauswahl
  */
-function evaluateMove(move, board, color) {
+function evaluateMove(move, board, color, profile) {
     let score = 0;
     const pieceValues = { 'p': 10, 'n': 30, 'b': 30, 'r': 50, 'q': 90, 'k': 1000 };
 
     if (move.capture) {
         const capturedPiece = move.captured || 'p';
         score += (pieceValues[capturedPiece.toLowerCase()] || 10) * 1.5;
+        if (profile.playstyle === 'aggressive') score += 10;
     }
-
-    if (move.check || move.isCheck) score += 25;
-    if (move.isCastle) score += 35; // Rochade wird belohnt
+    
+    if (move.check || move.isCheck) {
+        score += 25;
+        if (profile.playstyle === 'aggressive') score += 15;
+    }
+    
+    if (move.isCastle) {
+        score += 35; 
+        if (profile.playstyle === 'defensive') score += 20;
+    }
 
     // Zentrums-Bonus
     if (move.tr >= 2 && move.tr <= 5 && move.tc >= 2 && move.tc <= 5) {
@@ -2151,38 +3061,36 @@ function evaluateMove(move, board, color) {
 /**
  * Die Hauptfunktion für den Ghost-Player Zug
  */
-function handleGhostMove(ws, board, color, botName) {
+function handleGhostMove(ws, board, color, botName, timeControl = "10+0") {
     try {
-                const profile = BOT_PERSONALITIES[botName] || BOT_PERSONALITIES["luca_99"];
-
+        const profile = BOT_PERSONALITIES[botName] || BOT_PERSONALITIES["luca_99"];
+        
         // Nutzt vorhandenen engineWorker
         const moves = engine.generateMoves(board, color);
 
         if (!moves || moves.length === 0) {
-                        const defeatMsg = profile.messages.defeat[Math.floor(Math.random() * profile.messages.defeat.length)];
+            const defeatMsg = profile.messages.defeat[Math.floor(Math.random() * profile.messages.defeat.length)];
             if (ws && ws.readyState === 1) {
                 ws.send(JSON.stringify({ 
-                    type: 'chat', 
-                    text: defeatMsg, 
-                    sender: botName, 
-                    system: false 
-                }));
+                     type: 'chat', 
+                     text: defeatMsg, 
+                     sender: botName, 
+                     system: false 
+                 }));
             }
             return;
         }
 
         // Bewerten & Sortieren der Züge
-        const scoredMoves = moves.map(m => ({ move: m, score: evaluateMove(m, board, color) }));
+        const scoredMoves = moves.map(m => ({ move: m, score: evaluateMove(m, board, color, profile) }));
         scoredMoves.sort((a, b) => b.score - a.score);
 
         // Zug-Auswahl mit realistischer menschlicher Streuung
         let chosenMove;
         if (profile.difficulty === "Grandmaster") {
-            // GM wählt meistens den besten oder zweitbesten Zug (90% top 2)
             const topCandidates = scoredMoves.slice(0, Math.min(2, scoredMoves.length));
             chosenMove = topCandidates[Math.floor(Math.random() * topCandidates.length)].move;
         } else {
-            // Medium Bot wählt unter den besten 4 Zügen
             const topCandidates = scoredMoves.slice(0, Math.min(4, scoredMoves.length));
             chosenMove = topCandidates[Math.floor(Math.random() * topCandidates.length)].move;
         }
@@ -2190,7 +3098,7 @@ function handleGhostMove(ws, board, color, botName) {
         // Contextual Chat Generation
         const chance = Math.random();
         let spruch = "";
-
+        
         if (chance < profile.chatFrequency) {
             if (chosenMove.check || chosenMove.isCheck) {
                 spruch = profile.messages.check[Math.floor(Math.random() * profile.messages.check.length)];
@@ -2205,23 +3113,58 @@ function handleGhostMove(ws, board, color, botName) {
 
         // Sende Chat mit Tipp-Verzögerung
         if (spruch && ws && ws.readyState === 1) {
-            const typingSpeed = 400 + Math.random() * 800;
+            const typingSpeed = 200 + Math.random() * 500;
             setTimeout(() => {
                 if (ws && ws.readyState === 1) {
                     ws.send(JSON.stringify({ 
-                        type: 'chat', 
-                        text: spruch, 
-                        sender: botName, 
-                        system: false 
-                    }));
+                         type: 'chat', 
+                         text: spruch, 
+                         sender: botName, 
+                         system: false 
+                     }));
                 }
             }, typingSpeed);
         }
 
-        // Variable Reaktions- & Bedenkzeit
-        let complexityBonus = moves.length * 18;
-        let thinkingTime = 800 + Math.random() * 1500 + complexityBonus;
-        if (chosenMove.capture) thinkingTime += 300;
+        // Parse Time Control
+        let minutes = 10;
+        if (timeControl.includes('+')) {
+            minutes = parseInt(timeControl.split('+')[0]) || 10;
+        }
+        
+        // Variable Reaktions- & Bedenkzeit based on Time Control and Speed Preference
+        let baseThinkingTime = 800;
+        let randThinkingTime = 1500;
+        
+        if (minutes <= 1) { // Bullet
+            baseThinkingTime = 100;
+            randThinkingTime = 300;
+        } else if (minutes <= 3) { // Blitz
+            baseThinkingTime = 300;
+            randThinkingTime = 700;
+        } else if (minutes <= 5) {
+            baseThinkingTime = 500;
+            randThinkingTime = 1000;
+        } else { // Rapid / Classic
+            baseThinkingTime = 1000;
+            randThinkingTime = 2000;
+        }
+        
+        if (profile.speedPreference === 'bullet') {
+            baseThinkingTime *= 0.6;
+            randThinkingTime *= 0.6;
+        } else if (profile.speedPreference === 'rapid') {
+            baseThinkingTime *= 1.3;
+            randThinkingTime *= 1.3;
+        }
+
+        let complexityBonus = moves.length * (minutes <= 3 ? 5 : 15);
+        let thinkingTime = baseThinkingTime + Math.random() * randThinkingTime + complexityBonus;
+
+        if (chosenMove.capture) thinkingTime += (minutes <= 3 ? 100 : 300);
+        
+        // Ensure minimum delay so UI doesn't glitch
+        thinkingTime = Math.max(thinkingTime, 150);
 
         setTimeout(() => {
             if (ws && ws.readyState === 1) {
@@ -2231,8 +3174,8 @@ function handleGhostMove(ws, board, color, botName) {
                     sender: botName,
                     nextTurn: color === 'white' ? 'black' : 'white',
                     board: board 
-                }));
-                            }
+                 }));
+            }
         }, thinkingTime);
 
     } catch (err) {

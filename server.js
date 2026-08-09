@@ -422,7 +422,12 @@ Berechne die Genauigkeit (0 bis 100), Aggressivitätsgesamtindex (0 bis 100) und
 });
 
 // Ghost Player configuration
-const ghostNames = ["luca_99", "SchachMatt123", "JulianB", "Felix_M", "Anna_Chess", "alex88", "MariusK", "PawnStar", "max_gamer", "Lena_22", "simon_p", "david_91", "kevin_pro", "sarah_k", "tim_123", "jan_schach", "peter_pan", "lara_croft", "michael_m", "tobias_k", "stephan_b", "chris_99", "julia_s", "lisa_m", "marcel_x", "dennis_d", "philipp_r", "johannes_h", "matthias_w", "christian_g"];
+const ghostNames = [
+    "luca_99", "SchachMatt123", "JulianB", "Felix_M", "Anna_Chess", "alex88", "MariusK", "PawnStar", "max_gamer", "Lena_22", 
+    "simon_p", "david_91", "kevin_pro", "sarah_k", "tim_123", "jan_schach", "peter_pan", "lara_croft", "michael_m", "tobias_k", 
+    "stephan_b", "chris_99", "julia_s", "lisa_m", "marcel_x", "dennis_d", "philipp_r", "johannes_h", "matthias_w", "christian_g",
+    "BulletKing", "blitz_god", "rapid_master", "slow_thinker", "aggressor_99", "defend_pro", "tactics_fan", "endgame_boss"
+];
 const ghostSentences = ["hi", "moin", "gl hf", "hi :)", "viel glück", "hallo"];
 
 function createGhostPlayer() {
@@ -1943,12 +1948,11 @@ wss.on('connection', function(ws, req) {
                     broadcastRoomMessage(data, targetRoom, ws);
 
                     if (ws.isGhostMatch) {
-                        const currentBotName = ws.opponentName || "Grandmaster_Ghost";
-                        setTimeout(() => {
-                            if (typeof ghost !== 'undefined' && ghost && ghost.handleGhostMove) {
-                                ghost.handleGhostMove(ws, data.board, 'black', currentBotName);
-                            }
-                        }, 700);
+                        const currentBotName = ws.opponentName || "luca_99";
+                        const tc = roomState && roomState.timeControl ? roomState.timeControl : '10+0';
+                        if (typeof ghost !== 'undefined' && ghost && ghost.handleGhostMove) {
+                            ghost.handleGhostMove(ws, data.board, 'black', currentBotName, tc);
+                        }
                     }
                     return;
                 }
