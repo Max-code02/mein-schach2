@@ -658,7 +658,6 @@ function createPlayerProfile(name) {
 
 function sendLeaderboardUpdate(target) {
     const sorted = Object.entries(userDB)
-        .filter(([name, u]) => !name.startsWith('Spieler_'))
         .map(([name, u]) => ({
             name: name,
             wins: u.wins || 0,
@@ -668,7 +667,7 @@ function sendLeaderboardUpdate(target) {
             role: u.role || 'user'
         }))
         .sort((a, b) => b.wins - a.wins)
-        .slice(0, 10);
+        .slice(0, 100);
 
     const msg = JSON.stringify({ 
         type: 'leaderboard', 
@@ -1160,6 +1159,11 @@ async function saveAll(specificPlayerName = null) {
         for (const uname of playersToSave) {
             const u = userDB[uname];
             if (!u) continue;
+            
+            // 🔥 Firebase Cloud Firestore Sync!
+            if (typeof firestoreDb !== 'undefined' && firestoreDb) {
+                firestoreDb.collection('players').doc(uname).set(u, { merge: true }).catch(e => console.error('Firestore save err:', e));
+            }
         }
     } catch (e) {
         console.error("Fehler bei saveAll try-catch:", e.message);

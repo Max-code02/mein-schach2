@@ -762,6 +762,7 @@ window.addEventListener('load', () => {
                                     </div>
                                     <div style="text-align: right;">
                                         <div style="color: #f1c40f; font-weight: bold; font-size: 1.1em;">${p.wins || 0} 🏆</div>
+                                        <div style="color: #ccc; font-size: 0.7em;">Siege</div>
                                     </div>
                                 </div>
                             `;
