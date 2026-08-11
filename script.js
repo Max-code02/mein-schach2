@@ -1164,6 +1164,19 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
 }
 
 function resetGame() {
+    if (typeof window.switchSidebarTab === "function") {
+        const gameBtn = document.querySelectorAll(".sidebar-tab-btn")[0];
+        if (gameBtn) window.switchSidebarTab("tab-game", gameBtn);
+    }
+    const gameModeSelect = document.getElementById("gameMode");
+    if (gameModeSelect && (gameModeSelect.value === "random" || gameModeSelect.value === "online" || gameModeSelect.value === "bot")) {
+        gameModeSelect.value = "local";
+        const timeCtrl = document.getElementById("time-control-container");
+        if (timeCtrl) timeCtrl.style.display = "block";
+        const botDiff = document.getElementById("bot-difficulty-container");
+        if (botDiff) botDiff.style.display = "none";
+    }
+
     window.isTacticalPuzzleMode = false;
     const resetPuzzleBtn = document.getElementById("resetPuzzleBtn");
     if (resetPuzzleBtn) resetPuzzleBtn.style.display = "none";
@@ -1604,6 +1617,10 @@ socket.onmessage = (e) => {
             const statusEl = document.getElementById('status-display');
             if (statusEl) {
                 statusEl.textContent = "Online gegen " + (opponentName || "Gegner") + " (" + (myColor === "white" ? "Weiß" : "Schwarz") + ")";
+            }
+                        if (typeof window.switchSidebarTab === 'function') {
+                const chatBtn = document.querySelectorAll('.sidebar-tab-btn')[2];
+                if (chatBtn) window.switchSidebarTab('tab-chat', chatBtn);
             }
             addChat("System", "🎮 Spiel gestartet gegen " + (opponentName || "Gegner") + "! Du bist " + (myColor === "white" ? "Weiß" : "Schwarz") + ".", "system");
             return;
