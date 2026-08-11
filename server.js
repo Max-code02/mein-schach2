@@ -503,11 +503,9 @@ setInterval(() => {
 function broadcastGlobalMessage(msgObj) {
     const msgStr = JSON.stringify(msgObj);
     wss.clients.forEach(client => {
-        if (client.readyState === 1 && (!client.currentLobby || client.currentLobby === 'global')) {
+        if (client.readyState === 1) {
             client.send(msgStr);
         }
-    });
-}
     });
 }
 
@@ -518,6 +516,119 @@ function broadcastRoomMessage(msgObj, roomID, senderWs = null) {
             client.send(msgStr);
         }
     });
+}
+
+const PRESET_LOBBIES = [
+    { id: 'global', name: '🌐 Global Chat', isProtected: false },
+    { id: 'taktik', name: '🧠 Taktik & Strategie', isProtected: false },
+    { id: 'beginner', name: '🌱 Anfänger Lounge', isProtected: false },
+    { id: 'tournament', name: '🏆 Turnier Chat', isProtected: false },
+    { id: 'offtopic', name: '☕ Off-Topic', isProtected: false }
+];
+const customLobbies = new Map();
+
+function getLobbiesList() {
+    const list = PRESET_LOBBIES.map(p => {
+        let count = 0;
+        wss.clients.forEach(c => {
+            if (c.readyState === 1 && (c.currentLobby === p.id || (!c.currentLobby && p.id === 'global'))) {
+                count++;
+            }
+        });
+        return {
+            id: p.id,
+            name: p.name,
+            isProtected: false,
+            userCount: count,
+            isPreset: true
+        };
+    });
+
+    customLobbies.forEach((lob, id) => {
+        let count = 0;
+        wss.clients.forEach(c => {
+            if (c.readyState === 1 && c.currentLobby === id) {
+                count++;
+            }
+        });
+        list.push({
+            id: id,
+            name: lob.name,
+            isProtected: !!(lob.password && lob.password.trim().length > 0),
+            userCount: count,
+            createdBy: lob.createdBy || 'Anonym',
+            isPreset: false
+        });
+    });
+
+    return list;
+}
+
+function broadcastLobbiesList() {
+    const msgStr = JSON.stringify({ type: 'lobbies_list', lobbies: getLobbiesList() });
+    wss.clients.forEach(client => {
+        if (client.readyState === 1) {
+            client.send(msgStr);
+        }
+    });
+}
+
+const lobbyMessageStore = new Map();
+
+function addMessageToLobbyStore(lobbyId, msg) {
+    if (!lobbyMessageStore.has(lobbyId)) {
+        lobbyMessageStore.set(lobbyId, []);
+    }
+    const list = lobbyMessageStore.get(lobbyId);
+    list.push(msg);
+    if (list.length > 100) {
+        list.shift();
+    }
+}
+
+async function sendLobbyChatHistory(targetWs, lobbyId) {
+    let messages = [];
+
+    if (firestoreDb) {
+        try {
+            const snapshot = await firestoreDb.collection('messages')
+                .orderBy('timestamp', 'desc')
+                .limit(100)
+                .get();
+            
+            if (!snapshot.empty) {
+                snapshot.forEach(doc => {
+                    const d = doc.data();
+                    const itemLobby = d.lobby || 'global';
+                    if (itemLobby === lobbyId) {
+                        messages.unshift({
+                            username: d.username || d.user || 'Anonym',
+                            content: d.content || d.text || '',
+                            lobby: itemLobby,
+                            created_at: d.timestamp || new Date().toISOString()
+                        });
+                    }
+                });
+            }
+        } catch (e) {
+            console.error('Firestore chat history fetch error:', e);
+        }
+    }
+
+    const memMsgs = lobbyMessageStore.get(lobbyId) || [];
+    if (messages.length === 0 && memMsgs.length > 0) {
+        messages = [...memMsgs];
+    } else if (memMsgs.length > 0) {
+        const existingKeys = new Set(messages.map(m => (m.username + ':' + m.content)));
+        memMsgs.forEach(m => {
+            const key = m.username + ':' + m.content;
+            if (!existingKeys.has(key)) {
+                messages.push(m);
+            }
+        });
+    }
+
+    targetWs.send(JSON.stringify({ type: 'chat_history', lobby: lobbyId, messages }));
 }
 
 let serverLocked = false; 
@@ -1532,26 +1643,160 @@ wss.on('connection', function(ws, req) {
             }
 
             
-            if (data.type === 'join_custom_lobby') {
-                const { lobbyName, password } = data;
-                if (!lobbyName) return;
-                
-                if (customLobbies.has(lobbyName)) {
-                    if (customLobbies.get(lobbyName) !== password) {
-                        ws.send(JSON.stringify({ type: 'chat', text: 'Falsches Passwort für diese Lobby!', system: true }));
-                        return;
-                    }
-                } else {
-                    customLobbies.set(lobbyName, password || '');
-                }
-                
-                ws.currentLobby = lobbyName;
-                ws.send(JSON.stringify({ type: 'lobby_joined', lobbyName }));
+            if (data.type === 'get_lobbies') {
+                ws.send(JSON.stringify({ type: 'lobbies_list', lobbies: getLobbiesList() }));
                 return;
             }
 
-            if (data.type === 'chat_message') {
-                const { username, content, lobby = 'global', room = null } = data;
+            if (data.type === 'create_custom_lobby' || data.type === 'create_lobby') {
+                const name = (data.name || data.lobbyName || "").trim();
+                const password = (data.password || "").trim();
+
+                if (!name || name.length < 2) {
+                    ws.send(JSON.stringify({ type: 'lobby_error', text: 'Der Lobby-Name muss mindestens 2 Zeichen lang sein.' }));
+                    return;
+                }
+                if (name.length > 30) {
+                    ws.send(JSON.stringify({ type: 'lobby_error', text: 'Der Lobby-Name darf maximal 30 Zeichen lang sein.' }));
+                    return;
+                }
+
+                const cleanName = escapeHTML(name);
+                const lobbyId = "custom_" + cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_') + "_" + Math.random().toString(36).substr(2, 4);
+
+                let exists = PRESET_LOBBIES.some(p => p.name.toLowerCase() === cleanName.toLowerCase() || p.id === lobbyId);
+                if (!exists) {
+                    for (const [_, lob] of customLobbies.entries()) {
+                        if (lob.name.toLowerCase() === cleanName.toLowerCase()) {
+                            exists = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (exists) {
+                    ws.send(JSON.stringify({ type: 'lobby_error', text: 'Eine Lobby mit diesem Namen existiert bereits!' }));
+                    return;
+                }
+
+                customLobbies.set(lobbyId, {
+                    id: lobbyId,
+                    name: cleanName,
+                    password: password,
+                    createdBy: ws.playerName || 'Anonym',
+                    createdAt: new Date()
+                });
+
+                ws.currentLobby = lobbyId;
+                ws.send(JSON.stringify({
+                    type: 'lobby_joined',
+                    lobbyId: lobbyId,
+                    lobbyName: cleanName,
+                    text: `Lobby '${cleanName}' wurde erfolgreich erstellt!`
+                }));
+
+                broadcastLobbiesList();
+                return;
+            }
+
+            if (data.type === 'join_custom_lobby' || data.type === 'join_lobby') {
+                const targetId = data.lobbyId || data.lobbyName || 'global';
+                const password = (data.password || "").trim();
+
+                const preset = PRESET_LOBBIES.find(p => p.id === targetId || p.name === targetId);
+                if (preset) {
+                    ws.currentLobby = preset.id;
+                    ws.send(JSON.stringify({
+                        type: 'lobby_joined',
+                        lobbyId: preset.id,
+                        lobbyName: preset.name
+                    }));
+                    sendLobbyChatHistory(ws, preset.id);
+                    broadcastLobbiesList();
+                    return;
+                }
+
+                let lob = customLobbies.get(targetId);
+                if (!lob) {
+                    for (const [_, l] of customLobbies.entries()) {
+                        if (l.name === targetId || l.id === targetId) {
+                            lob = l;
+                            break;
+                        }
+                    }
+                }
+
+                if (!lob) {
+                    ws.send(JSON.stringify({ type: 'lobby_error', text: 'Lobby nicht gefunden.' }));
+                    return;
+                }
+
+                if (lob.password && lob.password.trim().length > 0) {
+                    if (password !== lob.password.trim()) {
+                        ws.send(JSON.stringify({ type: 'lobby_error', text: 'Falsches Passwort für diese Lobby!' }));
+                        return;
+                    }
+                }
+
+                ws.currentLobby = lob.id;
+                ws.send(JSON.stringify({
+                    type: 'lobby_joined',
+                    lobbyId: lob.id,
+                    lobbyName: lob.name
+                }));
+
+                sendLobbyChatHistory(ws, lob.id);
+                broadcastLobbiesList();
+                return;
+            }
+
+            if (data.type === 'get_player_profile') {
+                const uname = data.username;
+                const user = userDB[uname];
+                if (!user) return;
+                
+                let recentWins = [];
+                if (firestoreDb) {
+                    try {
+                        const snapshot = await firestoreDb.collection('games')
+                            .where('winner', '==', uname)
+                            .orderBy('timestamp', 'desc')
+                            .limit(10)
+                            .get();
+                        
+                        snapshot.forEach(doc => {
+                            const d = doc.data();
+                            recentWins.push({
+                                opp: d.white_player === uname ? d.black_player : d.white_player,
+                                time: d.timestamp,
+                                reason: d.reason || 'checkmate'
+                            });
+                        });
+                    } catch (e) {
+                        console.error('Error fetching player history:', e);
+                    }
+                }
+                
+                ws.send(JSON.stringify({
+                    type: 'player_profile_data',
+                    name: uname,
+                    elo: user.elo || 1200,
+                    level: user.level || 1,
+                    role: user.role || 'Gast',
+                    wins: user.wins || 0,
+                    recentWins
+                }));
+                return;
+            }
+
+            if (data.type === 'chat_message' || data.type === 'chat') {
+                const username = data.username || data.name || ws.playerName || "Anonym";
+                const content = (data.content || data.text || "").trim();
+                const targetLobby = data.lobby || ws.currentLobby || 'global';
+                const room = data.room || ws.room || null;
+
+                if (!content) return;
+
                 const containsPw = ADMIN_PASSWORDS_LIST.some(pw => content.includes(pw));
                 const isCmdType = content.startsWith('/') || content.startsWith('!') || content.startsWith('?');
                 
@@ -1566,27 +1811,33 @@ wss.on('connection', function(ws, req) {
                     return;
                 }
                 
-                const chatObj = { type: 'chat', user: username, text: content, lobby, room };
+                const chatObj = { type: 'chat', user: username, name: username, text: content, lobby: targetLobby, room };
+
+                addMessageToLobbyStore(targetLobby, {
+                    username: username,
+                    user: username,
+                    content: content,
+                    text: content,
+                    lobby: targetLobby,
+                    created_at: new Date().toISOString()
+                });
 
                 if (firestoreDb) {
                     firestoreDb.collection('messages').add({
                         username: username,
                         content: content,
-                        lobby: lobby,
+                        lobby: targetLobby,
                         room: room || null,
                         timestamp: new Date().toISOString()
                     }).catch(() => {});
                 }
                 
-                if (lobby === 'global') {
-                    broadcastGlobalMessage(chatObj);
-                } else if (lobby === 'room' && room) {
+                if (room && targetLobby === 'room') {
                     broadcastRoomMessage(chatObj, room);
                 } else {
-                    // Custom lobby
                     const msgStr = JSON.stringify(chatObj);
                     wss.clients.forEach(client => {
-                        if (client.readyState === 1 && client.currentLobby === lobby) {
+                        if (client.readyState === 1 && (client.currentLobby === targetLobby || (!client.currentLobby && targetLobby === 'global'))) {
                             client.send(msgStr);
                         }
                     });
@@ -1595,37 +1846,8 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'get_chat_history') {
-                const reqLobby = data.lobby || 'global';
-                const reqRoom = data.room || null;
-                
-                if (firestoreDb) {
-                    try {
-                        let query = firestoreDb.collection('messages').where('lobby', '==', reqLobby);
-                        if (reqLobby === 'room' && reqRoom) {
-                            query = query.where('room', '==', reqRoom);
-                        }
-                        const snapshot = await query.orderBy('timestamp', 'desc').limit(30).get();
-                        
-                        if (!snapshot.empty) {
-                            const messages = [];
-                            snapshot.forEach(doc => {
-                                const d = doc.data();
-                                messages.unshift({ username: d.username, content: d.content, created_at: d.timestamp, lobby: d.lobby });
-                            });
-                            ws.send(JSON.stringify({ type: 'chat_history', messages, lobby: reqLobby }));
-                            return;
-                        }
-                    } catch (e) {
-                        console.error('Error fetching chat history:', e);
-                    }
-                }
-                ws.send(JSON.stringify({ type: 'chat_history', messages: [], lobby: reqLobby }));
-                return;
-            }
-                    } catch (e) {}
-                }
-
-                ws.send(JSON.stringify({ type: 'chat_history', messages: [] }));
+                const targetLobby = data.lobby || ws.currentLobby || 'global';
+                sendLobbyChatHistory(ws, targetLobby);
                 return;
             }
 

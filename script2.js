@@ -630,6 +630,10 @@ window.switchSidebarTab = function(tabId, btn) {
         target.classList.add('active');
     }
     if (btn) btn.classList.add('active');
+
+    if (tabId === 'tab-chat' && typeof window.loadChatHistory === 'function') {
+        window.loadChatHistory();
+    }
 };
 
 function updateProfileDisplay(name, elo, wins, losses = 0, level = 1, xp = 0, achievements = []) {
@@ -750,7 +754,7 @@ window.addEventListener('load', () => {
                                 let color = i === 0 ? '#f1c40f' : i === 1 ? '#bdc3c7' : i === 2 ? '#cd7f32' : 'rgba(255,255,255,0.7)';
                                 let bg = i === 0 ? 'linear-gradient(135deg, rgba(241,196,15,0.2) 0%, rgba(0,0,0,0) 100%)' : 'rgba(255,255,255,0.03)';
                                 return `
-                                <div style="background: ${bg}; padding: 12px; border-radius: 10px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; transition: 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+                                <div onclick="viewPlayerProfile('${p.name}')" style="cursor: pointer; background: ${bg}; padding: 12px; border-radius: 10px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; transition: 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
                                     <div style="display: flex; align-items: center; gap: 10px;">
                                         <div style="width: 24px; text-align: center; font-weight: bold; color: ${color}; font-size: 1.1em;">
                                             ${badge || `#${i + 1}`}
@@ -1060,3 +1064,16 @@ function processVoiceMoveCommand(rawText) {
     }
 }
 
+
+window.viewPlayerProfile = function(name) {
+    document.getElementById('player-profile-modal').style.display = 'flex';
+    document.getElementById('ppm-name').textContent = name;
+    document.getElementById('ppm-history').innerHTML = '<div style="color:#888; font-style:italic;">Lädt...</div>';
+    
+    if (window.socket && window.socket.readyState === WebSocket.OPEN) {
+        window.socket.send(JSON.stringify({
+            type: 'get_player_profile',
+            username: name
+        }));
+    }
+};

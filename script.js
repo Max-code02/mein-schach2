@@ -679,7 +679,7 @@ function handleTimeout(color) {
     const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'game_over', reason: 'timeout', text: `${color} hat keine Zeit mehr! ${winner} gewinnt.` }));
-        if ((myColor === "white" && winner === "Weiß") || (myColor === "black" && winner === "Schwarz")) {
+        if ((myColor === "white" && winner === "Weiß") || (myColor === "black" && winner === "Schwarz") || (typeof gameModeSelect !== 'undefined' && gameModeSelect && gameModeSelect.value === 'local')) {
             const pName = getMyName();
             if (pName) {
                 const moves = typeof moveHistoryLog !== 'undefined' ? moveHistoryLog.length : 0;
@@ -1129,7 +1129,7 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
             }
             if (broadcast && socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ type: 'game_over', reason: 'checkmate', text: `Schachmatt! ${winner} gewinnt.` }));
-                if ((myColor === "white" && winner === "Weiß") || (myColor === "black" && winner === "Schwarz")) {
+                if ((myColor === "white" && winner === "Weiß") || (myColor === "black" && winner === "Schwarz") || (typeof gameModeSelect !== 'undefined' && gameModeSelect && gameModeSelect.value === 'local')) {
                     const pName = getMyName();
                     if (pName) {
                         const moves = typeof moveHistoryLog !== 'undefined' ? moveHistoryLog.length : 0;
@@ -1466,19 +1466,21 @@ function sendMsg() {
     if (!inp) return;
     const t = inp.value.trim();
     if (t && socket && socket.readyState === WebSocket.OPEN) {
-        let lobby = window.currentChatLobby || 'global';
-        if (lobby === 'room' && !onlineRoom) {
-            addChat("System", "Du bist in keinem Spiel-Raum.", "system");
-            return;
+        if (typeof isSpectatorMode !== 'undefined' && isSpectatorMode) {
+            socket.send(JSON.stringify({
+                type: 'spectate_chat',
+                room: onlineRoom,
+                username: getMyName(),
+                text: t
+            }));
+        } else {
+            socket.send(JSON.stringify({ 
+                 type: 'chat_message', 
+                 username: getMyName(),
+                 content: t,
+                 lobby: window.currentLobbyId || 'global'
+            }));
         }
-        
-        socket.send(JSON.stringify({ 
-             type: 'chat_message', 
-             username: getMyName(),
-             content: t,
-             lobby: lobby,
-             room: lobby === 'room' ? onlineRoom : null
-        }));
         inp.value = "";
     }
 }
@@ -1579,11 +1581,244 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// ==========================================
+// CHAT LOBBY SYSTEM CONTROLLER
+// ==========================================
+window.currentLobbyId = 'global';
+window.currentLobbyName = '🌐 Global Chat';
+let availableLobbiesList = [];
+let pendingLobbyToJoin = null;
+
+function renderLobbiesDropdown(lobbies) {
+    if (!Array.isArray(lobbies)) return;
+    availableLobbiesList = lobbies;
+
+    const selectEl = document.getElementById("chatLobbySelect");
+    if (selectEl) {
+        selectEl.innerHTML = "";
+
+        const presetGroup = document.createElement("optgroup");
+        presetGroup.label = "OFFIZIELLE LOBBIES";
+
+        const customGroup = document.createElement("optgroup");
+        customGroup.label = "BENUTZER-LOBBIES";
+
+        lobbies.forEach(lob => {
+            const opt = document.createElement("option");
+            opt.value = lob.id;
+            const lockIcon = lob.isProtected ? "🔒 " : "";
+            const userText = ` (${lob.userCount || 0})`;
+            opt.textContent = `${lockIcon}${lob.name}${userText}`;
+
+            if (lob.isPreset) {
+                presetGroup.appendChild(opt);
+            } else {
+                customGroup.appendChild(opt);
+            }
+        });
+
+        if (presetGroup.children.length > 0) selectEl.appendChild(presetGroup);
+        if (customGroup.children.length > 0) selectEl.appendChild(customGroup);
+
+        selectEl.value = window.currentLobbyId;
+    }
+
+    const currentLobObj = lobbies.find(l => l.id === window.currentLobbyId);
+    if (currentLobObj) {
+        window.currentLobbyName = currentLobObj.name;
+        const nameEl = document.getElementById("currentLobbyName");
+        if (nameEl) nameEl.textContent = currentLobObj.name;
+
+        const countEl = document.getElementById("currentLobbyUsers");
+        if (countEl) countEl.textContent = `● ${currentLobObj.userCount || 1} Online`;
+
+        const userCounter = document.getElementById("user-counter");
+        if (userCounter) userCounter.textContent = `● Online: ${currentLobObj.userCount || 1}`;
+    }
+}
+
+function handleLobbySelectChange(e) {
+    const targetId = e.target.value;
+    const lob = availableLobbiesList.find(l => l.id === targetId);
+
+    if (!lob) return;
+
+    if (lob.isProtected) {
+        e.target.value = window.currentLobbyId;
+        pendingLobbyToJoin = lob;
+
+        const targetNameDisplay = document.getElementById("targetLobbyNameDisplay");
+        if (targetNameDisplay) targetNameDisplay.textContent = lob.name;
+
+        const pwInput = document.getElementById("joinLobbyPasswordInput");
+        if (pwInput) pwInput.value = "";
+
+        const errDiv = document.getElementById("joinLobbyPasswordError");
+        if (errDiv) errDiv.textContent = "";
+
+        const modal = document.getElementById("joinLobbyPasswordModal");
+        if (modal) {
+            modal.style.display = "flex";
+            if (pwInput) pwInput.focus();
+        }
+    } else {
+        joinLobbyDirectly(lob.id);
+    }
+}
+
+function joinLobbyDirectly(lobbyId, password = "") {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            type: 'join_lobby',
+            lobbyId: lobbyId,
+            password: password
+        }));
+    }
+}
+
+function submitJoinProtectedLobby() {
+    if (!pendingLobbyToJoin) return;
+    const pwInput = document.getElementById("joinLobbyPasswordInput");
+    const password = pwInput ? pwInput.value.trim() : "";
+
+    if (!password) {
+        const errDiv = document.getElementById("joinLobbyPasswordError");
+        if (errDiv) errDiv.textContent = "Bitte gib ein Passwort ein.";
+        return;
+    }
+
+    joinLobbyDirectly(pendingLobbyToJoin.id, password);
+
+    const modal = document.getElementById("joinLobbyPasswordModal");
+    if (modal) modal.style.display = "none";
+}
+
+function openCreateLobbyModal() {
+    const nameInput = document.getElementById("newLobbyNameInput");
+    const pwInput = document.getElementById("newLobbyPasswordInput");
+    const errDiv = document.getElementById("createLobbyError");
+
+    if (nameInput) nameInput.value = "";
+    if (pwInput) pwInput.value = "";
+    if (errDiv) errDiv.textContent = "";
+
+    const modal = document.getElementById("createLobbyModal");
+    if (modal) {
+        modal.style.display = "flex";
+        if (nameInput) nameInput.focus();
+    }
+}
+
+function submitCreateLobby() {
+    const nameInput = document.getElementById("newLobbyNameInput");
+    const pwInput = document.getElementById("newLobbyPasswordInput");
+    const errDiv = document.getElementById("createLobbyError");
+
+    const name = nameInput ? nameInput.value.trim() : "";
+    const password = pwInput ? pwInput.value.trim() : "";
+
+    if (!name || name.length < 2) {
+        if (errDiv) errDiv.textContent = "Lobby-Name muss mindestens 2 Zeichen haben.";
+        return;
+    }
+
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            type: 'create_custom_lobby',
+            name: name,
+            password: password
+        }));
+    }
+
+    const modal = document.getElementById("createLobbyModal");
+    if (modal) modal.style.display = "none";
+}
+
+function setupLobbyEventListeners() {
+    const lobbySelect = document.getElementById("chatLobbySelect");
+    if (lobbySelect) {
+        lobbySelect.removeEventListener("change", handleLobbySelectChange);
+        lobbySelect.addEventListener("change", handleLobbySelectChange);
+    }
+
+    const refreshBtn = document.getElementById("refreshLobbiesBtn");
+    if (refreshBtn) {
+        refreshBtn.onclick = () => {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'get_lobbies' }));
+            }
+        };
+    }
+
+    const openCreateBtn = document.getElementById("openCreateLobbyModalBtn");
+    if (openCreateBtn) openCreateBtn.onclick = openCreateLobbyModal;
+
+    const closeCreateBtn = document.getElementById("closeCreateLobbyModalBtn");
+    if (closeCreateBtn) {
+        closeCreateBtn.onclick = () => {
+            const m = document.getElementById("createLobbyModal");
+            if (m) m.style.display = "none";
+        };
+    }
+
+    const cancelCreateBtn = document.getElementById("cancelCreateLobbyBtn");
+    if (cancelCreateBtn) {
+        cancelCreateBtn.onclick = () => {
+            const m = document.getElementById("createLobbyModal");
+            if (m) m.style.display = "none";
+        };
+    }
+
+    const submitCreateBtn = document.getElementById("submitCreateLobbyBtn");
+    if (submitCreateBtn) submitCreateBtn.onclick = submitCreateLobby;
+
+    const closeJoinPwBtn = document.getElementById("closeJoinLobbyPasswordModalBtn");
+    if (closeJoinPwBtn) {
+        closeJoinPwBtn.onclick = () => {
+            const m = document.getElementById("joinLobbyPasswordModal");
+            if (m) m.style.display = "none";
+        };
+    }
+
+    const cancelJoinPwBtn = document.getElementById("cancelJoinLobbyPasswordBtn");
+    if (cancelJoinPwBtn) {
+        cancelJoinPwBtn.onclick = () => {
+            const m = document.getElementById("joinLobbyPasswordModal");
+            if (m) m.style.display = "none";
+        };
+    }
+
+    const submitJoinPwBtn = document.getElementById("submitJoinLobbyPasswordBtn");
+    if (submitJoinPwBtn) submitJoinPwBtn.onclick = submitJoinProtectedLobby;
+
+    const newLobbyNameInput = document.getElementById("newLobbyNameInput");
+    if (newLobbyNameInput) {
+        newLobbyNameInput.onkeydown = (e) => {
+            if (e.key === "Enter") submitCreateLobby();
+        };
+    }
+
+    const joinLobbyPasswordInput = document.getElementById("joinLobbyPasswordInput");
+    if (joinLobbyPasswordInput) {
+        joinLobbyPasswordInput.onkeydown = (e) => {
+            if (e.key === "Enter") submitJoinProtectedLobby();
+        };
+    }
+}
+
+if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', setupLobbyEventListeners);
+} else {
+    setupLobbyEventListeners();
+}
+
 function loadChatHistory() {
     if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: 'get_chat_history', lobby: window.currentChatLobby || 'global', room: onlineRoom }));
+        socket.send(JSON.stringify({ type: 'get_chat_history', lobby: window.currentLobbyId || 'global' }));
+        socket.send(JSON.stringify({ type: 'get_lobbies' }));
     }
-} 
+}
+window.loadChatHistory = loadChatHistory; 
 
 socket.onmessage = (e) => {
     try {
@@ -1794,8 +2029,6 @@ socket.onmessage = (e) => {
             return;
         }
         if (data.type === 'chat') {
-            const currentLobby = window.currentChatLobby || 'global';
-            if (data.lobby && data.lobby !== currentLobby) return;
             if (data.system) {
                 addChat("System", data.text, "system");
             } else {
@@ -1824,28 +2057,66 @@ socket.onmessage = (e) => {
             return;
         }
         
-        if (data.type === 'lobby_joined') {
-            const select = document.getElementById('chat-lobby-select');
-            if (select) {
-                // Check if option exists
-                let exists = false;
-                for(let i=0; i<select.options.length; i++) {
-                    if (select.options[i].value === data.lobbyName) exists = true;
-                }
-                if (!exists) {
-                    const opt = document.createElement('option');
-                    opt.value = data.lobbyName;
-                    opt.textContent = '🔒 ' + data.lobbyName;
-                    select.appendChild(opt);
-                }
-                select.value = data.lobbyName;
-                select.dispatchEvent(new Event('change'));
+        
+        if (data.type === 'player_profile_data') {
+            document.getElementById('ppm-elo').textContent = "Elo: " + (data.elo || 1200);
+            document.getElementById('ppm-level').textContent = "Level: " + (data.level || 1);
+            document.getElementById('ppm-role').textContent = "Rolle: " + (data.role || 'Gast');
+            
+            const histEl = document.getElementById('ppm-history');
+            if (data.recentWins && data.recentWins.length > 0) {
+                histEl.innerHTML = data.recentWins.map(w => {
+                    const dateStr = new Date(w.time).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
+                    return '<div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:5px; font-size:0.9em;">' +
+                           '<div style="color:#2ecc71; font-weight:bold;">Sieg vs ' + (w.opp || 'Unbekannt') + '</div>' +
+                           '<div style="color:#aaa; font-size:0.8em;">' + dateStr + ' - ' + w.reason + '</div>' +
+                           '</div>';
+                }).join('');
+            } else {
+                histEl.innerHTML = '<div style="color:#888; font-style:italic;">Keine Siege gefunden.</div>';
             }
             return;
         }
+
+        
+        if (data.type === 'lobbies_list') {
+            renderLobbiesDropdown(data.lobbies);
+            return;
+        }
+        if (data.type === 'lobby_joined') {
+            window.currentLobbyId = data.lobbyId;
+            window.currentLobbyName = data.lobbyName;
+
+            const nameEl = document.getElementById("currentLobbyName");
+            if (nameEl) nameEl.textContent = data.lobbyName;
+
+            const selectEl = document.getElementById("chatLobbySelect");
+            if (selectEl) selectEl.value = data.lobbyId;
+
+            const container = document.getElementById("chat-messages") || chatMessages;
+            if (container) container.innerHTML = "";
+
+            addChat("System", `Du bist der Lobby '${data.lobbyName}' beigetreten.`, "system");
+
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'get_chat_history', lobby: data.lobbyId }));
+            }
+            return;
+        }
+        if (data.type === 'lobby_error') {
+            const createErr = document.getElementById("createLobbyError");
+            if (createErr) createErr.textContent = data.text;
+
+            const joinErr = document.getElementById("joinLobbyPasswordError");
+            if (joinErr) joinErr.textContent = data.text;
+
+            addChat("System", "🚨 " + data.text, "system");
+            return;
+        }
+
         if (data.type === 'chat_history') {
-            const currentLobby = window.currentChatLobby || 'global';
-            if (data.lobby && data.lobby !== currentLobby) return;
+            const container = document.getElementById("chat-messages") || chatMessages;
+            if (container) container.innerHTML = "";
             if (Array.isArray(data.messages)) {
                 data.messages.forEach(msg => {
                     if (msg.system) {
@@ -3311,42 +3582,19 @@ function downloadReplay() {
     }
 }
 window.downloadReplay = downloadReplay;
-
-
-window.currentChatLobby = 'global';
-window.addEventListener('DOMContentLoaded', () => {
-    const lobbySelect = document.getElementById('chat-lobby-select');
-    if (lobbySelect) {
-        lobbySelect.addEventListener('change', (e) => {
-            window.currentChatLobby = e.target.value;
-            const chatMessages = document.getElementById("chat-messages");
-            if (chatMessages) chatMessages.innerHTML = '';
-            
-            if (window.currentChatLobby === 'global') {
-                 socket.send(JSON.stringify({ type: 'get_chat_history', lobby: 'global' }));
-                 addChat("System", "Du bist im Globalen Chat.", "system");
-            } else if (window.currentChatLobby === 'room') {
-                 if (!onlineRoom) {
-                     addChat("System", "Du bist in keinem Spiel-Raum.", "system");
-                 } else {
-                     socket.send(JSON.stringify({ type: 'get_chat_history', lobby: 'room', room: onlineRoom }));
-                     addChat("System", "Du bist im Raum-Chat: " + onlineRoom, "system");
-                 }
-            } else {
-                 socket.send(JSON.stringify({ type: 'get_chat_history', lobby: window.currentChatLobby }));
-                 addChat("System", "Du bist im privaten Chat: " + window.currentChatLobby, "system");
-            }
-        });
+window.isChessMode = false;
+window.toggleChessMode = function() {
+    window.isChessMode = !window.isChessMode;
+    const btn = document.getElementById('navFocusToggle');
+    if (window.isChessMode) {
+        document.body.classList.add('chess-mode');
+        if (btn) btn.style.background = 'rgba(231, 76, 60, 0.4)';
+    } else {
+        document.body.classList.remove('chess-mode');
+        if (btn) btn.style.background = '';
     }
-    
-    const joinBtn = document.getElementById('join-custom-lobby-btn');
-    if (joinBtn) {
-        joinBtn.addEventListener('click', () => {
-            const lobbyName = prompt("Gib den Namen der privaten Lobby ein:");
-            if (!lobbyName) return;
-            const password = prompt("Gib das Passwort für '" + lobbyName + "' ein (oder lass es leer, wenn es keins gibt):");
-            
-            socket.send(JSON.stringify({ type: 'join_custom_lobby', lobbyName, password }));
-        });
-    }
-});
+};
+
+// Automaticaly enable when match starts (optional but good idea)
+const originalDoMove = window.doMove;
+// we don't necessarily override doMove, we just provide the toggle so users can use it.

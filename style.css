@@ -919,3 +919,11 @@ body.light-mode .emoji-btn:hover {
     border: none !important;
     box-shadow: none !important;
 }
+
+/* Chess Mode (Focus) */
+body.chess-mode .glow-orb {
+    opacity: 0.1 !important;
+    animation-play-state: paused !important;
+    transform: scale(0.5) !important;
+    transition: all 1.5s ease-in-out;
+}
