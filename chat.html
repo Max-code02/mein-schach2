@@ -4,19 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-    <title>Prochess Chat | Fullscreen</title>
+    <title>Prochess Live Chatroom | Fullscreen</title>
     <link rel="stylesheet" href="style.css">
     <style>
         body {
             margin: 0;
             padding: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
             overflow: hidden;
             display: flex;
             justify-content: center;
             height: 100vh;
             color: white;
-            background: #000;
+            background: #090a0f;
         }
 
         /* Hintergrund-Canvas */
@@ -30,35 +30,40 @@
             pointer-events: none;
         }
 
-        /* HAUPT-CONTAINER: Füllt jetzt alles aus */
+        /* HAUPT-CONTAINER */
         .chat-layout {
             width: 100%;
-            max-width: 1200px; /* Begrenzt die Breite auf großen Monitoren für bessere Lesbarkeit */
+            max-width: 1100px;
             height: 100vh;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(15px);
+            background: rgba(12, 14, 24, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             display: flex;
             flex-direction: column;
-            padding: 20px;
+            padding: 16px;
             box-sizing: border-box;
-            gap: 15px;
+            gap: 12px;
             border-left: 1px solid rgba(255, 255, 255, 0.1);
             border-right: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
         }
 
         .glass-panel {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.04);
             border-radius: 12px;
-            padding: 15px;
+            padding: 12px 16px;
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        /* Header Steuerung */
-        .header-controls {
+        .top-nav-bar {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 20px;
+            gap: 12px;
+            padding: 10px 16px;
+            background: rgba(20, 24, 38, 0.85);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
         }
 
         .row {
@@ -68,82 +73,138 @@
         }
 
         input, select, button {
-            background: rgba(20, 20, 20, 0.8);
-            border: 1px solid #444;
+            background: rgba(20, 20, 28, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.18);
             color: white;
             padding: 10px;
             border-radius: 8px;
             font-size: 0.95em;
         }
 
-        input:focus { border-color: #28a745; outline: none; }
+        input:focus { border-color: #3498db; outline: none; box-shadow: 0 0 8px rgba(52, 152, 219, 0.4); }
 
-        .btn-green { background: #28a745; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        .btn-green:hover { background: #218838; transform: scale(1.02); }
+        .btn-green { 
+            background: linear-gradient(135deg, #27ae60, #2ecc71); 
+            border: none; 
+            font-weight: bold; 
+            color: white;
+            cursor: pointer; 
+            transition: all 0.2s ease; 
+            box-shadow: 0 2px 10px rgba(46, 204, 113, 0.25);
+        }
+        .btn-green:hover { 
+            transform: translateY(-1px); 
+            box-shadow: 0 4px 15px rgba(46, 204, 113, 0.4); 
+        }
+
+        .glass-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #eee;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .glass-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+        }
 
         /* CHAT BEREICH */
         #chat-container {
             flex: 1;
             display: flex;
             flex-direction: column;
-            background: rgba(0, 0, 0, 0.4);
-            border-radius: 15px;
+            background: rgba(8, 10, 18, 0.6);
+            border-radius: 14px;
             border: 1px solid rgba(255, 255, 255, 0.1);
             min-height: 0;
+            overflow: hidden;
         }
 
         #chat-messages {
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
+            padding: 18px;
             display: flex;
             flex-direction: column;
             gap: 10px;
+            scroll-behavior: smooth;
+        }
+
+        #chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+        #chat-messages::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
         }
 
         .chat-msg { 
             background: rgba(255,255,255,0.05); 
-            padding: 12px 16px; 
-            border-radius: 8px; 
-            border-left: 4px solid #3498db;
-            max-width: 90%;
+            padding: 10px 14px; 
+            border-radius: 10px; 
+            border-left: 3.5px solid #3498db;
+            max-width: 88%;
+            word-break: break-word;
+            line-height: 1.4;
+            font-size: 0.95em;
         }
-        .chat-msg strong { color: #3498db; display: block; margin-bottom: 4px; }
+        .chat-msg.me {
+            align-self: flex-end;
+            background: rgba(52, 152, 219, 0.15);
+            border-left-color: #2ecc71;
+            border-right: 3.5px solid #2ecc71;
+        }
+        .chat-msg.system {
+            align-self: center;
+            background: rgba(241, 196, 15, 0.1);
+            border-left: 3.5px solid #f1c40f;
+            color: #f39c12;
+            font-size: 0.88em;
+            max-width: 95%;
+            text-align: center;
+        }
+        .chat-msg strong { color: #3498db; display: block; margin-bottom: 3px; font-size: 0.9em; }
+        .chat-msg.me strong { color: #2ecc71; text-align: right; }
 
         .chat-input-area {
-            padding: 20px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(0,0,0,0.2);
+            padding: 14px 18px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(14, 17, 28, 0.7);
         }
 
         .emoji-bar {
-            margin-bottom: 12px;
-            font-size: 1.5em;
+            margin-bottom: 10px;
+            font-size: 1.35em;
             display: flex;
-            gap: 15px;
+            gap: 12px;
+            overflow-x: auto;
+            padding-bottom: 4px;
         }
-        .emoji-btn { cursor: pointer; transition: 0.2s; }
-        .emoji-btn:hover { transform: scale(1.2); }
+        .emoji-btn { 
+            cursor: pointer; 
+            transition: transform 0.15s ease; 
+            user-select: none;
+        }
+        .emoji-btn:hover { transform: scale(1.3); }
 
         /* Leaderboard & Footer */
         .footer-area {
             display: flex;
-            gap: 15px;
-            max-height: 100px;
-        }
-
-        .mini-leaderboard {
-            flex: 1;
-            overflow-y: auto;
-            font-size: 0.9em;
+            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.85em;
+            color: #888;
         }
 
         /* AGB Popup */
         #agb-popup {
             display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9); align-items: center; justify-content: center; backdrop-filter: blur(8px);
+            background: rgba(0,0,0,0.85); align-items: center; justify-content: center; backdrop-filter: blur(8px);
         }
-        .popup-content { background: #1a1a1a; padding: 30px; border-radius: 15px; text-align: center; border: 2px solid #28a745; max-width: 400px; }
+        .popup-content { background: #141722; padding: 28px; border-radius: 14px; text-align: center; border: 1px solid #2ecc71; max-width: 380px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }
     </style>
 </head>
 <body>
@@ -152,79 +213,114 @@
 
     <div id="agb-popup">
         <div class="popup-content">
-            <h2>Willkommen bei Prochess!</h2>
-            <p>Bitte akzeptiere die <a href="AGB.html" style="color:#3498db">AGB</a> zum Starten.</p>
-            <button class="btn-green" style="padding: 10px 20px;" onclick="acceptAGB()">Chat betreten</button>
+            <h2 style="margin-top:0; color:#2ecc71;">Willkommen bei Prochess!</h2>
+            <p style="color:#ccc;">Bitte akzeptiere die <a href="AGB.html" style="color:#3498db">AGB</a> zum Starten.</p>
+            <button class="btn-green" style="padding: 10px 24px; border-radius: 8px;" onclick="acceptAGB()">Chat Betreten</button>
         </div>
     </div>
     
     <div class="chat-layout">
-        <div class="glass-panel header-controls" style="display: flex; flex-direction: column; gap: 10px;">
+        <!-- TOP NAVIGATION BAR -->
+        <div class="top-nav-bar">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <a href="index.html" class="glass-btn" style="text-decoration: none; display: flex; align-items: center; gap: 6px; padding: 8px 14px; font-size: 0.9em; font-weight: bold; color: white;">
+                    🎮 Zum Hauptspiel
+                </a>
+                <span style="font-size: 1.1em; font-weight: bold; color: #fff; display: flex; align-items: center; gap: 6px;">
+                    👑 Prochess Live Chatroom
+                </span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span id="headerPlayerPill" style="font-size: 0.85em; background: rgba(52, 152, 219, 0.2); border: 1px solid rgba(52, 152, 219, 0.4); color: #3498db; padding: 5px 12px; border-radius: 20px; font-weight: bold;">
+                    👤 Angemeldet
+                </span>
+            </div>
+        </div>
+
+        <!-- LOBBY HEADER CONTROLS -->
+        <div class="glass-panel header-controls" style="display: flex; flex-direction: column; gap: 8px;">
             <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%;">
                 <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 220px;">
-                    <span style="font-weight: bold; color: #fff;">💬 Chat-Lobby:</span>
-                    <select id="chatLobbySelect" class="glass-select" style="flex: 1; padding: 8px 12px; border-radius: 6px; background: rgba(20, 20, 28, 0.9); color: #fff; border: 1px solid rgba(255,255,255,0.2); font-weight: bold; cursor: pointer;">
+                    <span style="font-weight: bold; color: #ccc; font-size: 0.9em;">💬 Chat-Lobby:</span>
+                    <select id="chatLobbySelect" class="glass-select" style="flex: 1; padding: 8px 12px; border-radius: 8px; background: rgba(20, 20, 28, 0.95); color: #fff; border: 1px solid rgba(255,255,255,0.2); font-weight: bold; cursor: pointer;">
                         <option value="global">🌐 Global Chat</option>
                     </select>
                 </div>
                 <div style="display: flex; gap: 8px; align-items: center;">
-                    <button id="openCreateLobbyModalBtn" class="btn-green" style="padding: 8px 14px; font-size: 0.9em; display: flex; align-items: center; gap: 5px;" title="Neue eigene Lobby erstellen">
+                    <button id="openCreateLobbyModalBtn" class="btn-green" style="padding: 8px 14px; font-size: 0.88em; display: flex; align-items: center; gap: 5px; border-radius: 8px;" title="Neue eigene Lobby erstellen">
                         ➕ Lobby Erstellen
                     </button>
-                    <button id="refreshLobbiesBtn" class="glass-btn" style="padding: 8px 12px; font-size: 0.9em;" title="Lobbies aktualisieren">
-                        🔄
+                    <button id="refreshLobbiesBtn" class="glass-btn" style="padding: 8px 12px; font-size: 0.88em; border-radius: 8px;" title="Lobbies aktualisieren">
+                        🔄 Refresh
                     </button>
-                    <span id="user-counter" style="color: #28a745; font-weight: bold; margin-left: 10px;">● Online: 1</span>
+                    <span id="user-counter" style="color: #2ecc71; font-weight: bold; font-size: 0.9em; margin-left: 6px;">● Online: 1</span>
                 </div>
             </div>
-            <div id="activeLobbyInfo" style="font-size: 0.85em; color: #aaa; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px;">
+            <div id="activeLobbyInfo" style="font-size: 0.85em; color: #aaa; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px;">
                 <span>Aktive Lobby: <strong id="currentLobbyName" style="color: #3498db;">🌐 Global Chat</strong></span>
-                <span id="currentLobbyUsers" style="color: #2ecc71; font-weight: bold;">● 1 Mitglied</span>
+                <span id="currentLobbyUsers" style="color: #2ecc71; font-weight: bold;">● 1 Mitglied online</span>
             </div>
         </div>
 
+        <!-- CHAT MESSAGES & INPUT -->
         <div id="chat-container">
             <div id="chat-messages">
-                <div class="chat-msg"><strong>Admin:</strong> Willkommen im Prochess Fullscreen Chat! Viel Spaß beim Schreiben.</div>
+                <div class="chat-msg system">Willkommen im Prochess Live Chat! Wähle eine Lobby oder tausche dich aus.</div>
             </div>
             
             <div class="chat-input-area">
                 <div class="emoji-bar">
                     <span class="emoji-btn">😊</span>
+                    <span class="emoji-btn">😂</span>
                     <span class="emoji-btn">🔥</span>
+                    <span class="emoji-btn">👍</span>
                     <span class="emoji-btn">⚔️</span>
                     <span class="emoji-btn">👑</span>
-                    <span class="emoji-btn">😎</span>
                     <span class="emoji-btn">♟️</span>
+                    <span class="emoji-btn">😎</span>
+                    <span class="emoji-btn">🎯</span>
+                    <span class="emoji-btn">🚀</span>
+                    <span class="emoji-btn">💡</span>
+                    <span class="emoji-btn">🛡️</span>
+                    <span class="emoji-btn">🏆</span>
+                    <span class="emoji-btn">💬</span>
                 </div>
-                <div class="row" style="width: 100%;">
-                    <input type="text" id="chat-input" placeholder="!help für befehle." style="flex: 1;">
-                    <button id="send-chat" class="btn-green" style="padding: 10px 30px;">Senden</button>
+                <div class="row" style="width: 100%; display: flex; gap: 10px;">
+                    <input type="text" id="chat-input" placeholder="Schreibe eine Nachricht... (!help für Befehle)" style="flex: 1; padding: 10px 14px; border-radius: 8px;">
+                    <button id="send-chat" class="btn-green" style="padding: 10px 24px; border-radius: 8px; font-size: 0.95em;">Senden</button>
                 </div>
             </div>
         </div>
 
-        <div class="footer-area">
-            <div class="glass-panel mini-leaderboard">
-                <strong>🏆 Beste Spieler</strong>
-                <div id="leaderboard-list"></div>
+        <!-- FOOTER AREA -->
+        <div class="footer-area glass-panel">
+            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                <a href="index.html" style="color: #3498db; text-decoration: none; font-weight: bold;">🎮 Hauptspiel</a>
+                <span style="color: rgba(255,255,255,0.2)">|</span>
+                <a href="stats.html" style="color: #3498db; text-decoration: none;">📊 Statistik & Rangliste</a>
+                <span style="color: rgba(255,255,255,0.2)">|</span>
+                <a href="AGB.html" style="color: #aaa; text-decoration: none;">📜 AGB</a>
+                <span style="color: rgba(255,255,255,0.2)">|</span>
+                <a href="datenschutz.html" style="color: #aaa; text-decoration: none;">🔒 Datenschutz</a>
             </div>
-            <div class="glass-panel" style="display: flex; align-items: center; gap: 10px;">
-                <a href="stats.html" style="color: #3498db; text-decoration: none; font-size: 0.85em;">Rangliste</a>
-                <span style="color: rgba(255,255,255,0.3)">|</span>
-                <span style="font-size: 0.85em; color: #888;">Verion 2.0 - Chat-Mode</span>
-            </div>
+            <span style="font-size: 0.8em; color: #666;">Prochess v2.5 • Fullscreen Chat</span>
         </div>
     </div>
 
     <script type="module">
-
         window.acceptAGB = function() {
             localStorage.setItem('agbAkzeptiert', 'true');
             document.getElementById('agb-popup').style.display = 'none';
         };
         if (!localStorage.getItem('agbAkzeptiert')) {
             document.getElementById('agb-popup').style.display = 'flex';
+        }
+
+        // Display current user name in header if available
+        const savedName = localStorage.getItem('playerName');
+        if (savedName) {
+            const pill = document.getElementById('headerPlayerPill');
+            if (pill) pill.textContent = '👤 ' + savedName;
         }
     </script>
     <script src="script.js"></script>
@@ -271,9 +367,10 @@
             requestAnimationFrame(render);
         })();
     </script>
+
     <!-- MODALS FOR CUSTOM LOBBIES -->
-    <div id="createLobbyModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 10000; align-items: center; justify-content: center; padding: 15px;">
-        <div class="glass-panel" style="width: 100%; max-width: 400px; background: rgba(20, 20, 28, 0.95); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); color: white;">
+    <div id="createLobbyModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 10000; align-items: center; justify-content: center; padding: 15px;">
+        <div class="glass-panel" style="width: 100%; max-width: 400px; background: rgba(20, 24, 38, 0.95); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); color: white;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
                 <h3 style="margin: 0; font-size: 1.15em; display: flex; align-items: center; gap: 8px;">
                     🏰 Neue Lobby Erstellen
@@ -299,8 +396,8 @@
         </div>
     </div>
 
-    <div id="joinLobbyPasswordModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 10000; align-items: center; justify-content: center; padding: 15px;">
-        <div class="glass-panel" style="width: 100%; max-width: 380px; background: rgba(20, 20, 28, 0.95); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); color: white;">
+    <div id="joinLobbyPasswordModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 10000; align-items: center; justify-content: center; padding: 15px;">
+        <div class="glass-panel" style="width: 100%; max-width: 380px; background: rgba(20, 24, 38, 0.95); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); color: white;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
                 <h3 style="margin: 0; font-size: 1.1em; display: flex; align-items: center; gap: 6px;">
                     🔒 Passwort Geschützt
@@ -323,3 +420,4 @@
 
 </body>
 </html>
+
