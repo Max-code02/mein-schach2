@@ -756,6 +756,15 @@
             <!-- TAB 3: CHAT & COMMUNITY -->
             <div id="tab-chat" class="sidebar-tab-content">
                 <div id="chat-container">
+
+                <div id="lobby-controls" style="display: flex; gap: 5px; margin-bottom: 10px; align-items: center; padding: 10px 15px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <select id="chat-lobby-select" class="glass-input" style="flex: 1; padding: 8px;">
+                        <option value="global" style="color: black;">🌐 Global Chat</option>
+                        <option value="room" style="color: black;">🎮 Spiel-Raum</option>
+                    </select>
+                    <button id="join-custom-lobby-btn" class="glass-btn primary" style="padding: 8px 12px; margin: 0;" title="Privaten Chatraum beitreten">🔒 Join</button>
+                </div>
+
                     <div id="chat-messages"></div>
                     <div class="chat-input-area" style="position: relative;">
                         <div class="emoji-bar">
@@ -863,70 +872,11 @@ function playVideo(url) {
     <script type="module" src="script.js"></script>
     <script type="module" src="script2.js"></script>
 
-    <canvas id="glCanvas" style="position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:-1; pointer-events:none;"></canvas>
+    
 
-    <script id="fragmentShader" type="x-shader/x-fragment">
-        precision highp float;
-        uniform float time;
-        uniform vec2 resolution;
+    
 
-        float wave(vec2 p, float t) {
-            float v = sin(p.x * 8.0 + t) + sin((p.y + t) * 0.5) + sin((p.x + p.y + t) * 0.5);
-            return v;
-        }
-
-        void main() {
-            vec2 uv = gl_FragCoord.xy / resolution.xy;
-            vec2 p = -1.0 + 2.0 * uv;
-            p.x *= resolution.x / resolution.y;
-            float t = time * 0.3;
-            float v = wave(p, t);
-            vec3 color = vec3(0.05, 0.1, 0.35) + 0.15 * sin(v + vec3(0.0, 2.0, 4.0));
-            color *= (1.0 - length(p * 0.6));
-            gl_FragColor = vec4(color, 1.0);
-        }
-    </script>
-
-    <script>
-        (function() {
-            const canvas = document.getElementById('glCanvas');
-            const gl = canvas.getContext('webgl');
-            if (!gl) return;
-
-            const vs = gl.createShader(gl.VERTEX_SHADER);
-            gl.shaderSource(vs, `attribute vec4 p; void main(){gl_Position=p;}`);
-            gl.compileShader(vs);
-
-            const fs = gl.createShader(gl.FRAGMENT_SHADER);
-            gl.shaderSource(fs, document.getElementById('fragmentShader').text);
-            gl.compileShader(fs);
-
-            const prog = gl.createProgram();
-            gl.attachShader(prog, vs); gl.attachShader(prog, fs);
-            gl.linkProgram(prog); gl.useProgram(prog);
-
-            const buf = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]), gl.STATIC_DRAW);
-
-            const pLoc = gl.getAttribLocation(prog, "p");
-            gl.enableVertexAttribArray(pLoc);
-            gl.vertexAttribPointer(pLoc, 2, gl.FLOAT, false, 0, 0);
-
-            const tLoc = gl.getUniformLocation(prog, "time");
-            const rLoc = gl.getUniformLocation(prog, "resolution");
-
-            function render(now) {
-                canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-                gl.viewport(0, 0, canvas.width, canvas.height);
-                gl.uniform1f(tLoc, now * 0.001);
-                gl.uniform2f(rLoc, canvas.width, canvas.height);
-                gl.drawArrays(gl.TRIANGLES, 0, 6);
-                requestAnimationFrame(render);
-            }
-            requestAnimationFrame(render);
-        })();
-    </script>
+    
     <script type="application/ld+json">
 {
   "@context": "https://schema.org",
