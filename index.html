@@ -27,7 +27,7 @@
             backdrop-filter: blur(5px);
         }
         .popup-content {
-            background: rgba(20, 20, 30, 0.6); backdrop-filter: blur(20px) saturate(150%); -webkit-backdrop-filter: blur(20px) saturate(150%); border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(10, 10, 15, 0.05); backdrop-filter: blur(2px) saturate(150%); -webkit-backdrop-filter: blur(2px) saturate(150%); border: 1px solid rgba(255,255,255,0.2);
             color: white;
             padding: 30px;
             border-radius: 15px;
@@ -152,13 +152,13 @@
 /* Modals & Popups */
 .modal-overlay {
     display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);
+    background: rgba(10, 10, 15, 0.05); backdrop-filter: blur(2px) saturate(110%); -webkit-backdrop-filter: blur(2px) saturate(110%); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.2); backdrop-filter: blur(5px);
     z-index: 10000; align-items: center; justify-content: center;
 }
 .modal-box {
-    background: rgba(20, 20, 30, 0.6);
-    backdrop-filter: blur(20px) saturate(150%);
-    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    background: rgba(10, 10, 15, 0.05);
+    backdrop-filter: blur(2px) saturate(110%);
+    -webkit-backdrop-filter: blur(2px) saturate(110%);
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-top: 1px solid rgba(255, 255, 255, 0.4);
     border-left: 1px solid rgba(255, 255, 255, 0.3);
@@ -248,7 +248,7 @@
         <div class="header-brand">
             <span class="brand-logo">♟️</span>
             <span class="brand-title">Schach Live</span>
-            <div id="daily-streak" style="margin-left: 15px; background: rgba(231, 76, 60, 0.2); border: 1px solid #e74c3c; color: #e74c3c; padding: 3px 8px; border-radius: 12px; font-size: 0.8em; display: flex; align-items: center; gap: 4px; cursor: pointer; font-weight: bold;" title="Tägliche Serie" onclick="openFeaturesModal()">
+            <div id="daily-streak" style="margin-left: 15px; background: rgba(231, 76, 60, 0.15); backdrop-filter: blur(2px); border: 1px solid #e74c3c; color: #e74c3c; padding: 3px 8px; border-radius: 12px; font-size: 0.8em; display: flex; align-items: center; gap: 4px; cursor: pointer; font-weight: bold;" title="Tägliche Serie" onclick="openFeaturesModal()">
                 🔥 <span id="streak-count">1</span>
             </div>
         </div>
@@ -258,11 +258,11 @@
             <span class="status-badge">⚡ <span id="nav-ping">-- ms</span></span>
         </div>
         <div class="header-user-actions">
-            <button id="navThemeToggle" onclick="toggleAppTheme()" class="nav-btn">🌙 Theme</button>
-            <button id="navAuthBtn" onclick="openAuthModal()" class="nav-btn primary">🔐 Einloggen / Registrieren</button>
+            <button id="navThemeToggle" onclick="toggleAppTheme()" class="glass-btn nav-btn">🌙 Theme</button>
+            <button id="navAuthBtn" onclick="openAuthModal()" class="glass-btn nav-btn primary">🔐 Einloggen / Registrieren</button>
             <div id="navUserPill" style="display: none; align-items: center; gap: 8px; background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.15);">
                 <span id="navUserName" style="font-weight: bold; color: #f1c40f; font-size: 0.85em;">Gast</span>
-                <button id="navLogoutBtn" onclick="logout()" class="nav-btn danger" style="padding: 3px 8px; font-size: 0.75em;">Abmelden</button>
+                <button id="navLogoutBtn" onclick="logout()" class="glass-btn nav-btn danger" style="padding: 3px 8px; font-size: 0.75em;">Abmelden</button>
             </div>
         </div>
     </header>
@@ -271,7 +271,7 @@
         <div class="popup-content">
             <h2>Willkommen bei Prochess!</h2>
             <p>Um fortzufahren, bestätige bitte, dass du unsere <a href="AGB.html" target="_blank">AGB</a> und die <a href="datenschutz.html" target="_blank">Datenschutzerklärung</a> akzeptierst.</p>
-            <button class="accept-btn" onclick="acceptAGB()">Akzeptieren & Starten</button>
+            <button class="glass-btn accept-btn" onclick="acceptAGB()">Akzeptieren & Starten</button>
         </div>
     </div>
 
@@ -285,10 +285,10 @@
             <h3 id="game-request-title" style="margin: 0 0 10px 0; color: #f39c12; font-size: 1.3em;">Remis-Angebot erhalten!</h3>
             <p id="game-request-message" style="color: #ddd; font-size: 0.95em; margin-bottom: 22px; line-height: 1.5;">Dein Gegner bietet ein Unentschieden (Remis) an.</p>
             <div style="display: flex; gap: 12px; justify-content: center;">
-                <button id="game-request-accept-btn" style="flex: 1; background: #27ae60; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1em; transition: 0.2s;">
+                <button id="game-request-accept-btn" style="flex: 1; /*bg-removed*/; color: white;  padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1em; transition: 0.2s;" class="glass-btn success">
                     ✅ Annehmen
                 </button>
-                <button id="game-request-decline-btn" style="flex: 1; background: #c0392b; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1em; transition: 0.2s;">
+                <button id="game-request-decline-btn" style="flex: 1; /*bg-removed*/; color: white;  padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1em; transition: 0.2s;" class="glass-btn danger">
                     ❌ Ablehnen
                 </button>
             </div>
@@ -300,15 +300,15 @@
         <div class="modal-box" style="max-width: 480px; width: 90%; border: 2px solid #e74c3c; background: #1a0c0c; box-shadow: 0 0 30px rgba(231, 76, 60, 0.4); text-align: center;">
             <div style="font-size: 3rem; margin-bottom: 10px;">⛔</div>
             <h2 style="color: #ff4d4d; margin-top: 0; margin-bottom: 10px; font-size: 1.8rem; letter-spacing: 1px;">Account gesperrt</h2>
-            <div style="display: inline-block; background: rgba(231, 76, 60, 0.2); color: #ff6b6b; padding: 4px 12px; border-radius: 20px; font-size: 0.8em; font-weight: bold; border: 1px solid rgba(231, 76, 60, 0.4); margin-bottom: 15px;">PERMANENTE SPERRE</div>
+            <div style="display: inline-block; background: rgba(231, 76, 60, 0.15); backdrop-filter: blur(2px); color: #ff6b6b; padding: 4px 12px; border-radius: 20px; font-size: 0.8em; font-weight: bold; border: 1px solid rgba(231, 76, 60, 0.4); margin-bottom: 15px;">PERMANENTE SPERRE</div>
             <p style="color: #ddd; font-size: 0.95em; line-height: 1.5; margin-bottom: 20px;">
                 Dein Konto wurde von der Administration gesperrt. Ein Anmelden ist nicht mehr möglich.
             </p>
-            <div style="background: rgba(0,0,0,0.5); border-left: 4px solid #e74c3c; padding: 12px 15px; text-align: left; border-radius: 4px; margin-bottom: 20px;">
+            <div style="background: rgba(10, 10, 15, 0.05); backdrop-filter: blur(2px) saturate(110%); -webkit-backdrop-filter: blur(2px) saturate(110%); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.2); border-left: 4px solid #e74c3c; padding: 12px 15px; text-align: left; border-radius: 4px; margin-bottom: 20px;">
                 <div style="font-size: 0.75em; text-transform: uppercase; color: #aaa; letter-spacing: 0.5px; margin-bottom: 4px;">Hinterlegter Bann-Grund:</div>
                 <div id="account-banned-reason-text" style="color: #ff9999; font-size: 1em; font-weight: bold; word-break: break-word;">Verstoß gegen die Community-Richtlinien / Admin-Entscheidung</div>
             </div>
-            <button class="auth-btn" style="background: #c0392b; color: white; width: 100%; padding: 12px; font-size: 1em; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s;" onclick="document.getElementById('account-banned-modal').style.display='none'">Verstanden</button>
+            <button class="glass-btn danger auth-btn" style="/*bg-removed*/; color: white; width: 100%; padding: 12px; font-size: 1em;  border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s;" onclick="document.getElementById('account-banned-modal').style.display='none'">Verstanden</button>
         </div>
     </div>
 
@@ -325,11 +325,11 @@
             <input type="hidden" id="ban-reason-target-input" value="">
             <div style="margin-bottom: 15px; text-align: left;">
                 <label style="display: block; font-size: 0.8em; color: #aaa; margin-bottom: 5px;">Bann-Grund:</label>
-                <textarea id="ban-reason-text-input" class="auth-input" style="width: 100%; height: 80px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; padding: 10px; font-family: inherit; box-sizing: border-box; resize: vertical;" placeholder="z. B. Beleidigung im Chat, Cheating, Spam..."></textarea>
+                <textarea id="ban-reason-text-input" class="auth-input" style="width: 100%; height: 80px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(10, 10, 15, 0.05); backdrop-filter: blur(2px) saturate(110%); -webkit-backdrop-filter: blur(2px) saturate(110%); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.2); color: white; padding: 10px; font-family: inherit; box-sizing: border-box; resize: vertical;" placeholder="z. B. Beleidigung im Chat, Cheating, Spam..."></textarea>
             </div>
             <div style="display: flex; gap: 10px;">
-                <button style="flex: 1; background: #7f8c8d; color: white; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;" onclick="closeBanReasonModal()">Abbrechen</button>
-                <button style="flex: 1; background: #c0392b; color: white; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;" onclick="submitBanWithReasonModal()">Bannen ausführen</button>
+                <button style="flex: 1; background: #7f8c8d; color: white; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;" onclick="closeBanReasonModal()" class="glass-btn">Abbrechen</button>
+                <button style="flex: 1; /*bg-removed*/; color: white; padding: 10px;  border-radius: 6px; cursor: pointer; font-weight: bold;" onclick="submitBanWithReasonModal()" class="glass-btn danger">Bannen ausführen</button>
             </div>
         </div>
     </div>
@@ -346,8 +346,8 @@
                 <input type="email" id="auth-email-input" class="auth-input" placeholder="E-Mail-Adresse" style="padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: white; width: 100%; box-sizing: border-box;">
                 <input type="password" id="auth-password-input" class="auth-input" placeholder="Passwort (min. 6 Zeichen)" style="padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: white; width: 100%; box-sizing: border-box;">
                 <div style="display: flex; gap: 10px;">
-                    <button class="auth-btn" style="flex: 1; background: #27ae60; color: white; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;" onclick="submitAuthEmailLogin()">Einloggen</button>
-                    <button class="auth-btn" style="flex: 1; background: #2980b9; color: white; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;" onclick="submitAuthEmailRegister()">Registrieren</button>
+                    <button class="glass-btn success auth-btn" style="flex: 1; /*bg-removed*/; color: white; padding: 10px;  border-radius: 6px; cursor: pointer; font-weight: bold;" onclick="submitAuthEmailLogin()">Einloggen</button>
+                    <button class="glass-btn primary auth-btn" style="flex: 1; /*bg-removed*/; color: white; padding: 10px;  border-radius: 6px; cursor: pointer; font-weight: bold;" onclick="submitAuthEmailRegister()">Registrieren</button>
                 </div>
             </div>
 
@@ -357,11 +357,11 @@
                 <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.15);"></div>
             </div>
 
-            <button id="auth-google-btn" class="auth-btn" style="width: 100%; background: #ffffff; color: #333; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid #ddd; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="submitAuthGoogle()">
+            <button id="auth-google-btn" class="glass-btn auth-btn" style="width: 100%; background: #ffffff; color: #333; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid #ddd; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="submitAuthGoogle()">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width: 18px; height: 18px;" alt="Google Logo">
                 Mit Google anmelden
             </button>
-            <button id="auth-guest-btn" class="auth-btn" style="width: 100%; background: rgba(255,255,255,0.1); color: #fff; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="playAsGuest()">
+            <button id="auth-guest-btn" class="glass-btn auth-btn" style="width: 100%; background: rgba(255,255,255,0.1); color: #fff; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="playAsGuest()">
                 👤 Als Gast spielen (Ohne Konto)
             </button>
             <div id="auth-status" style="margin-top: 15px; font-size: 0.9em; text-align: left;"></div>
@@ -375,7 +375,7 @@
             <h2 style="color: white; margin-top: 0; margin-bottom: 20px;">Benutzername ändern</h2>
             <p style="color: #bdc3c7; font-size: 0.9em; margin-bottom: 20px;">Lege einen eindeutigen Namen für Leaderboard und Chat fest.</p>
             <input type="text" id="new-username" class="auth-input" placeholder="Neuer Name" maxlength="15">
-            <button class="auth-btn" onclick="submitNameChange()">Speichern</button>
+            <button class="glass-btn auth-btn" onclick="submitNameChange()">Speichern</button>
             <div id="name-status" style="margin-top: 15px; font-size: 0.9em;"></div>
         </div>
     </div>
@@ -387,9 +387,9 @@
             <div class="checkmate-icon">👑</div>
             <div class="checkmate-title">Schachmatt!</div>
             <div class="checkmate-winner" id="checkmate-winner-text">Weiß gewinnt das Spiel.</div>
-            <button class="checkmate-btn" onclick="document.getElementById('checkmate-modal').style.display='none'; resetGame();">Neue Partie starten</button>
-            <button class="checkmate-btn" style="background: #3498db; margin-top: 10px;" onclick="downloadReplay();">📥 Replay (PGN) herunterladen</button>
-            <button class="checkmate-btn" style="background: #9b59b6; margin-top: 10px;" onclick="shareGameForAnalysis();">🔍 Spiel-Analyse (Lichess)</button>
+            <button class="glass-btn checkmate-btn" onclick="document.getElementById('checkmate-modal').style.display='none'; resetGame();">Neue Partie starten</button>
+            <button class="glass-btn primary checkmate-btn" style="/*bg-removed*/; margin-top: 10px;" onclick="downloadReplay();">📥 Replay (PGN) herunterladen</button>
+            <button class="glass-btn purple checkmate-btn" style="/*bg-removed*/; margin-top: 10px;" onclick="shareGameForAnalysis();">🔍 Spiel-Analyse (Lichess)</button>
         </div>
     </div>
 
@@ -403,7 +403,7 @@
                 </div>
                 <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
                     <div style="font-weight: bold; color: #7f8fa6; font-size: 1.2em;">VS</div>
-                    <button id="themeToggleBtn" onclick="toggleAppTheme()" style="padding: 4px 10px; font-size: 0.8em; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; font-weight: bold;">🌙 Dark Mode</button>
+                    <button id="themeToggleBtn" onclick="toggleAppTheme()" style="padding: 4px 10px; font-size: 0.8em; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); cursor: pointer; font-weight: bold;" class="glass-btn">🌙 Dark Mode</button>
                 </div>
                 <div class="player-clock active" id="clock-white">
                     <span class="name" id="name-white">Weiß</span>
@@ -416,7 +416,7 @@
                     <span class="pulse" style="width: 8px; height: 8px; background: #e74c3c; border-radius: 50%; display: inline-block;"></span>
                     <span id="spectating-text" style="font-weight: bold; font-size: 0.9em; color: #3498db;">👁️ Zuschauer-Modus: Du schaust zu</span>
                 </div>
-                <button id="leaveSpectateBtn" style="background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 0.8em; font-weight: bold;">Beenden</button>
+                <button id="leaveSpectateBtn" style="/*bg-removed*/; color: white;  padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 0.8em; font-weight: bold;" class="glass-btn danger">Beenden</button>
             </div>
 
             <h2 id="status-display" style="display: none;">Weiß am Zug</h2>
@@ -429,22 +429,22 @@
             <img src="schach-vorschau.jpg" alt="Max' Schach Live - Online Schachspiel Vorschau" style="display:none;">
 
             <div class="control-row">
-                <button id="undoBtn">↩️ Zug-Rücknahme</button>
-                <button id="offerDrawBtn">🤝 Remis anbieten</button>
-                <button id="resetBtn">🆕 Neues Spiel</button>
-                <button id="resignBtn">🚩 Aufgeben</button>
-                <button id="fullscreenBtn">📺 Vollbild</button>
+                <button id="undoBtn" class="glass-btn">↩️ Zug-Rücknahme</button>
+                <button id="offerDrawBtn" class="glass-btn">🤝 Remis anbieten</button>
+                <button id="resetBtn" class="glass-btn">🆕 Neues Spiel</button>
+                <button id="resignBtn" class="glass-btn">🚩 Aufgeben</button>
+                <button id="fullscreenBtn" class="glass-btn">📺 Vollbild</button>
             </div>
             <div class="control-row" style="margin-top: 10px;">
-                <button id="featuresBtn" onclick="openFeaturesModal()" style="background: #8e44ad; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; flex: 1;">⚙️ Einstellungen & Features</button>
+                <button id="featuresBtn" onclick="openFeaturesModal()" style="/*bg-removed*/; color: white;  padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; flex: 1;" class="glass-btn purple">⚙️ Einstellungen & Features</button>
             </div>
             
             <!-- Features & Settings Modal -->
-            <div id="features-modal" class="modal-overlay" style="display: none; z-index: 1000000; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(8px); justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%;">
-                <div class="modal-box" style="background: rgba(20, 20, 30, 0.6); backdrop-filter: blur(20px) saturate(150%); -webkit-backdrop-filter: blur(20px) saturate(150%); border: 1px solid rgba(255,255,255,0.2); padding: 25px; border-radius: 12px; max-width: 650px; width: 95%; max-height: 90vh; overflow-y: auto; border: 1px solid #8e44ad; box-shadow: 0 0 30px rgba(142, 68, 173, 0.4); text-align: left; color: white;">
+            <div id="features-modal" class="modal-overlay" style="display: none; z-index: 1000000; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%;">
+                <div class="modal-box" style="background: rgba(10, 10, 15, 0.05); backdrop-filter: blur(2px) saturate(150%); -webkit-backdrop-filter: blur(2px) saturate(150%); border: 1px solid rgba(255,255,255,0.2); padding: 25px; border-radius: 12px; max-width: 650px; width: 95%; max-height: 90vh; overflow-y: auto; border: 1px solid #8e44ad; box-shadow: 0 0 30px rgba(142, 68, 173, 0.4); text-align: left; color: white;">
                     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 20px;">
                         <h2 style="margin: 0; color: #8e44ad;">⚙️ Spiel-Einstellungen & Extra Features</h2>
-                        <button onclick="document.getElementById('features-modal').style.display='none'" style="background: #c0392b; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-weight: bold;">X</button>
+                        <button onclick="document.getElementById('features-modal').style.display='none'" style="/*bg-removed*/; color: white;  padding: 5px 10px; border-radius: 5px; cursor: pointer; font-weight: bold;" class="glass-btn danger">X</button>
                     </div>
 
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
@@ -459,8 +459,8 @@
                                 <option value="blindfold">Blindfold Chess (Unsichtbare Figuren)</option>
                             </select>
                             
-                            <button id="startVariantBtn" onclick="startVariantGame()" style="width: 100%; padding: 8px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">🚀 Variante starten</button>
-                            <button id="passPlayBtn" onclick="startPassAndPlay()" style="width: 100%; padding: 8px; background: #f39c12; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 5px;">👥 Pass & Play (Lokal)</button>
+                            <button id="startVariantBtn" onclick="startVariantGame()" style="width: 100%; padding: 8px; /*bg-removed*/; color: white;  border-radius: 4px; cursor: pointer; font-weight: bold;" class="glass-btn success">🚀 Variante starten</button>
+                            <button id="passPlayBtn" onclick="startPassAndPlay()" style="width: 100%; padding: 8px; /*bg-removed*/; color: white;  border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 5px;" class="glass-btn warning">👥 Pass & Play (Lokal)</button>
                         </div>
 
                         <!-- Customization -->
@@ -499,10 +499,10 @@
                         <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; grid-column: span 2;">
                             <h3 style="margin-top: 0; color: #2ecc71; border-bottom: 1px solid #333; padding-bottom: 5px;">🎓 Training & Tools</h3>
                             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                                <button onclick="alert('KI Coach aktiviert! Analysiert deine Züge nach dem Spiel.')" style="background: #34495e; color: white; border: 1px solid #555; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 0.9em; flex: 1;">🤖 KI Coach</button>
-                                <button onclick="alert('Tägliche Streak! Du hast heute noch keine Puzzles gelöst.')" style="background: #34495e; color: white; border: 1px solid #555; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 0.9em; flex: 1;">🔥 Daily Streak</button>
-                                <button onclick="alert('Offline Modus ist aktiv. Du kannst Puzzles lösen auch ohne Internet!')" style="background: #34495e; color: white; border: 1px solid #555; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 0.9em; flex: 1;">📶 Offline PWA</button>
-                                <button onclick="alert('Zeigt ein Heatmap-Overlay deiner meisten Fehler (Coming Soon)')" style="background: #34495e; color: white; border: 1px solid #555; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 0.9em; flex: 1;">📊 Blunder Heatmap</button>
+                                <button onclick="alert('KI Coach aktiviert! Analysiert deine Züge nach dem Spiel.')" style="/*bg-removed*/; color: white;  padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 0.9em; flex: 1;" class="glass-btn">🤖 KI Coach</button>
+                                <button onclick="alert('Tägliche Streak! Du hast heute noch keine Puzzles gelöst.')" style="/*bg-removed*/; color: white;  padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 0.9em; flex: 1;" class="glass-btn">🔥 Daily Streak</button>
+                                <button onclick="alert('Offline Modus ist aktiv. Du kannst Puzzles lösen auch ohne Internet!')" style="/*bg-removed*/; color: white;  padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 0.9em; flex: 1;" class="glass-btn">📶 Offline PWA</button>
+                                <button onclick="alert('Zeigt ein Heatmap-Overlay deiner meisten Fehler (Coming Soon)')" style="/*bg-removed*/; color: white;  padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 0.9em; flex: 1;" class="glass-btn">📊 Blunder Heatmap</button>
                             </div>
                         </div>
                     </div>
@@ -516,8 +516,8 @@
 
             <div class="control-row" style="margin-top: 10px;">
                 <div style="position: relative; display: inline-block;">
-                    <button id="emoteBtn" style="background: #34495e; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold;">😀 Emotes</button>
-                    <div id="emote-menu" style="display: none; position: absolute; bottom: 100%; left: 0; background: rgba(0,0,0,0.9); border: 1px solid #444; border-radius: 5px; padding: 10px; z-index: 10; margin-bottom: 5px; white-space: nowrap;">
+                    <button id="emoteBtn" style="/*bg-removed*/; color: white;  padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold;" class="glass-btn">😀 Emotes</button>
+                    <div id="emote-menu" style="display: none; position: absolute; bottom: 100%; left: 0; background: rgba(10, 10, 15, 0.05); backdrop-filter: blur(2px) saturate(110%); -webkit-backdrop-filter: blur(2px) saturate(110%); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.2); border: 1px solid #444; border-radius: 5px; padding: 10px; z-index: 10; margin-bottom: 5px; white-space: nowrap;">
                         <span class="emote-select" style="cursor: pointer; padding: 5px; font-size: 1.5em; transition: 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">🤔</span>
                         <span class="emote-select" style="cursor: pointer; padding: 5px; font-size: 1.5em; transition: 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">👏</span>
                         <span class="emote-select" style="cursor: pointer; padding: 5px; font-size: 1.5em; transition: 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">😱</span>
@@ -525,8 +525,8 @@
                         <span class="emote-select" style="cursor: pointer; padding: 5px; font-size: 1.5em; transition: 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">😂</span>
                     </div>
                 </div>
-                <button id="voiceMoveBtn" onclick="toggleVoiceMoveControl()" style="background: #27ae60; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; flex: 1;">🎤 Sprachsteuerung</button>
-                <button id="voiceChatBtn" style="display: none; background: #9b59b6; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold;">🎤 Voice-Chat starten</button>
+                <button id="voiceMoveBtn" onclick="toggleVoiceMoveControl()" style="/*bg-removed*/; color: white;  padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; flex: 1;" class="glass-btn success">🎤 Sprachsteuerung</button>
+                <button id="voiceChatBtn" style="display: none; /*bg-removed*/; color: white;  padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold;" class="glass-btn purple">🎤 Voice-Chat starten</button>
                 <div id="voice-status" style="font-size: 0.8em; color: #ccc; margin-left: 10px; align-self: center;"></div>
             </div>
             <div id="voice-move-status" style="font-size: 0.9em; font-weight: bold; margin-top: 8px; text-align: center; min-height: 22px;"></div>
@@ -558,7 +558,7 @@
                 </div>
                 <div class="video-area">
     <input type="text" id="videoPrompt" placeholder="Was soll passieren?">
-    <button id="generateVideoBtn" onclick="startGeneration()">KI VIDEO GENERIEREN</button>
+    <button id="generateVideoBtn" onclick="startGeneration()" class="glass-btn">KI VIDEO GENERIEREN</button>
     
     <div id="videoStatus"></div>
     
@@ -575,10 +575,10 @@
         <div class="sidebar">
             <!-- Sidebar Navigation Tabs -->
             <div class="sidebar-tabs">
-                <button class="sidebar-tab-btn active" onclick="switchSidebarTab('tab-game', this)">🎮 Spiel</button>
-                <button class="sidebar-tab-btn" onclick="switchSidebarTab('tab-profile', this)">🏆 Profil</button>
-                <button class="sidebar-tab-btn" onclick="switchSidebarTab('tab-chat', this)">💬 Community</button>
-                <button class="sidebar-tab-btn" onclick="switchSidebarTab('tab-design', this)">🎨 Design</button>
+                <button class="glass-btn sidebar-tab-btn active" onclick="switchSidebarTab('tab-game', this)">🎮 Spiel</button>
+                <button class="glass-btn sidebar-tab-btn" onclick="switchSidebarTab('tab-profile', this)">🏆 Profil</button>
+                <button class="glass-btn sidebar-tab-btn" onclick="switchSidebarTab('tab-chat', this)">💬 Community</button>
+                <button class="glass-btn sidebar-tab-btn" onclick="switchSidebarTab('tab-design', this)">🎨 Design</button>
             </div>
 
             <!-- TAB 1: GAME & LOBBY -->
@@ -617,38 +617,38 @@
 
                     <div class="room-controls">
                         <input type="text" id="roomID" placeholder="Raum ID eingeben">
-                        <button id="connectMP">Beitreten</button>
+                        <button id="connectMP" class="glass-btn">Beitreten</button>
                     </div>
                     
                     <div style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 15px;">
                         <span>🏆 <strong>Turniermodus</strong></span>
                         <div style="display: flex; gap: 5px; margin-top: 8px;">
-                            <input type="text" id="tournamentName" placeholder="Turniername" style="flex: 1; padding: 5px; border-radius: 4px; border: 1px solid #444; background: #222; color: white;">
-                            <button id="createTournamentBtn" style="background: #e67e22; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-weight: bold;">Erstellen</button>
+                            <input type="text" id="tournamentName" placeholder="Turniername" style="flex: 1; padding: 5px; border-radius: 4px; border: 1px solid #444; background: transparent; color: white;">
+                            <button id="createTournamentBtn" style="/*bg-removed*/; color: white;  padding: 5px 10px; border-radius: 4px; cursor: pointer; font-weight: bold;" class="glass-btn warning">Erstellen</button>
                         </div>
                     </div>
                 </div>
 
                 <div class="glass-panel" id="tactical-puzzle-panel" style="display: flex; flex-direction: column; gap: 8px;">
                     <span>🧩 <strong>Tägliches Taktik-Rätsel</strong></span>
-                    <div id="puzzle-details" style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                    <div id="puzzle-details" style="background: rgba(10, 10, 15, 0.05); backdrop-filter: blur(2px) saturate(110%); -webkit-backdrop-filter: blur(2px) saturate(110%); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
                         <div id="puzzle-title" style="font-weight: bold; color: #f1c40f; font-size: 1em;">Lade Taktik-Rätsel...</div>
                         <div id="puzzle-desc" style="font-size: 0.85em; color: #bdc3c7; margin-top: 4px;">Finde den besten Zug, um +100 ELO & XP zu ergattern.</div>
                         <div id="puzzle-status" style="font-size: 0.8em; color: #2ecc71; margin-top: 5px; font-weight: bold;"></div>
                         <div style="display: flex; gap: 5px; margin-top: 10px;">
-                            <button id="loadPuzzleBtn" style="flex: 1; padding: 6px; background: #9b59b6; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold;">Rätsel starten</button>
-                            <button id="resetPuzzleBtn" style="padding: 6px; background: #e74c3c; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold; display: none;">Reset</button>
+                            <button id="loadPuzzleBtn" style="flex: 1; padding: 6px; /*bg-removed*/; color: white;  border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold;" class="glass-btn purple">Rätsel starten</button>
+                            <button id="resetPuzzleBtn" style="padding: 6px; /*bg-removed*/; color: white;  border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold; display: none;" class="glass-btn danger">Reset</button>
                         </div>
                     </div>
                 </div>
 
                 <div class="glass-panel" id="spectator-panel" style="display: flex; flex-direction: column; gap: 8px;">
                     <span>👁️ <strong>Zuschauer-Lobby</strong></span>
-                    <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                    <div style="background: rgba(10, 10, 15, 0.05); backdrop-filter: blur(2px) saturate(110%); -webkit-backdrop-filter: blur(2px) saturate(110%); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
                         <div id="spectator-games-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto; margin-bottom: 8px;">
                             <div style="color: #aaa; font-style: italic; text-align: center; font-size: 0.85em; padding: 10px 0;">Keine laufenden Online-Spiele.</div>
                         </div>
-                        <button id="refreshGamesBtn" style="width: 100%; padding: 6px; background: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold; transition: 0.2s;">🔄 Liste aktualisieren</button>
+                        <button id="refreshGamesBtn" style="width: 100%; padding: 6px; /*bg-removed*/; color: white;  border-radius: 5px; cursor: pointer; font-size: 0.85em; font-weight: bold; transition: 0.2s;" class="glass-btn success">🔄 Liste aktualisieren</button>
                     </div>
                 </div>
 
@@ -664,10 +664,10 @@
                 <div class="glass-panel">
                     <div class="user-info" style="display: flex; flex-direction: column; gap: 8px;">
                         <span>👤 <strong>Spieler-Profil</strong></span>
-                        <div id="profile-display" style="display: flex; flex-direction: column; gap: 10px; align-items: center; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px;">
+                        <div id="profile-display" style="display: flex; flex-direction: column; gap: 10px; align-items: center; background: rgba(10, 10, 15, 0.05); backdrop-filter: blur(2px) saturate(110%); -webkit-backdrop-filter: blur(2px) saturate(110%); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.2); padding: 15px; border-radius: 10px;">
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <div id="profile-name" style="font-size: 1.2em; font-weight: bold; color: #f1c40f;">Gastspieler</div>
-                                <button id="edit-name-btn" onclick="openNameModal()" style="background: none; border: none; cursor: pointer; color: #aaa; padding: 2px;" title="Name ändern">✏️</button>
+                                <button id="edit-name-btn" onclick="openNameModal()" style="background: none; border: none; cursor: pointer; color: #aaa; padding: 2px;" title="Name ändern" class="glass-btn">✏️</button>
                             </div>
                             <div id="profile-stats" style="font-size: 0.9em; color: #ccc;">Elo: 1200 | Siege: 0</div>
                             
@@ -698,10 +698,10 @@
                                 </div>
                             </div>
 
-                            <button id="openAuthBtn" onclick="openAuthModal()" style="background: #3498db; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s; margin-top: 5px;">
+                            <button id="openAuthBtn" onclick="openAuthModal()" style="/*bg-removed*/; color: white;  padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s; margin-top: 5px;" class="glass-btn primary">
                                 🔐 Einloggen / Registrieren
                             </button>
-                            <button id="logoutBtn" onclick="logout()" style="display: none; background: #e74c3c; color: white; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s; margin-top: 5px;">
+                            <button id="logoutBtn" onclick="logout()" style="display: none; /*bg-removed*/; color: white;  padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s; margin-top: 5px;" class="glass-btn danger">
                                 🚪 Abmelden
                             </button>
                         </div>
@@ -712,9 +712,9 @@
                 <div class="glass-panel" id="admin-panel" style="display: none;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                         <span>🛡️ <strong>Benutzerverwaltung</strong> (Admin)</span>
-                        <button onclick="requestAdminUsersRefresh()" style="background: #2980b9; color: white; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8em; font-weight: bold; transition: 0.2s;">🔄 Spieler laden</button>
+                        <button onclick="requestAdminUsersRefresh()" style="/*bg-removed*/; color: white;  padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8em; font-weight: bold; transition: 0.2s;" class="glass-btn primary">🔄 Spieler laden</button>
                     </div>
-                    <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin-top: 5px; max-height: 280px; overflow-y: auto;">
+                    <div style="background: rgba(10, 10, 15, 0.05); backdrop-filter: blur(2px) saturate(110%); -webkit-backdrop-filter: blur(2px) saturate(110%); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin-top: 5px; max-height: 280px; overflow-y: auto;">
                         <div id="admin-user-list" style="display: flex; flex-direction: column; gap: 8px;">
                             <div style="color: #aaa; font-style: italic; text-align: center; font-size: 0.85em; padding: 10px 0;">Klicke auf 'Spieler laden' oder warte auf automatische Verbindung...</div>
                         </div>
@@ -722,14 +722,14 @@
 
                     <!-- Admin Log Panel for Ban Attempts against Admins -->
                     <div id="admin-logs-section" style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.15); padding-top: 12px;">
-                        <button id="toggle-admin-logs-btn" onclick="toggleAdminLogsPanel()" style="width: 100%; background: rgba(231, 76, 60, 0.2); border: 1px solid rgba(231, 76, 60, 0.6); color: #ff6b6b; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: space-between; transition: 0.2s;">
+                        <button id="toggle-admin-logs-btn" onclick="toggleAdminLogsPanel()" style="width: 100%; background: rgba(231, 76, 60, 0.15); backdrop-filter: blur(2px); border: 1px solid rgba(231, 76, 60, 0.6); color: #ff6b6b; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: space-between; transition: 0.2s;" class="glass-btn">
                             <span>🛡️ Admin-Sicherheits-Logs</span>
                             <span id="admin-logs-arrow">▼</span>
                         </button>
-                        <div id="admin-logs-container" style="display: none; margin-top: 10px; background: rgba(0,0,0,0.4); padding: 10px; border-radius: 8px; border: 1px solid rgba(231,76,60,0.3); max-height: 250px; overflow-y: auto;">
+                        <div id="admin-logs-container" style="display: none; margin-top: 10px; background: rgba(10, 10, 15, 0.05); backdrop-filter: blur(2px) saturate(110%); -webkit-backdrop-filter: blur(2px) saturate(110%); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; border: 1px solid rgba(231,76,60,0.3); max-height: 250px; overflow-y: auto;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #444; padding-bottom: 5px;">
                                 <span style="font-size: 0.75em; color: #aaa;">Protokollierte Bann-Versuche gegen Admins</span>
-                                <button onclick="requestAdminLogsRefresh()" style="background: #34495e; color: white; border: none; padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75em;">🔄 Aktualisieren</button>
+                                <button onclick="requestAdminLogsRefresh()" style="/*bg-removed*/; color: white;  padding: 3px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75em;" class="glass-btn">🔄 Aktualisieren</button>
                             </div>
                             <div id="admin-logs-list" style="display: flex; flex-direction: column; gap: 6px; font-size: 0.8em;">
                                 <div style="color: #aaa; text-align: center; font-style: italic; padding: 10px 0;">Keine verdächtigen Aktivitäten protokolliert.</div>
@@ -746,7 +746,7 @@
 
                 <div class="glass-panel">
                     <span>📜 <strong>Match History & Replays</strong></span>
-                    <button id="loadHistoryBtn" style="width: 100%; margin-top: 10px; background: #34495e; color: white; border: none; padding: 8px; border-radius: 5px; cursor: pointer;">Laden</button>
+                    <button id="loadHistoryBtn" style="width: 100%; margin-top: 10px; /*bg-removed*/; color: white;  padding: 8px; border-radius: 5px; cursor: pointer;" class="glass-btn">Laden</button>
                     <div id="match-history-list" style="margin-top: 15px; font-size: 0.9em; max-height: 200px; overflow-y: auto;">
                         <div style="color: #aaa; text-align: center; font-style: italic;">Keine Matches gefunden</div>
                     </div>
@@ -765,18 +765,18 @@
                         </div>
 
                         <div style="display: flex; gap: 5px; align-items: center; position: relative;">
-                            <button id="emote-menu-btn" style="padding: 5px 10px; cursor: pointer; background: #eee; border: 1px solid #ccc; border-radius: 4px;">...</button>
+                            <button id="emote-menu-btn" style="padding: 5px 10px; cursor: pointer; background: #eee; border: 1px solid #ccc; border-radius: 4px;" class="glass-btn">...</button>
                             
                             <div id="emote-popup" style="display: none; position: absolute; bottom: 110%; left: 0; background: white; border: 2px solid #444; border-radius: 8px; box-shadow: 0 8px 20px rgba(0,0,0,0.3); z-index: 9999; width: 160px; padding: 5px;">
-                                <button class="emote-btn" data-msg="Viel Glück! 🍀" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee;">Viel Glück! 🍀</button>
-                                <button class="emote-btn" data-msg="Guter Zug! 👏" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee;">Guter Zug! 👏</button>
-                                <button class="emote-btn" data-msg="Ups! 😅" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee;">Ups! 😅</button>
-                                <button class="emote-btn" data-msg="Danke! 😊" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee;">Danke! 😊</button>
-                                <button class="emote-btn" data-msg="Gutes Spiel! 🤝" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px;">Gutes Spiel! 🤝</button>
+                                <button class="glass-btn emote-btn" data-msg="Viel Glück! 🍀" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee;">Viel Glück! 🍀</button>
+                                <button class="glass-btn emote-btn" data-msg="Guter Zug! 👏" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee;">Guter Zug! 👏</button>
+                                <button class="glass-btn emote-btn" data-msg="Ups! 😅" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee;">Ups! 😅</button>
+                                <button class="glass-btn emote-btn" data-msg="Danke! 😊" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px; border-bottom: 1px solid #eee;">Danke! 😊</button>
+                                <button class="glass-btn emote-btn" data-msg="Gutes Spiel! 🤝" style="width: 100%; text-align: left; padding: 10px; border: none; background: none; cursor: pointer; font-size: 14px;">Gutes Spiel! 🤝</button>
                             </div>
 
                             <input type="text" id="chat-input" placeholder="Nachricht..." style="flex-grow: 1;">
-                            <button id="send-chat">Senden</button>
+                            <button id="send-chat" class="glass-btn">Senden</button>
                         </div>
                     </div>
                 </div>
@@ -791,8 +791,8 @@
                 <div class="glass-panel" style="margin-top: 15px;">
                     <span>👥 <strong>Freunde & Einladungen</strong></span>
                     <div style="display: flex; gap: 5px; margin-top: 10px;">
-                        <input type="text" id="friend-name-input" placeholder="Spieler suchen..." style="flex: 1; padding: 8px; border-radius: 5px; border: 1px solid #555; background: rgba(0,0,0,0.3); color: white;">
-                        <button id="addFriendBtn" style="background: #2ecc71; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold;">Hinzufügen</button>
+                        <input type="text" id="friend-name-input" placeholder="Spieler suchen..." style="flex: 1; padding: 8px; border-radius: 5px; border: 1px solid #555; background: rgba(10, 10, 15, 0.05); backdrop-filter: blur(2px) saturate(110%); -webkit-backdrop-filter: blur(2px) saturate(110%); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.2); color: white;">
+                        <button id="addFriendBtn" style="/*bg-removed*/; color: white;  padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold;" class="glass-btn success">Hinzufügen</button>
                     </div>
                     <div id="friends-list" style="margin-top: 15px; font-size: 0.9em; max-height: 150px; overflow-y: auto;">
                         <div style="color: #aaa; text-align: center; font-style: italic;">Logge dich ein, um Freunde zu sehen</div>
@@ -807,7 +807,7 @@
                     <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
                         <div>
                             <label style="font-size: 0.85em; color: #ccc; display: block; margin-bottom: 4px;">Brett-Stil:</label>
-                            <select id="boardThemeSelect" style="width: 100%; padding: 6px; background: rgba(0,0,0,0.3); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; cursor: pointer;">
+                            <select id="boardThemeSelect" style="width: 100%; padding: 6px; background: rgba(10, 10, 15, 0.05); backdrop-filter: blur(2px) saturate(110%); -webkit-backdrop-filter: blur(2px) saturate(110%); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; cursor: pointer;">
                                 <option value="classic">Klassisch (Default)</option>
                                 <option value="wood">Klassisches Holz 🪵</option>
                                 <option value="neon">Moderner Neon-Look ⚡</option>
@@ -817,7 +817,7 @@
                         </div>
                         <div>
                             <label style="font-size: 0.85em; color: #ccc; display: block; margin-bottom: 4px;">Figuren-Stil:</label>
-                            <select id="pieceThemeSelect" style="width: 100%; padding: 6px; background: rgba(0,0,0,0.3); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; cursor: pointer;">
+                            <select id="pieceThemeSelect" style="width: 100%; padding: 6px; background: rgba(10, 10, 15, 0.05); backdrop-filter: blur(2px) saturate(110%); -webkit-backdrop-filter: blur(2px) saturate(110%); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 5px; cursor: pointer;">
                                 <option value="classic">Klassisch (Wikipedia)</option>
                                 <option value="goldsilver">Gold & Silber ✨</option>
                                 <option value="neon">Neon Glow 🔴🔵</option>
@@ -840,8 +840,8 @@
             </div>
         </div>
     </div>
-    <div id="videoModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:9999; justify-content:center; align-items:center;">
-    <div style="background:#222; padding:20px; border-radius:10px; position:relative; max-width:80%;">
+    <div id="videoModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: rgba(10, 10, 15, 0.05); backdrop-filter: blur(2px) saturate(110%); -webkit-backdrop-filter: blur(2px) saturate(110%); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index:9999; justify-content:center; align-items:center;">
+    <div style="background: transparent; padding:20px; border-radius:10px; position:relative; max-width:80%;">
         <span onclick="document.getElementById('videoModal').style.display='none'" style="position:absolute; top:10px; right:20px; color:white; cursor:pointer; font-size:30px;">&times;</span>
         <video id="player" controls width="100%"></video>
     </div>
