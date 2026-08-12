@@ -2912,8 +2912,39 @@ setTimeout(() => {
     }
 }, 1000);
 
+// --- GLASSMORPHISM & PERFORMANCE TOGGLE LOGIK ---
+function updateGlassmorphismState() {
+    const isGlassEnabled = localStorage.getItem("glassmorphism_enabled") === "true";
+    if (isGlassEnabled) {
+        document.body.classList.add("glass-effects-enabled");
+    } else {
+        document.body.classList.remove("glass-effects-enabled");
+    }
+    const glassSelect = document.getElementById("glassEffectsSelect");
+    if (glassSelect) {
+        glassSelect.value = isGlassEnabled ? "enabled" : "disabled";
+    }
+}
+updateGlassmorphismState();
+if (document.readyState === 'loading') {
+    document.addEventListener("DOMContentLoaded", updateGlassmorphismState);
+} else {
+    updateGlassmorphismState();
+}
+
 // --- CUSTOMIZATION & PIECE CUSTOM COLOR LOGIK ---
 function initCustomizationControls() {
+    updateGlassmorphismState();
+    const glassSelect = document.getElementById("glassEffectsSelect");
+    if (glassSelect) {
+        glassSelect.value = localStorage.getItem("glassmorphism_enabled") === "true" ? "enabled" : "disabled";
+        glassSelect.addEventListener("change", () => {
+            const isEnabled = glassSelect.value === "enabled";
+            localStorage.setItem("glassmorphism_enabled", isEnabled ? "true" : "false");
+            updateGlassmorphismState();
+        });
+    }
+
     const boardThemeSelect = document.getElementById("boardThemeSelect");
     const pieceThemeSelect = document.getElementById("pieceThemeSelect");
     const cpWhite = document.getElementById("colorWhite");
