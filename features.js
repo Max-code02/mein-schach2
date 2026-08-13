@@ -19,7 +19,7 @@ window.initFeatures = function(socket, myName) {
         btn.onclick = (e) => {
             const emote = e.target.innerText;
             if (socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ type: 'emote', emote: emote, sender: localStorage.getItem('playerName') || 'Anonym' }));
+                if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'emote', emote: emote, sender: localStorage.getItem('playerName') || 'Anonym' }));
             }
             emoteMenu.style.display = 'none';
             showEmoteOnBoard(emote, true);
@@ -87,7 +87,7 @@ window.initFeatures = function(socket, myName) {
             voiceBtn.style.background = '#e74c3c';
             voiceStatus.innerText = 'Warte auf Gegner...';
             
-            socket.send(JSON.stringify({ type: 'voice_offer_request' }));
+            if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'voice_offer_request' }));
         } catch (err) {
             console.error(err);
             voiceStatus.innerText = '❌ Mikrofon blockiert';
@@ -109,7 +109,7 @@ window.initFeatures = function(socket, myName) {
             voiceBtn.style.background = '#9b59b6';
         }
         if(voiceStatus) voiceStatus.innerText = '';
-        socket.send(JSON.stringify({ type: 'voice_stop' }));
+        if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'voice_stop' }));
     }
 
     const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
@@ -125,7 +125,7 @@ window.initFeatures = function(socket, myName) {
                 
                 peerConnection.onicecandidate = (e) => {
                     if (e.candidate) {
-                        socket.send(JSON.stringify({ type: 'voice_signal', signalType: 'candidate', candidate: e.candidate }));
+                        if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'voice_signal', signalType: 'candidate', candidate: e.candidate }));
                     }
                 };
                 
@@ -142,7 +142,7 @@ window.initFeatures = function(socket, myName) {
 
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
-                socket.send(JSON.stringify({ type: 'voice_signal', signalType: 'offer', offer: offer }));
+                if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'voice_signal', signalType: 'offer', offer: offer }));
                 voiceStatus.innerText = 'Verbunden 🎙️';
             }
         } else if (data.signalType === 'offer') {
@@ -151,7 +151,7 @@ window.initFeatures = function(socket, myName) {
             
             peerConnection.onicecandidate = (e) => {
                 if (e.candidate) {
-                    socket.send(JSON.stringify({ type: 'voice_signal', signalType: 'candidate', candidate: e.candidate }));
+                    if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'voice_signal', signalType: 'candidate', candidate: e.candidate }));
                 }
             };
             
@@ -169,7 +169,7 @@ window.initFeatures = function(socket, myName) {
             await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
             const answer = await peerConnection.createAnswer();
             await peerConnection.setLocalDescription(answer);
-            socket.send(JSON.stringify({ type: 'voice_signal', signalType: 'answer', answer: answer }));
+            if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'voice_signal', signalType: 'answer', answer: answer }));
             voiceStatus.innerText = 'Verbunden 🎙️';
 
         } else if (data.signalType === 'answer') {
@@ -189,7 +189,7 @@ window.initFeatures = function(socket, myName) {
         addFriendBtn.onclick = () => {
             const fname = friendInput.value.trim();
             if (fname && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ type: 'add_friend', friend: fname }));
+                if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'add_friend', friend: fname }));
                 friendInput.value = '';
             }
         };
@@ -224,7 +224,7 @@ window.initFeatures = function(socket, myName) {
             
             if (f.online) {
                 challengeBtn.onclick = () => {
-                    socket.send(JSON.stringify({ type: 'challenge_friend', friend: f.name }));
+                    if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'challenge_friend', friend: f.name }));
                     alert('Herausforderung an ' + f.name + ' gesendet!');
                 };
             } else {
@@ -244,7 +244,7 @@ window.initFeatures = function(socket, myName) {
     if (loadHistoryBtn) {
         loadHistoryBtn.onclick = () => {
             if (socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ type: 'get_match_history' }));
+                if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'get_match_history' }));
                 loadHistoryBtn.innerText = 'Lade...';
             }
         };

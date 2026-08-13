@@ -61,8 +61,7 @@ const defaultFirebaseConfig = {
     storageBucket: "schachlive.firebasestorage.app",
     messagingSenderId: "729285821168",
     appId: "1:729285821168:web:6d3fc2d942c8b8d101b835",
-    measurementId: "G-184X8Q73WV",
-    databaseId: "ai-studio-schachlive-ae0abb12-4abe-4855-8cd8-d6198a934d30"
+    measurementId: "G-184X8Q73WV"
 };
 
 async function initFirebase() {
@@ -131,6 +130,16 @@ async function initFirebase() {
                     showFirestoreStatusToast(true);
                 }
             }, (err) => {
+                if (err.code === 'permission-denied') {
+                    if (typeof window.showInAppNotification === 'function') {
+                        window.showInAppNotification(
+                            "⚠️ Firebase Berechtigungen fehlen",
+                            "Bitte erlaube Lese-/Schreibzugriff in den Firestore Rules deiner Firebase Console.",
+                            "warning"
+                        );
+                    }
+                    return;
+                }
                 if (!wasFirestoreOffline) {
                     wasFirestoreOffline = true;
                     showFirestoreStatusToast(false);
