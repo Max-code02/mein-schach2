@@ -674,7 +674,11 @@ async function sendLobbyChatHistory(targetWs, lobbyId) {
                 });
             }
         } catch (e) {
-            console.error('Firestore chat history fetch error:', e);
+            if (e.code === 7 || (e.message && e.message.includes('PERMISSION_DENIED'))) {
+                console.warn('[Firestore] Notice: Chat history using in-memory store (Cloud IAM access pending).');
+            } else {
+                console.warn('Firestore chat history fetch note:', e.message || e);
+            }
         }
     }
 
