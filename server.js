@@ -362,6 +362,51 @@ app.get('/api/leaderboard', async (req, res) => {
     res.json({ success: true, list: sorted });
 });
 
+const globalSupportTickets = [];
+
+app.post('/api/support-ticket', (req, res) => {
+    const { user, contact, text, banReason } = req.body || {};
+    if (!text) {
+        return res.status(400).json({ success: false, message: 'Nachricht ist erforderlich.' });
+    }
+    const ticketId = 'TICK-' + Date.now().toString(36).toUpperCase();
+    const newTicket = {
+        id: ticketId,
+        user: user || 'Gesperrter Spieler',
+        contact: contact || user || 'Unbekannt',
+        email: 'schachlivesupport.jailer914@slmail.me',
+        text: text,
+        banReason: banReason || 'Admin-Gesperrt',
+        status: 'Offen',
+        createdAt: new Date().toLocaleString('de-DE'),
+        timestamp: Date.now(),
+        reply: ''
+    };
+    globalSupportTickets.unshift(newTicket);
+    console.log(`📩 Support-Ticket [${ticketId}] von ${user} erfasst.`);
+    res.json({
+        success: true,
+        ticketId: ticketId,
+        supportEmail: 'schachlivesupport.jailer914@slmail.me',
+        message: 'Support-Ticket erfolgreich übermittelt.'
+    });
+});
+
+app.get('/api/admin/tickets', (req, res) => {
+    res.json({ success: true, tickets: globalSupportTickets, supportEmail: 'schachlivesupport.jailer914@slmail.me' });
+});
+
+app.post('/api/admin/reply-ticket', (req, res) => {
+    const { ticketId, reply, status } = req.body || {};
+    const ticket = globalSupportTickets.find(t => t.id === ticketId);
+    if (ticket) {
+        if (reply) ticket.reply = reply;
+        if (status) ticket.status = status;
+        return res.json({ success: true, ticket });
+    }
+    res.status(404).json({ success: false, message: 'Ticket nicht gefunden' });
+});
+
 app.post('/analyse', async (req, res) => {
     const data = req.body || {};
     const spieler = data.spieler || "Unbekannt";

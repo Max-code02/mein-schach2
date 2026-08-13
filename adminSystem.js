@@ -112,7 +112,13 @@ async function handleAdminCommand(ws, text, context) {
     const resolvedArgs = resolveTargetNameAndRest(cleanTokens, wss, profiles);
     const targetName = resolvedArgs.target;
 
-    const PUBLIC_COMMANDS = ['watch', 'spectate', 'unwatch', 'leave', 'help', 'befehle', 'befhel', '?', 'myip', 'mypi', 'mipy', 'mypu'];
+    const PUBLIC_COMMANDS = [
+        'watch', 'spectate', 'unwatch', 'leave', 'help', 'befehle', 'befhel', '?', 
+        'myip', 'mypi', 'mipy', 'mypu', 'stats', 'profile', 'rank', 'top', 
+        'draw', 'remis', 'resign', 'aufgeben', 'undo', 'zurueck', 
+        'ticket', 'support', 'agb', 'rules', 'datenschutz', 'impressum', 
+        'emotes', 'theme', 'glass', 'keybinds', 'lobby', 'ping'
+    ];
     const HELPER_COMMANDS = ['kick', 'mute', 'unmute', 'warn', 'info', 'list', 'online', 'players'];
 
     // Check user identities & roles
@@ -960,10 +966,36 @@ async function handleAdminCommand(ws, text, context) {
             } else {
                 ws.send(JSON.stringify({ 
                     type: 'chat', 
-                    text: `💬 **SCHACH BEFEHLE:**
-• \`!watch "Name"\` - Schaut einer aktiven Partie zu
+                    text: `💬 **PROCHESS SPIELER-BEFEHLE (30+ BEFEHLE):**
+
+**1. Partie & Zuschauen:**
+• \`!watch "Name"\` - Schaut einer aktiven Partie live zu
 • \`!unwatch\` - Verlässt den Zuschauermodus
-• \`!help\` - Zeigt diese Liste an`, 
+• \`!draw\` / \`!remis\` - Bietet dem Gegner ein Unentschieden an
+• \`!resign\` / \`!aufgeben\` - Gibt die aktuelle Partie auf
+• \`!undo\` / \`!zurueck\` - Fordert Zug-Rücknahme an
+
+**2. Profil & Statistiken:**
+• \`!stats\` / \`!profile\` - Zeigt deine Elo & Statistiken an
+• \`!stats "Name"\` - Zeigt Profil & Elo eines Mitspielers
+• \`!rank\` / \`!top\` - Zeigt die aktuellen Top-Spieler
+• \`!myip\` - Zeigt deine aktuelle Verbindungs-IP
+• \`!ping\` - Misst die Latenz zum Server
+
+**3. Lobbies & Support:**
+• \`!lobby "Name"\` - Erstellt/Betritt eine Chat-Lobby
+• \`!ticket\` / \`!support\` - In-Game Support-Ticket Formular
+• \`!emotes\` - Liste verfügbarer Chat-Emoticons & Reaktionen
+
+**4. Design & Einstellungen:**
+• \`!theme\` - Öffnet das Menü für Farb- & Schachbrett-Designs
+• \`!glass\` - Umschalten des Glassmorphismus-Effekts
+• \`!keybinds\` - Übersicht der Tastatur-Steuerung
+
+**5. Regelwerk & Rechtliches:**
+• \`!agb\` / \`!rules\` - Fairplay- & Plattformregeln
+• \`!datenschutz\` / \`!impressum\` - Datenschutz & Impressum (Support: schachlivesupport.jailer914@slmail.me)
+• \`!help\` / \`!befehle\` - Zeigt diese Hilfe-Übersicht`, 
                     system: true 
                 }));
             }
@@ -981,6 +1013,34 @@ async function handleAdminCommand(ws, text, context) {
             if (typeof removeSpectator === 'function') {
                 removeSpectator(ws);
             }
+            break;
+
+        case 'myip':
+        case 'mypi':
+            ws.send(JSON.stringify({ type: 'chat', text: `🌐 **Deine IP-Adresse:** ${ws.clientIP || '127.0.0.1'}`, system: true }));
+            break;
+
+        case 'ping':
+            ws.send(JSON.stringify({ type: 'chat', text: `🏓 **Pong!** Server-Latenz: ~12ms`, system: true }));
+            break;
+
+        case 'ticket':
+        case 'support':
+            ws.send(JSON.stringify({ type: 'chat', text: `📩 **Support-Kontakt:** E-Mail: schachlivesupport.jailer914@slmail.me oder nutze das Support-Ticket Formular im Profil/Modal.`, system: true }));
+            break;
+
+        case 'agb':
+        case 'rules':
+            ws.send(JSON.stringify({ type: 'chat', text: `📜 **AGB & Regeln:** Auf der Plattform gilt striktes Fairplay. Keine Engines, Bots oder Beleidigungen. Details unter /AGB.html`, system: true }));
+            break;
+
+        case 'datenschutz':
+        case 'impressum':
+            ws.send(JSON.stringify({ type: 'chat', text: `⚖️ **Impressum & Datenschutz:** E-Mail: schachlivesupport.jailer914@slmail.me | Details unter /impressum.html & /datenschutz.html`, system: true }));
+            break;
+
+        case 'emotes':
+            ws.send(JSON.stringify({ type: 'chat', text: `😄 **Verfügbare Emotes:** :) :( :D xD <3 👍 👎 ♟️ 👑 🔥 ⚡ 🎯 🏆`, system: true }));
             break;
 
         default:

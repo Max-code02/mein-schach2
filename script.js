@@ -323,9 +323,11 @@ window.handleAdminUsersUpdate = function(users) {
         if (role === 'admin' || role === 'Admin') roleBadge = '<span style="background: #e74c3c; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; font-weight: bold;">👑 Admin</span>';
         else if (role === 'moderator' || role === 'Mod') roleBadge = '<span style="background: #f39c12; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75em;">🛡️ Mod</span>';
 
-        let banBtn = `<button onclick="adminBanUser('${u.username}')" style="background: #c0392b; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;">⛔ Ban</button>`;
+        let kickBtn = `<button onclick="adminKickUser('${u.username}')" style="background: #e67e22; color: white; border: none; padding: 3px 7px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;" title="Spieler kicken">⚡ Kick</button>`;
+
+        let banBtn = `<button onclick="adminBanUser('${u.username}')" style="background: #c0392b; color: white; border: none; padding: 3px 7px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;" title="Spieler bannen">⛔ Ban</button>`;
         if (isBanned) {
-            banBtn = `<button onclick="adminUnbanUser('${u.username}')" style="background: #27ae60; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;">🔓 Entbannen</button>`;
+            banBtn = `<button onclick="adminUnbanUser('${u.username}')" style="background: #27ae60; color: white; border: none; padding: 3px 7px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;" title="Spieler entbannen">🔓 Entbannen</button>`;
         }
 
         return `
@@ -341,12 +343,139 @@ window.handleAdminUsersUpdate = function(users) {
                     <div style="display: flex; gap: 4px;">
                         <button onclick="setUserRole('${u.username}', 'admin')" style="background: #8e44ad; color: white; border: none; padding: 3px 6px; border-radius: 3px; font-size: 0.7em; cursor: pointer;">👑 Admin</button>
                         <button onclick="setUserRole('${u.username}', 'moderator')" style="background: #d35400; color: white; border: none; padding: 3px 6px; border-radius: 3px; font-size: 0.7em; cursor: pointer;">🛡️ Mod</button>
+                        ${kickBtn}
                         ${banBtn}
                     </div>
                 </div>
             </div>
         `;
     }).join('');
+};
+
+window.adminKickUser = function(username) {
+    const reason = prompt(`Grund für Kick von ${username}:`, "Fehlverhalten im Spiel / Chat");
+    if (reason !== null && socket && socket.readyState === 1) {
+        socket.send(JSON.stringify({ type: 'admin_action', action: 'kick', target: username, reason: reason }));
+        socket.send(JSON.stringify({ type: 'chat_message', username: getMyName(), content: `/kick "${username}" ${reason}` }));
+        window.showInAppNotification("Admin", `Kick für ${username} gesendet.`, "warning");
+        setTimeout(window.requestAdminUsersRefresh, 500);
+    }
+};
+
+window.sendBannedUserSupportTicket = function() {
+    const contact = document.getElementById('ban-ticket-contact')?.value?.trim();
+    const text = document.getElementById('ban-ticket-text')?.value?.trim();
+    const statusEl = document.getElementById('ban-ticket-status');
+    const reasonText = document.getElementById('account-banned-reason-text')?.innerText || 'Admin-Gesperrt';
+
+    if (!text) {
+        if (statusEl) {
+            statusEl.style.color = '#e74c3c';
+            statusEl.innerText = '❌ Bitte gib eine Nachricht an den Support ein.';
+        }
+        return;
+    }
+
+    if (statusEl) {
+        statusEl.style.color = '#f39c12';
+        statusEl.innerText = '⏳ Sende Support-Ticket...';
+    }
+
+    const payload = {
+        user: contact || window.currentUser || 'Gesperrter Spieler',
+        contact: contact || 'Keine Angabe',
+        email: 'schachlivesupport.jailer914@slmail.me',
+        text: text,
+        banReason: reasonText
+    };
+
+    fetch('/api/support-ticket', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    }).then(res => res.json()).then(data => {
+        if (data && data.success) {
+            if (statusEl) {
+                statusEl.style.color = '#2ecc71';
+                statusEl.innerHTML = `✅ Ticket <strong>${data.ticketId}</strong> erfolgreich übermittelt! E-Mail: <strong>schachlivesupport.jailer914@slmail.me</strong>`;
+            }
+            const txtInput = document.getElementById('ban-ticket-text');
+            if (txtInput) txtInput.value = '';
+        } else {
+            throw new Error(data?.message || 'Senden fehlgeschlagen');
+        }
+    }).catch(err => {
+        if (socket && socket.readyState === 1) {
+            socket.send(JSON.stringify({ type: 'submit_support_ticket', ...payload }));
+            if (statusEl) {
+                statusEl.style.color = '#2ecc71';
+                statusEl.innerHTML = `✅ Ticket gesendet! Support-E-Mail: <strong>schachlivesupport.jailer914@slmail.me</strong>`;
+            }
+            const txtInput = document.getElementById('ban-ticket-text');
+            if (txtInput) txtInput.value = '';
+        } else {
+            if (statusEl) {
+                statusEl.style.color = '#e74c3c';
+                statusEl.innerText = '❌ Senden fehlgeschlagen. Wende dich bitte direkt per E-Mail an schachlivesupport.jailer914@slmail.me';
+            }
+        }
+    });
+};
+
+window.requestAdminTicketsRefresh = function() {
+    fetch('/api/admin/tickets')
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.tickets) {
+                window.renderAdminTickets(data.tickets);
+            }
+        })
+        .catch(err => {
+            if (socket && socket.readyState === 1) {
+                socket.send(JSON.stringify({ type: 'get_admin_tickets' }));
+            }
+        });
+};
+
+window.renderAdminTickets = function(tickets) {
+    const container = document.getElementById('admin-tickets-container');
+    if (!container) return;
+
+    if (!tickets || tickets.length === 0) {
+        container.innerHTML = `<div style="color: #aaa; text-align: center; font-style: italic; font-size: 0.85em; padding: 10px 0;">Keine Support-Tickets vorhanden.</div>`;
+        return;
+    }
+
+    container.innerHTML = tickets.map(t => {
+        const statusColor = t.status === 'Offen' ? '#e74c3c' : (t.status === 'In Bearbeitung' ? '#f39c12' : '#2ecc71');
+        return `
+            <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-left: 3px solid ${statusColor}; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <span style="font-weight: bold; color: #fff; font-size: 0.85em;">${t.user} <span style="font-size: 0.75em; color: #888;">(${t.id})</span></span>
+                    <span style="background: ${statusColor}; color: white; padding: 1px 6px; border-radius: 10px; font-size: 0.7em; font-weight: bold;">${t.status || 'Offen'}</span>
+                </div>
+                <div style="font-size: 0.75em; color: #aaa; margin-bottom: 4px;">Kontakt: ${t.contact || t.email || 'schachlivesupport.jailer914@slmail.me'} | ${t.createdAt || ''}</div>
+                <div style="font-size: 0.8em; color: #ddd; background: rgba(0,0,0,0.3); padding: 6px; border-radius: 4px; margin-bottom: 6px;">${t.text}</div>
+                ${t.banReason ? `<div style="font-size: 0.75em; color: #ff9999; margin-bottom: 4px;">Bann-Grund: ${t.banReason}</div>` : ''}
+                ${t.reply ? `<div style="font-size: 0.75em; color: #2ecc71; margin-bottom: 4px;">Antwort: ${t.reply}</div>` : ''}
+                <div style="display: flex; gap: 6px; margin-top: 6px;">
+                    <button onclick="adminUnbanUser('${t.user}')" style="background: #27ae60; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer; font-weight: bold;">🔓 User Entbannen</button>
+                    <button onclick="replyToTicket('${t.id}')" style="background: #3498db; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer;">💬 Antworten</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+};
+
+window.replyToTicket = function(ticketId) {
+    const reply = prompt("Antwort / Statusänderung für Support-Ticket:");
+    if (reply !== null) {
+        fetch('/api/admin/reply-ticket', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticketId, reply, status: 'Beantwortet' })
+        }).then(() => window.requestAdminTicketsRefresh());
+    }
 };
 
 window.setUserRole = function(username, role) {
