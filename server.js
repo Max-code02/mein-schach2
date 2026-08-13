@@ -10,6 +10,19 @@ const WebSocket = require('ws');
 let bannedIPs = new Set();
 let bannedPlayers = new Set();
 const ADMIN_PASSWORDS_LIST = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi', '222'];
+
+function isLoopbackOrLocalIP(ip) {
+    if (!ip) return true;
+    const cleanIP = String(ip).split(',')[0].replace(/^::ffff:/, '').trim();
+    if (cleanIP === '127.0.0.1' || cleanIP === '::1' || cleanIP === 'localhost' || cleanIP === 'unknown' || cleanIP === '') return true;
+    if (cleanIP.startsWith('10.') || 
+        cleanIP.startsWith('192.168.') || 
+        cleanIP.startsWith('127.') || 
+        /^172\.(1[6-9]|2[0-9]|3[01])\./.test(cleanIP)) {
+        return true;
+    }
+    return false;
+}
 const userMessageLog = new Map();
 const SPAM_THRESHOLD = 5;
 const SPAM_INTERVAL = 3000;
@@ -161,9 +174,13 @@ const VIDEO_DIR = path.join(__dirname, 'videos');
 });
 
 function banIPPermanently(ip, reason = "Anti-Hack Trigger") {
-    if (ip && !bannedIPs.has(ip)) {
+    if (!ip || isLoopbackOrLocalIP(ip)) {
+        console.log(`🛡️ IP '${ip}' ist eine lokale/interne/Proxy-IP und wird NICHT gebannt.`);
+        return;
+    }
+    if (!bannedIPs.has(ip)) {
         bannedIPs.add(ip);
-        console.log(`🚫 IP ${ip} wurde zur internen Sperrliste hinzugefügt.`);
+        console.log(`🚫 IP ${ip} wurde zur internen Sperrliste hinzugefügt. Grund: ${reason}`);
         
         const htaccessPath = path.join(__dirname, '.htaccess');
         const denyLine = `\nDeny from ${ip}`;
@@ -173,7 +190,10 @@ function banIPPermanently(ip, reason = "Anti-Hack Trigger") {
             else console.log(`🚫 IP ${ip} wurde permanent in .htaccess gesperrt!`);
         });
 
-            }
+        try {
+            fs.writeFileSync(BAN_FILE, JSON.stringify([...bannedIPs], null, 2));
+        } catch (e) {}
+    }
 }
 
 module.exports = { banIPPermanently };
@@ -212,12 +232,79 @@ async function sendBanEmail(playerName, reason, ip) {
     }
 }
 
-// Security Middleware
+// Emergency Unban & Security Middleware
 app.use((req, res, next) => {
-    const clientIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const rawIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+    const clientIP = String(rawIP).split(',')[0].replace(/^::ffff:/, '').trim();
 
-    if (bannedIPs.has(clientIP)) {
-        return res.status(403).send("<h1>403 Forbidden</h1>Deine IP wurde vom Antihack-System gesperrt.");
+    // Check emergency unban triggers (Query param ?unban=..., ?admin=..., or URL /unban-self)
+    const reqPass = req.query.unban || req.query.admin || req.query.pass || req.headers['x-admin-key'];
+    const isAdminPass = reqPass && ADMIN_PASSWORDS_LIST.some(p => p.toLowerCase() === String(reqPass).toLowerCase().trim());
+    const isLocalOrDev = isLoopbackOrLocalIP(clientIP) || isLoopbackOrLocalIP(rawIP);
+
+    if (isAdminPass || (isLocalOrDev && (req.path === '/unban-self' || req.path === '/api/unban-self'))) {
+        bannedIPs.delete(clientIP);
+        bannedIPs.delete(rawIP);
+        bannedIPs.clear(); // Emergency unban for admin
+        bannedPlayers.clear();
+        console.log(`🔓 Notfall-Entsperrung ausgeführt für IP: ${clientIP}`);
+
+        if (req.path === '/unban-self' || req.path === '/api/unban-self') {
+            return res.status(200).send(`
+                <!DOCTYPE html>
+                <html lang="de">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>IP Entsperrt - Schach</title>
+                    <style>
+                        body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; text-align: center; padding: 60px 20px; }
+                        .card { background: #1e293b; max-width: 520px; margin: 0 auto; padding: 40px; border-radius: 20px; border: 1px solid #10b981; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
+                        h1 { color: #34d399; margin-top: 0; font-size: 28px; }
+                        p { font-size: 16px; color: #cbd5e1; line-height: 1.6; }
+                        .btn { display: inline-block; margin-top: 25px; padding: 14px 28px; background: #10b981; color: #ffffff; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 16px; transition: background 0.2s; }
+                        .btn:hover { background: #059669; }
+                    </style>
+                </head>
+                <body>
+                    <div class="card">
+                        <h1>✅ Admin/Entwickler erfolgreich entsperrt!</h1>
+                        <p>Deine IP (<strong>${clientIP}</strong>) und alle aktiven Sperren wurden zurückgesetzt.</p>
+                        <a href="/" class="btn">🎮 Zurück zur Schach-Anwendung</a>
+                    </div>
+                </body>
+                </html>
+            `);
+        }
+    }
+
+    // Never block loopback, localhost, or internal container/proxy IPs
+    if (isLoopbackOrLocalIP(clientIP) || isLoopbackOrLocalIP(rawIP)) {
+        return next();
+    }
+
+    if (bannedIPs.has(clientIP) || bannedIPs.has(rawIP)) {
+        return res.status(403).send(`
+            <!DOCTYPE html>
+            <html lang="de">
+            <head>
+                <meta charset="UTF-8">
+                <title>403 Zugriff verweigert</title>
+                <style>
+                    body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; text-align: center; padding: 60px 20px; }
+                    .card { background: #1e293b; max-width: 520px; margin: 0 auto; padding: 40px; border-radius: 20px; border: 1px solid #ef4444; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
+                    h1 { color: #f87171; margin-top: 0; font-size: 28px; }
+                    p { font-size: 16px; color: #cbd5e1; line-height: 1.6; }
+                </style>
+            </head>
+            <body>
+                <div class="card">
+                    <h1>⛔ IP-Adresse gesperrt</h1>
+                    <p>Deine IP-Adresse (<strong>${clientIP}</strong>) wurde vom Anti-Hack-System gesperrt.</p>
+                    <p style="font-size: 13px; color: #94a3b8; margin-top: 20px;">Support: Wende dich an den Administrator oder nutze den Admin-Bypass-Schlüssel.</p>
+                </div>
+            </body>
+            </html>
+        `);
     }
 
     if (req.headers['x-forwarded-proto'] !== 'https' && process.env.NODE_ENV === 'production') {
@@ -996,9 +1083,13 @@ async function loadFirestoreBans() {
             const type = data.type; // 'ip' or 'username'
             if (target && type) {
                 if (type === 'ip') {
-                    bannedIPs.add(target);
+                    if (!isLoopbackOrLocalIP(target)) {
+                        bannedIPs.add(target);
+                    }
                 } else if (type === 'username') {
-                    bannedPlayers.add(target.trim().toLowerCase());
+                    if (!isUserAdmin(target)) {
+                        bannedPlayers.add(target.trim().toLowerCase());
+                    }
                 }
             }
         });
