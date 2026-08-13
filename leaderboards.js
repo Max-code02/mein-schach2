@@ -9,15 +9,6 @@ const ACHIEVEMENTS = [
     { id: "coin_tycoon", name: "Münz-Tycoon", description: "Besitze über 5.000 Vorhersage-Coins", icon: "💰" }
 ];
 
-// Simulierte/Lokale Saisondaten
-const mockSeasonalLeaderboard = [
-    { rank: 1, username: "Max_Schach", rating: 2350, gamesPlayed: 142, badge: "⚡ Legende" },
-    { rank: 2, username: "Magnus_Bot", rating: 2280, gamesPlayed: 98, badge: "🔱 Großmeister" },
-    { rank: 3, username: "ChessMaster99", rating: 2010, gamesPlayed: 215, badge: "👑 Meister" },
-    { rank: 4, username: "TaktikFuchs", rating: 1850, gamesPlayed: 76, badge: "🏆 Diamant" },
-    { rank: 5, username: "SpeedyKnight", rating: 1720, gamesPlayed: 110, badge: "💎 Platin" }
-];
-
 /**
  * Holt die aktuelle Saisonbezeichnung (z.B. "Saison August 2026")
  */
@@ -28,13 +19,52 @@ function getCurrentSeasonName() {
 }
 
 /**
- * Holt die Rangliste für ein gewähltes Format (blitz, rapid, bullet, puzzles)
+ * Generiert ein Rang-Badge basierend auf Elo
  */
-function getFormatLeaderboard(format = 'blitz') {
+function getBadgeForElo(elo = 1200) {
+    if (elo >= 2300) return "⚡ Legende";
+    if (elo >= 2000) return "🔱 Großmeister";
+    if (elo >= 1800) return "👑 Meister";
+    if (elo >= 1600) return "🏆 Diamant";
+    if (elo >= 1400) return "💎 Platin";
+    if (elo >= 1200) return "🥇 Gold";
+    return "♟️ Anfänger";
+}
+
+/**
+ * Holt die Rangliste für ein gewähltes Format aus der echten User-Datenbank
+ */
+function getFormatLeaderboard(format = 'blitz', userDB = {}) {
+    let list = [];
+
+    if (userDB && Object.keys(userDB).length > 0) {
+        list = Object.entries(userDB)
+            .map(([uname, u]) => ({
+                username: uname,
+                rating: u.elo || 1200,
+                gamesPlayed: (u.wins || 0) + (u.losses || 0),
+                wins: u.wins || 0,
+                badge: getBadgeForElo(u.elo || 1200)
+            }))
+            .sort((a, b) => (b.rating !== a.rating ? b.rating - a.rating : b.wins - a.wins));
+    }
+
+    if (list.length === 0) {
+        list = [
+            { username: "Max_Schach", rating: 2350, gamesPlayed: 142, wins: 110, badge: "⚡ Legende" },
+            { username: "Magnus_Bot", rating: 2280, gamesPlayed: 98, wins: 80, badge: "🔱 Großmeister" }
+        ];
+    }
+
+    const rankedList = list.map((item, index) => ({
+        rank: index + 1,
+        ...item
+    }));
+
     return {
         season: getCurrentSeasonName(),
         format: format.toUpperCase(),
-        leaderboard: mockSeasonalLeaderboard
+        leaderboard: rankedList
     };
 }
 

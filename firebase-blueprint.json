@@ -54,9 +54,30 @@
         "createdAt": { "type": "string" }
       },
       "required": ["target", "type"]
+    },
+    "LeaderboardEntry": {
+      "title": "LeaderboardEntry",
+      "description": "Rankings and highscore data for global and seasonal leaderboards",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "name": { "type": "string" },
+        "elo": { "type": "number" },
+        "wins": { "type": "number" },
+        "losses": { "type": "number" },
+        "level": { "type": "number" },
+        "xp": { "type": "number" },
+        "role": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["username"]
     }
   },
   "firestore": {
+    "/leaderboard/{entryDocId}": {
+      "schema": { "$ref": "#/entities/LeaderboardEntry" },
+      "description": "Leaderboard highscore entries collection"
+    },
     "/players/{playerId}": {
       "schema": { "$ref": "#/entities/Player" },
       "description": "Player collection"

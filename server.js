@@ -127,8 +127,9 @@ try {
                 });
             }
             const { getFirestore } = require('firebase-admin/firestore');
-            if (fbConfig.firestoreDatabaseId) {
-                firestoreDb = getFirestore(admin.app(), fbConfig.firestoreDatabaseId);
+            const targetDbId = fbConfig.databaseId || fbConfig.firestoreDatabaseId;
+            if (targetDbId && targetDbId !== '(default)') {
+                firestoreDb = getFirestore(admin.app(), targetDbId);
             } else {
                 firestoreDb = getFirestore();
             }
@@ -333,19 +334,35 @@ app.post('/api/register', async (req, res) => {
 
 app.get('/api/leaderboard', async (req, res) => {
     try {
-                if (data && data.length > 0) {
-            const list = data.map(p => ({
-                name: p.username,
-                wins: p.wins || 0,
-                elo: p.elo || 1200,
-                level: p.level || 1,
-                xp: p.xp || 0,
-                role: p.role || 'Gast'
-            }));
-            return res.json({ success: true, list });
+        if (typeof firestoreDb !== 'undefined' && firestoreDb) {
+            let snapshot = await firestoreDb.collection('leaderboard').get();
+            if (snapshot.empty) {
+                snapshot = await firestoreDb.collection('players').get();
+            }
+            if (!snapshot.empty) {
+                const list = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const uname = doc.id || data.username || data.name;
+                    if (uname && uname !== 'global') {
+                        list.push({
+                            name: uname,
+                            wins: data.wins || 0,
+                            elo: data.elo || 1200,
+                            level: data.level || 1,
+                            xp: data.xp || 0,
+                            role: data.role || 'Gast'
+                        });
+                    }
+                });
+                list.sort((a, b) => (b.elo !== a.elo ? b.elo - a.elo : b.wins - a.wins));
+                if (list.length > 0) {
+                    return res.json({ success: true, list: list.slice(0, 100) });
+                }
+            }
         }
     } catch (err) {
-        console.error("SQL Leaderboard Fetch Error:", err);
+        console.error("Firestore Leaderboard Fetch Error:", err.message);
     }
 
     const sorted = Object.entries(userDB)
@@ -357,8 +374,9 @@ app.get('/api/leaderboard', async (req, res) => {
             xp: u.xp || 0,
             role: u.role || 'Gast'
         }))
-        .sort((a, b) => b.wins - a.wins)
-        .slice(0, 10);
+        .sort((a, b) => (b.elo !== a.elo ? b.elo - a.elo : b.wins - a.wins))
+        .slice(0, 100);
+
     res.json({ success: true, list: sorted });
 });
 
@@ -922,6 +940,43 @@ async function loadFirestoreProfiles() {
             }
         });
         console.log(`🔥 ${snapshot.size} Nutzer-Profile aus Firestore synchronisiert.`);
+
+        // Also fetch leaderboard collection from Firestore
+        const lbSnapshot = await firestoreDb.collection('leaderboard').get();
+        lbSnapshot.forEach(doc => {
+            const data = doc.data();
+            const uname = doc.id || data.username || data.name;
+            if (uname && uname !== 'global') {
+                if (!userDB[uname]) {
+                    userDB[uname] = {
+                        username: uname,
+                        elo: data.elo || 1200,
+                        wins: data.wins || 0,
+                        losses: data.losses || 0,
+                        level: data.level || 1,
+                        xp: data.xp || 0,
+                        role: data.role || "user"
+                    };
+                }
+                leaderboard[uname] = data.wins || userDB[uname].wins || 0;
+            }
+        });
+
+        // Ensure every userDB entry is synced to Firestore leaderboard collection
+        for (const uname in userDB) {
+            const u = userDB[uname];
+            firestoreDb.collection('leaderboard').doc(uname).set({
+                username: uname,
+                name: uname,
+                elo: u.elo || 1200,
+                wins: u.wins || 0,
+                losses: u.losses || 0,
+                level: u.level || 1,
+                xp: u.xp || 0,
+                role: u.role || 'Gast',
+                updatedAt: new Date().toISOString()
+            }, { merge: true }).catch(() => {});
+        }
     } catch (e) {
         console.warn("Firestore profiles load error:", e.message);
     }
@@ -1312,15 +1367,30 @@ async function saveAll(specificPlayerName = null) {
     }
 
     try {
-        const sqlOps = [];
         const playersToSave = specificPlayerName ? [specificPlayerName] : Object.keys(userDB);
         for (const uname of playersToSave) {
             const u = userDB[uname];
             if (!u) continue;
             
-            // 🔥 Firebase Cloud Firestore Sync!
+            // 🔥 Firebase Cloud Firestore Sync for Players & Leaderboard!
             if (typeof firestoreDb !== 'undefined' && firestoreDb) {
-                firestoreDb.collection('players').doc(uname).set(u, { merge: true }).catch(e => console.error('Firestore save err:', e));
+                firestoreDb.collection('players').doc(uname).set(u, { merge: true })
+                    .catch(e => console.error('Firestore player save err:', e.message));
+
+                const lbEntry = {
+                    username: uname,
+                    name: uname,
+                    elo: u.elo || 1200,
+                    wins: u.wins || 0,
+                    losses: u.losses || 0,
+                    level: u.level || 1,
+                    xp: u.xp || 0,
+                    role: u.role || 'Gast',
+                    updatedAt: new Date().toISOString()
+                };
+
+                firestoreDb.collection('leaderboard').doc(uname).set(lbEntry, { merge: true })
+                    .catch(e => console.error('Firestore leaderboard save err:', e.message));
             }
         }
     } catch (e) {
