@@ -1311,12 +1311,22 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
         if (gameModeSelect) {
             if (gameModeSelect.value === "bot" && turn === "black") {
                 const diffSelect = document.getElementById("botDifficulty");
-                const level = diffSelect ? parseInt(diffSelect.value) : 5;
+                const diffVal = diffSelect ? diffSelect.value : "instant";
                 const fen = typeof boardToFEN === 'function' ? boardToFEN() : "";
-                if (fen) {
-                    stockfishWorker.postMessage('setoption name Skill Level value ' + (level * 2));
+
+                if (diffVal === "10" && typeof stockfishWorker !== 'undefined') {
+                    let stockfishAnswered = false;
+                    const fallbackTimer = setTimeout(() => {
+                        if (!stockfishAnswered && turn === "black" && gameModeSelect && gameModeSelect.value === "bot") {
+                            myEngineWorker.postMessage({ board, turn: "black", fen, difficulty: "10" });
+                        }
+                    }, 1200);
+
+                    stockfishWorker.postMessage('setoption name Skill Level value 20');
                     stockfishWorker.postMessage(`position fen ${fen}`);
-                    stockfishWorker.postMessage(`go depth ${level * 2}`);
+                    stockfishWorker.postMessage(`go depth 10`);
+                } else {
+                    myEngineWorker.postMessage({ board, turn: "black", fen, difficulty: diffVal });
                 }
             }
         }
@@ -1331,13 +1341,13 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
     }, animationDuration);
 }
 
-function resetGame() {
+function resetGame(keepCurrentMode = false) {
     if (typeof window.switchSidebarTab === "function") {
         const gameBtn = document.querySelectorAll(".sidebar-tab-btn")[0];
         if (gameBtn) window.switchSidebarTab("tab-game", gameBtn);
     }
     const gameModeSelect = document.getElementById("gameMode");
-    if (gameModeSelect && (gameModeSelect.value === "random" || gameModeSelect.value === "online" || gameModeSelect.value === "bot")) {
+    if (!keepCurrentMode && gameModeSelect && (gameModeSelect.value === "random" || gameModeSelect.value === "online")) {
         gameModeSelect.value = "local";
         const timeCtrl = document.getElementById("time-control-container");
         if (timeCtrl) timeCtrl.style.display = "block";
@@ -1742,8 +1752,11 @@ window.addEventListener('DOMContentLoaded', () => {
                 if (roomInput && roomInput.value.trim()) {
                     onlineRoom = roomInput.value.trim();
                 }
+            } else if (mode === "bot") {
+                resetGame(true);
+                addChat("System", "🤖 Spiel gegen den Computer gestartet! Wähle deine Schwierigkeit.", "system");
             } else {
-                resetGame();
+                resetGame(true);
             }
         };
     }
@@ -2437,8 +2450,12 @@ socket.onmessage = (e) => {
             return;
         }
         if (data.type === 'move') {
-            if (data.fr !== undefined && data.fc !== undefined && data.tr !== undefined && data.tc !== undefined) {
-                doMove(data.fr, data.fc, data.tr, data.tc, false);
+            const fr = data.fr !== undefined ? data.fr : (data.move ? data.move.fr : undefined);
+            const fc = data.fc !== undefined ? data.fc : (data.move ? data.move.fc : undefined);
+            const tr = data.tr !== undefined ? data.tr : (data.move ? data.move.tr : undefined);
+            const tc = data.tc !== undefined ? data.tc : (data.move ? data.move.tc : undefined);
+            if (fr !== undefined && fc !== undefined && tr !== undefined && tc !== undefined) {
+                doMove(fr, fc, tr, tc, false);
             }
             return;
         }
@@ -2859,17 +2876,20 @@ if (resignBtn) {
 }
 
 myEngineWorker.onmessage = (e) => {
-    if(e.data && turn === "black" && gameModeSelect && gameModeSelect.value === "bot") {
+    if (e.data && turn === "black" && gameModeSelect && gameModeSelect.value === "bot") {
         const { fr, fc, tr, tc } = e.data;
+        const diffSelect = document.getElementById("botDifficulty");
+        const isInstant = diffSelect && (diffSelect.value === "instant" || diffSelect.value === "1");
+        const delay = isInstant ? 50 : 180;
         setTimeout(() => {
-            if (board[fr][fc]) {
+            if (board && board[fr] && board[fr][fc]) {
                 const p = board[fr][fc];
                 if (p.toLowerCase() === 'p' && (tr === 0 || tr === 7)) {
                     board[fr][fc] = p === 'P' ? 'Q' : 'q';
                 }
             }
             doMove(fr, fc, tr, tc, false);
-        }, 600);
+        }, delay);
     }
 };
 
@@ -2885,11 +2905,11 @@ stockfishWorker.onmessage = (e) => {
             const tc = cols.indexOf(match[2][0]);
             const prom = match[3];
             setTimeout(() => {
-                if (prom && board[fr][fc]) {
+                if (prom && board && board[fr] && board[fr][fc]) {
                     board[fr][fc] = board[fr][fc] === 'P' ? prom.toUpperCase() : prom.toLowerCase();
                 }
                 doMove(fr, fc, tr, tc, false);
-            }, 600);
+            }, 100);
         }
     }
 };

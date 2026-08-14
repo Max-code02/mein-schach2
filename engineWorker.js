@@ -222,7 +222,9 @@ function alphaBeta(board, depth, alpha, beta, maximizing, turn) {
 
 // HAUPT-LOGIK
 onmessage = function(e) {
-    const { board, turn, fen } = e.data;
+    if (!e || !e.data) return;
+    const { board, turn, fen, difficulty } = e.data;
+    if (!board || !turn) return;
 
     // 1. Eröffnungsbuch
     const cleanFen = fen ? fen.split(' ')[0] : null;
@@ -238,7 +240,7 @@ onmessage = function(e) {
     }
 
     const moves = generateMoves(board, turn);
-    if (moves.length === 0) { postMessage(null); return; }
+    if (!moves || moves.length === 0) { postMessage(null); return; }
 
     let bestMove = moves[0];
     let bestScore = turn === "white" ? -Infinity : Infinity;
@@ -246,8 +248,20 @@ onmessage = function(e) {
     // Wir leeren das Gedächtnis bei jedem neuen Zug, um Platz zu sparen
     transpositionTable.clear();
 
+    // Tiefe basierend auf Schwierigkeitsgrad
+    let searchDepth = 3;
+    if (difficulty === 'instant') {
+        searchDepth = 1; // Rechnet in 1 Millisekunde
+    } else if (difficulty === '1') {
+        searchDepth = 2; // Leicht
+    } else if (difficulty === '3') {
+        searchDepth = 3; // Mittel
+    } else if (difficulty === '5' || difficulty === '10') {
+        searchDepth = 4; // Schwer
+    }
+
     for (const m of moves) {
-        const score = alphaBeta(makeMove(board, m), 4, -Infinity, Infinity, turn !== "white", turn === "white" ? "black" : "white");
+        const score = alphaBeta(makeMove(board, m), searchDepth, -Infinity, Infinity, turn !== "white", turn === "white" ? "black" : "white");
         if (turn === "white" ? score > bestScore : score < bestScore) {
             bestScore = score;
             bestMove = m;

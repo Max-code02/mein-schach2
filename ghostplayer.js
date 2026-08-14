@@ -3,6 +3,42 @@ const engine = require('./engineWorker.js');
 
 // Bot-Persönlichkeiten mit individueller Spielweise und Chat-Profilen
 const BOT_PERSONALITIES = {
+    "SofortBot": {
+        "title": "SofortBot",
+        "difficulty": "Instant",
+        "speedPreference": "instant",
+        "playstyle": "aggressive",
+        "aggressiveness": 0.85,
+        "chatFrequency": 0.15,
+        "messages": {
+            "greetings": ["⚡ Hi! Ich antworte sofort!", "Blitzschnell am Start!", "Hi, let's go!"],
+            "thinking": ["Zack!", "Direkt der nächste Zug!"],
+            "aggressive": ["Boom!", "Schlag!", "Angriff!"],
+            "defensive": ["Puh!", "Weiter geht's!"],
+            "check": ["Schach!", "Achtung Schach!"],
+            "endgame": ["Schnelles Endspiel!"],
+            "defeat": ["Gutes Spiel! GG!", "Respekt, gg!"],
+            "victory": ["GG!", "Danke für die schnelle Runde!"]
+        }
+    },
+    "FlashBot": {
+        "title": "FlashBot",
+        "difficulty": "Instant",
+        "speedPreference": "instant",
+        "playstyle": "aggressive",
+        "aggressiveness": 0.9,
+        "chatFrequency": 0.15,
+        "messages": {
+            "greetings": ["⚡ Speed-Schach!", "Hi, bin ultra schnell!", "gl hf!"],
+            "thinking": ["Sofortzug!", "Gleich weiter!"],
+            "aggressive": ["Take!", "Attacke!"],
+            "defensive": ["Knapp!"],
+            "check": ["Schach!"],
+            "endgame": ["Endphase!"],
+            "defeat": ["GG WP!", "Stark gespielt!"],
+            "victory": ["GG!", "Schachmatt, gut gespielt!"]
+        }
+    },
     "luca_99": {
         "title": "luca_99",
         "difficulty": "Medium",
@@ -3128,50 +3164,55 @@ function handleGhostMove(ws, board, color, botName, timeControl = "10+0") {
 
         // Parse Time Control
         let minutes = 10;
-        if (timeControl.includes('+')) {
-            minutes = parseInt(timeControl.split('+')[0]) || 10;
+        if (timeControl) {
+            if (typeof timeControl === 'number') {
+                minutes = timeControl;
+            } else if (typeof timeControl === 'string') {
+                if (timeControl.includes('+')) {
+                    minutes = parseInt(timeControl.split('+')[0]) || 10;
+                } else if (timeControl === 'unlimited') {
+                    minutes = 10;
+                } else {
+                    minutes = parseInt(timeControl) || 10;
+                }
+            }
         }
         
         // Variable Reaktions- & Bedenkzeit based on Time Control and Speed Preference
-        let baseThinkingTime = 800;
-        let randThinkingTime = 1500;
+        let thinkingTime = 100;
         
-        if (minutes <= 1) { // Bullet
-            baseThinkingTime = 100;
-            randThinkingTime = 300;
-        } else if (minutes <= 3) { // Blitz
-            baseThinkingTime = 300;
-            randThinkingTime = 700;
-        } else if (minutes <= 5) {
-            baseThinkingTime = 500;
-            randThinkingTime = 1000;
-        } else { // Rapid / Classic
-            baseThinkingTime = 1000;
-            randThinkingTime = 2000;
+        const isInstantBot = profile.speedPreference === 'instant' || (botName && (botName.includes('Sofort') || botName.includes('Flash') || botName.includes('Instant')));
+        
+        if (isInstantBot) {
+            // Instant bot responds immediately (< 80ms)
+            thinkingTime = Math.floor(40 + Math.random() * 60);
+        } else if (minutes <= 1) { // Bullet (1 min) -> Extremely fast
+            thinkingTime = Math.floor(80 + Math.random() * 120);
+        } else if (minutes <= 3) { // Blitz (3 min) -> Snappy
+            thinkingTime = Math.floor(150 + Math.random() * 200);
+        } else if (minutes <= 5) { // Blitz (5 min) -> Quick
+            thinkingTime = Math.floor(250 + Math.random() * 250);
+        } else { // Rapid / Classic (10 min) -> Fast & steady, never takes forever!
+            thinkingTime = Math.floor(350 + Math.random() * 350);
         }
         
         if (profile.speedPreference === 'bullet') {
-            baseThinkingTime *= 0.6;
-            randThinkingTime *= 0.6;
-        } else if (profile.speedPreference === 'rapid') {
-            baseThinkingTime *= 1.3;
-            randThinkingTime *= 1.3;
+            thinkingTime = Math.max(50, Math.floor(thinkingTime * 0.7));
         }
-
-        let complexityBonus = moves.length * (minutes <= 3 ? 5 : 15);
-        let thinkingTime = baseThinkingTime + Math.random() * randThinkingTime + complexityBonus;
-
-        if (chosenMove.capture) thinkingTime += (minutes <= 3 ? 100 : 300);
-        
-        // Ensure minimum delay so UI doesn't glitch
-        thinkingTime = Math.max(thinkingTime, 150);
 
         setTimeout(() => {
             if (ws && ws.readyState === 1) {
+                const p = (board && board[chosenMove.fr]) ? board[chosenMove.fr][chosenMove.fc] : 'p';
                 ws.send(JSON.stringify({
                     type: 'move',
+                    fr: chosenMove.fr,
+                    fc: chosenMove.fc,
+                    tr: chosenMove.tr,
+                    tc: chosenMove.tc,
                     move: chosenMove,
+                    piece: p,
                     sender: botName,
+                    turn: color === 'white' ? 'black' : 'white',
                     nextTurn: color === 'white' ? 'black' : 'white',
                     board: board 
                  }));

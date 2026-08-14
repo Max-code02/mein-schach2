@@ -693,7 +693,7 @@ Berechne die Genauigkeit (0 bis 100), Aggressivitätsgesamtindex (0 bis 100) und
 
 // Ghost Player configuration
 const ghostNames = [
-    "luca_99", "SchachMatt123", "JulianB", "Felix_M", "Anna_Chess", "alex88", "MariusK", "PawnStar", "max_gamer", "Lena_22", 
+    "SofortBot", "FlashBot", "luca_99", "SchachMatt123", "JulianB", "Felix_M", "Anna_Chess", "alex88", "MariusK", "PawnStar", "max_gamer", "Lena_22", 
     "simon_p", "david_91", "kevin_pro", "sarah_k", "tim_123", "jan_schach", "peter_pan", "lara_croft", "michael_m", "tobias_k", 
     "stephan_b", "chris_99", "julia_s", "lisa_m", "marcel_x", "dennis_d", "philipp_r", "johannes_h", "matthias_w", "christian_g",
     "BulletKing", "blitz_god", "rapid_master", "slow_thinker", "aggressor_99", "defend_pro", "tactics_fan", "endgame_boss"
@@ -2585,26 +2585,57 @@ wss.on('connection', function(ws, req) {
                                 };
                             }
 
+                            let tc = ws.timeControl || data.timeControl || 'unlimited';
+                            let tSecs = 600;
+                            let tInc = 0;
+                            if (tc !== 'unlimited') {
+                                if (tc.includes('+')) {
+                                    const pts = tc.split('+');
+                                    tSecs = (parseInt(pts[0]) || 10) * 60;
+                                    tInc = parseInt(pts[1]) || 0;
+                                } else {
+                                    tSecs = (parseInt(tc) || 10) * 60;
+                                }
+                            } else {
+                                tSecs = Infinity;
+                            }
+
+                            activeRoomStates.set(roomID, {
+                                board: null,
+                                turn: 'white',
+                                isGhostMatch: true,
+                                whitePlayer: ws.playerName || "Gast",
+                                blackPlayer: botName,
+                                timeControl: tc,
+                                timeWhite: tSecs,
+                                timeBlack: tSecs,
+                                timeInc: tInc,
+                                gameOver: false
+                            });
+
                             ws.room = roomID;
                             ws.isGhostMatch = true;
-                            ws.opponentName = botName; 
+                            ws.opponentName = botName;
+                            ws.color = 'white';
                             waitingPlayer = null; 
 
                             ws.send(JSON.stringify({ 
                                 type: 'gameStart', 
                                 opponent: botName, 
-                                 
                                 room: roomID, 
-                                color: 'white' 
+                                color: 'white',
+                                timeControl: tc,
+                                timeWhite: tSecs,
+                                timeBlack: tSecs
                             }));
 
-                            console.log(`🎮 Match erstellt: ${botName} vs. ${ws.playerName}`);
+                            console.log(`🎮 Match erstellt: ${botName} vs. ${ws.playerName} (Time: ${tc})`);
 
                             if (typeof ghost !== 'undefined' && ghost && ghost.handleGhostGreeting) {
                                 ghost.handleGhostGreeting(ws, botName);
                             }
                         }
-                    }, 5000); 
+                    }, 2500); 
                 }
                 return;
             }
@@ -3060,25 +3091,56 @@ wss.on('connection', function(ws, req) {
                                 roomWaitingMap.set(roomName, currList);
 
                                 const botName = ghostNames[Math.floor(Math.random() * ghostNames.length)];
-                            if (!userDB[botName]) {
-                                userDB[botName] = { 
-                                    level: 1 + Math.floor(Math.random() * 5), 
-                                    xp: Math.floor(Math.random() * 100), 
-                                    wins: Math.floor(Math.random() * 20), 
-                                    losses: Math.floor(Math.random() * 20), 
-                                    elo: 1000 + Math.floor(Math.random() * 500), 
-                                    role: 'user' 
-                                };
-                            }
+                                if (!userDB[botName]) {
+                                    userDB[botName] = { 
+                                        level: 1 + Math.floor(Math.random() * 5), 
+                                        xp: Math.floor(Math.random() * 100), 
+                                        wins: Math.floor(Math.random() * 20), 
+                                        losses: Math.floor(Math.random() * 20), 
+                                        elo: 1000 + Math.floor(Math.random() * 500), 
+                                        role: 'user' 
+                                    };
+                                }
+                                let tc = ws.timeControl || '10+0';
+                                let tSecs = 600;
+                                let tInc = 0;
+                                if (tc !== 'unlimited') {
+                                    if (tc.includes('+')) {
+                                        const pts = tc.split('+');
+                                        tSecs = (parseInt(pts[0]) || 10) * 60;
+                                        tInc = parseInt(pts[1]) || 0;
+                                    } else {
+                                        tSecs = (parseInt(tc) || 10) * 60;
+                                    }
+                                } else {
+                                    tSecs = Infinity;
+                                }
+
+                                activeRoomStates.set(roomName, {
+                                    board: null,
+                                    turn: 'white',
+                                    isGhostMatch: true,
+                                    whitePlayer: ws.playerName || "Gast",
+                                    blackPlayer: botName,
+                                    timeControl: tc,
+                                    timeWhite: tSecs,
+                                    timeBlack: tSecs,
+                                    timeInc: tInc,
+                                    gameOver: false
+                                });
+
                                 ws.isGhostMatch = true;
                                 ws.opponentName = botName;
+                                ws.color = 'white';
 
                                 ws.send(JSON.stringify({
                                     type: 'gameStart',
                                     opponent: botName,
-                                    
                                     room: roomName,
-                                    color: 'white'
+                                    color: 'white',
+                                    timeControl: tc,
+                                    timeWhite: tSecs,
+                                    timeBlack: tSecs
                                 }));
                                 if (typeof ghost !== 'undefined' && ghost && ghost.handleGhostGreeting) {
                                     ghost.handleGhostGreeting(ws, botName);
