@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Schach Live - Mobile | Smartphone Schach</title>
+    <meta name="description" content="Optimiertes Handy-Schach live gegen Freunde oder KI. Vollbild-Brett, Touch-Steuerung und Echtzeit-Chat.">
+    <meta name="theme-color" content="#121522">
+    
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+    <style>
+        /* Mobile-First Master Overrides */
+        :root {
+            --mobile-bg: #0c0e17;
+            --mobile-card: rgba(20, 24, 38, 0.92);
+            --mobile-border: rgba(255, 255, 255, 0.12);
+            --mobile-accent: #2ecc71;
+            --mobile-primary: #3498db;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--mobile-bg);
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            padding-bottom: 75px; /* Platz für die mobile Bottom-Navigation */
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Mobile Header */
+        .mobile-header {
+            width: 100%;
+            background: rgba(15, 18, 30, 0.95);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--mobile-border);
+            padding: 8px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 999;
+        }
+
+        .mobile-brand {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 800;
+            font-size: 1.1rem;
+            color: #fff;
+        }
+
+        .mobile-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-pc-switch {
+            background: rgba(52, 152, 219, 0.15);
+            border: 1px solid #3498db;
+            color: #3498db;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Game Layout on Mobile */
+        .mobile-main-container {
+            width: 100%;
+            max-width: 500px;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        /* Player Clocks Bar */
+        .mobile-player-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--mobile-card);
+            border: 1px solid var(--mobile-border);
+            border-radius: 10px;
+            padding: 8px 12px;
+            width: 100%;
+        }
+
+        .mobile-player-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .mobile-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #2c3e50;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .mobile-player-name {
+            font-weight: bold;
+            font-size: 0.95rem;
+            color: #f1c40f;
+            max-width: 140px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .mobile-player-sub {
+            font-size: 0.75rem;
+            color: #aaa;
+        }
+
+        .mobile-clock {
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: 800;
+            font-size: 1.25rem;
+            background: #111;
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            color: #ddd;
+            min-width: 75px;
+            text-align: center;
+        }
+
+        .mobile-clock.active {
+            background: #27ae60;
+            border-color: #2ecc71;
+            color: #fff;
+            box-shadow: 0 0 12px rgba(46, 204, 113, 0.6);
+        }
+
+        .mobile-clock.low-time {
+            background: #c0392b;
+            border-color: #e74c3c;
+            color: #fff;
+            animation: pulseRed 1s infinite;
+        }
+
+        /* Chessboard Container for Touch */
+        #board-wrapper {
+            width: 100%;
+            max-width: min(calc(100vw - 16px), 480px);
+            aspect-ratio: 1 / 1;
+            margin: 0 auto;
+            position: relative;
+            touch-action: manipulation;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.6);
+        }
+
+        #chess-board {
+            width: 100% !important;
+            height: 100% !important;
+            display: grid !important;
+            grid-template-columns: repeat(8, 1fr) !important;
+            grid-template-rows: repeat(8, 1fr) !important;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .cell {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            font-size: clamp(2rem, 8vw, 3.2rem);
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        /* Mobile Quick Action Buttons */
+        .mobile-quick-actions {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            width: 100%;
+            margin-top: 4px;
+        }
+
+        .mobile-quick-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--mobile-border);
+            color: #fff;
+            padding: 10px 4px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        .mobile-quick-btn:active {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(0.96);
+        }
+
+        /* Bottom Tab Navigation Bar */
+        .mobile-bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 62px;
+            background: rgba(14, 17, 28, 0.98);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-top: 1px solid var(--mobile-border);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            z-index: 10000;
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+
+        .mobile-nav-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #8e9bb0;
+            font-size: 0.72rem;
+            font-weight: bold;
+            padding: 6px 0;
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            transition: color 0.2s;
+        }
+
+        .mobile-nav-item .nav-icon {
+            font-size: 1.3rem;
+            margin-bottom: 2px;
+        }
+
+        .mobile-nav-item.active {
+            color: #2ecc71;
+        }
+
+        /* Tab Content Pages on Mobile */
+        .sidebar-tab-content {
+            display: none;
+            width: 100%;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .sidebar-tab-content.active {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .glass-panel {
+            background: var(--mobile-card) !important;
+            border: 1px solid var(--mobile-border) !important;
+            border-radius: 12px !important;
+            padding: 14px !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3) !important;
+        }
+
+        /* Mobile Chat Stream */
+        #chat-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 170px);
+            min-height: 380px;
+        }
+
+        #chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+        }
+
+        /* Mobile Input Improvements */
+        select, input, button {
+            touch-action: manipulation;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="mobile-device">
+
+    <!-- Background Orbs -->
+    <div class="bg-layer">
+        <div class="glow-orb orb-1"></div>
+        <div class="glow-orb orb-2"></div>
+    </div>
+    <div class="bg-grid"></div>
+
+    <!-- Mobile Top Navigation Header -->
+    <header class="mobile-header">
+        <div class="mobile-brand">
+            <span>♟️</span>
+            <span>Schach Live</span>
+            <div id="daily-streak" style="margin-left: 6px; background: rgba(231, 76, 60, 0.2); border: 1px solid #e74c3c; color: #e74c3c; padding: 2px 6px; border-radius: 10px; font-size: 0.72rem; font-weight: bold; cursor: pointer;" onclick="openFeaturesModal()">
+                🔥 <span id="streak-count">1</span>
+            </div>
+        </div>
+        <div class="mobile-header-actions">
+            <span style="font-size: 0.75rem; color: #2ecc71; display: flex; align-items: center; gap: 4px;">
+                ● <span id="nav-server-status" style="display: none;">Server Online</span>
+                <span id="nav-ping" style="color: #3498db;">-- ms</span>
+            </span>
+            <button id="themeToggleBtn" onclick="toggleAppTheme()" class="glass-btn" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 15px;">🌙</button>
+            <button id="navAuthBtn" onclick="openAuthModal()" class="glass-btn primary" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 15px;">🔐</button>
+            <div id="navUserPill" style="display: none; align-items: center; gap: 4px; background: rgba(255,255,255,0.1); padding: 3px 8px; border-radius: 15px; font-size: 0.75rem;">
+                <span id="navUserName" style="color: #f1c40f; font-weight: bold;">Gast</span>
+                <button id="navLogoutBtn" onclick="logout()" class="glass-btn danger" style="padding: 2px 6px; font-size: 0.65rem; border-radius: 10px;">X</button>
+            </div>
+            <a href="index.html?mode=desktop" class="btn-pc-switch" onclick="setPcPreference()" title="Zur Desktop-Version wechseln">💻 PC</a>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="mobile-main-container">
+
+        <!-- Hidden elements required by script.js / script2.js for backward-compat -->
+        <span id="nav-user-counter" style="display: none;">1 Online</span>
+        <button id="navThemeToggle" onclick="toggleAppTheme()" style="display: none;"></button>
+        <button id="navFocusToggle" onclick="toggleChessMode()" style="display: none;"></button>
+
+        <!-- ================= TAB 1: SPIEL (GAME BOARD) ================= -->
+        <div id="tab-game" class="sidebar-tab-content active">
+
+            <!-- Opponent Clock & Profile Bar (Top) -->
+            <div class="mobile-player-bar">
+                <div class="mobile-player-info">
+                    <div class="mobile-avatar">👤</div>
+                    <div>
+                        <div class="mobile-player-name" id="name-black">Schwarz</div>
+                        <div class="mobile-player-sub">Gegner</div>
+                    </div>
+                </div>
+                <div class="player-clock mobile-clock" id="clock-black">
+                    <span class="time" id="time-black">10:00</span>
+                </div>
+            </div>
+
+            <!-- Spectator Notice Banner -->
+            <div id="spectating-banner" style="display: none; background: rgba(41, 128, 185, 0.2); border: 1px solid #2980b9; padding: 6px 10px; border-radius: 8px; align-items: center; justify-content: space-between;">
+                <span id="spectating-text" style="font-size: 0.8rem; color: #3498db; font-weight: bold;">👁️ Zuschauer-Modus</span>
+                <button id="leaveSpectateBtn" class="glass-btn danger" style="padding: 3px 8px; font-size: 0.75rem;">Beenden</button>
+            </div>
+
+            <!-- Status Display -->
+            <div id="status-display" style="text-align: center; font-size: 0.85rem; font-weight: bold; color: #f1c40f; padding: 2px 0;">Weiß am Zug</div>
+
+            <!-- Responsive Chessboard -->
+            <div id="board-wrapper">
+                <div id="emote-popup-area" style="position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 100; overflow: hidden; display: flex; justify-content: center; align-items: center;"></div>
+                <div id="chess-board"></div>
+            </div>
+
+            <!-- Player Clock & Profile Bar (Bottom) -->
+            <div class="mobile-player-bar">
+                <div class="mobile-player-info">
+                    <div class="mobile-avatar" style="border-color: #2ecc71;">♟️</div>
+                    <div>
+                        <div class="mobile-player-name" id="name-white" style="color: #2ecc71;">Weiß</div>
+                        <div class="mobile-player-sub">Du</div>
+                    </div>
+                </div>
+                <div class="player-clock active mobile-clock" id="clock-white">
+                    <span class="time" id="time-white">10:00</span>
+                </div>
+            </div>
+
+            <!-- Quick Action Touch Bar -->
+            <div class="mobile-quick-actions">
+                <button id="resetBtn" class="mobile-quick-btn">
+                    <span>🆕</span> Neu
+                </button>
+                <button id="undoBtn" class="mobile-quick-btn">
+                    <span>↩️</span> Zurück
+                </button>
+                <button id="offerDrawBtn" class="mobile-quick-btn">
+                    <span>🤝</span> Remis
+                </button>
+                <button id="resignBtn" class="mobile-quick-btn" style="color: #e74c3c;">
+                    <span>🚩</span> Aufgeben
+                </button>
+            </div>
+
+            <!-- Secondary Action Row -->
+            <div style="display: flex; gap: 6px; margin-top: 4px;">
+                <button id="emoteBtn" class="glass-btn" style="flex: 1; padding: 8px; font-size: 0.8rem; font-weight: bold;">😀 Emotes</button>
+                <button id="featuresBtn" onclick="openFeaturesModal()" class="glass-btn purple" style="flex: 1; padding: 8px; font-size: 0.8rem; font-weight: bold;">⚙️ Einstellungen</button>
+            </div>
+
+            <!-- Emote Picker Floating Menu -->
+            <div id="emote-menu" style="display: none; background: rgba(20, 24, 38, 0.95); border: 1px solid #444; border-radius: 10px; padding: 8px; margin-top: 4px; justify-content: space-around;">
+                <span class="emote-select" style="cursor: pointer; font-size: 1.8rem; padding: 4px;">🤔</span>
+                <span class="emote-select" style="cursor: pointer; font-size: 1.8rem; padding: 4px;">👏</span>
+                <span class="emote-select" style="cursor: pointer; font-size: 1.8rem; padding: 4px;">😱</span>
+                <span class="emote-select" style="cursor: pointer; font-size: 1.8rem; padding: 4px;">😡</span>
+                <span class="emote-select" style="cursor: pointer; font-size: 1.8rem; padding: 4px;">😂</span>
+            </div>
+
+            <!-- Quick Game Setup & Mode Drawer -->
+            <div class="glass-panel" style="margin-top: 6px;">
+                <div style="font-weight: bold; font-size: 0.95rem; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+                    <span>🎮 <strong>Spielmodus & Einstellungen</strong></span>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <div>
+                        <label style="font-size: 0.8rem; color: #ccc; display: block; margin-bottom: 3px;">Modus wählen:</label>
+                        <select id="gameMode" style="width: 100%; padding: 8px; border-radius: 6px; background: rgba(0,0,0,0.5); color: white; border: 1px solid #444;">
+                            <option value="bot" selected>Gegen den Computer (KI)</option>
+                            <option value="local">Lokal (2 Spieler am Handy)</option>
+                            <option value="random">Zufälliger Gegner (Online)</option>
+                            <option value="online">Online (Privater Raum)</option>
+                        </select>
+                    </div>
+
+                    <div id="bot-difficulty-container">
+                        <label style="font-size: 0.8rem; color: #ccc; display: block; margin-bottom: 3px;">🤖 Bot-Schwierigkeit:</label>
+                        <select id="botDifficulty" style="width: 100%; padding: 8px; border-radius: 6px; background: rgba(0,0,0,0.5); color: white; border: 1px solid #444;">
+                            <option value="instant" selected>⚡ Sofort-Bot (Schnell)</option>
+                            <option value="1">Leicht (Anfänger)</option>
+                            <option value="3">Mittel (Fortgeschritten)</option>
+                            <option value="5">Schwer (Profi)</option>
+                            <option value="10">Meister (Stockfish 🔥)</option>
+                        </select>
+                    </div>
+
+                    <div id="time-control-container">
+                        <label style="font-size: 0.8rem; color: #ccc; display: block; margin-bottom: 3px;">⏱️ Zeitkontrolle:</label>
+                        <select id="timeControl" style="width: 100%; padding: 8px; border-radius: 6px; background: rgba(0,0,0,0.5); color: white; border: 1px solid #444;">
+                            <option value="unlimited">Unbegrenzt (∞)</option>
+                            <option value="1">Bullet (1 min)</option>
+                            <option value="3+2">Blitz (3 min + 2s)</option>
+                            <option value="5+3">Blitz (5 min + 3s)</option>
+                            <option value="10" selected>Rapid (10 min)</option>
+                        </select>
+                    </div>
+
+                    <div class="room-controls" style="display: flex; gap: 6px;">
+                        <input type="text" id="roomID" placeholder="Raum ID" style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #444; background: rgba(0,0,0,0.5); color: white;">
+                        <button id="connectMP" class="glass-btn primary" style="padding: 8px 12px; font-weight: bold;">Beitreten</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Move History (Notation) -->
+            <div class="glass-panel" id="move-history-panel" style="max-height: 180px;">
+                <span style="font-size: 0.85rem; font-weight: bold;">📋 Zugsverlauf</span>
+                <div id="move-history-list" style="overflow-y: auto; max-height: 120px; font-family: monospace; font-size: 0.85rem; display: flex; flex-direction: column; gap: 2px; margin-top: 6px;"></div>
+            </div>
+
+        </div>
+
+        <!-- ================= TAB 2: CHAT & COMMUNITY ================= -->
+        <div id="tab-chat" class="sidebar-tab-content">
+            <div class="glass-panel" style="padding: 10px !important;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-weight: bold; font-size: 0.95rem;">💬 Live-Chat</span>
+                    <div style="display: flex; gap: 4px;">
+                        <button id="openCreateLobbyModalBtn" class="glass-btn success" style="padding: 4px 8px; font-size: 0.75rem;">➕ Lobby</button>
+                        <button id="refreshLobbiesBtn" class="glass-btn" style="padding: 4px 8px; font-size: 0.75rem;">🔄</button>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 8px;">
+                    <select id="chatLobbySelect" class="glass-select" style="width: 100%; padding: 8px; border-radius: 6px; background: rgba(20, 20, 28, 0.9); color: #fff; border: 1px solid rgba(255,255,255,0.2); font-weight: bold;">
+                        <option value="global">🌐 Global Chat</option>
+                    </select>
+                </div>
+
+                <div id="activeLobbyInfo" style="font-size: 0.75rem; color: #aaa; display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <span>Aktiv: <strong id="currentLobbyName" style="color: #3498db;">🌐 Global Chat</strong></span>
+                    <span id="currentLobbyUsers" style="color: #2ecc71;">● 1 Online</span>
+                </div>
+
+                <div id="chat-messages" style="height: 320px; overflow-y: auto; background: rgba(0,0,0,0.4); border-radius: 8px; padding: 8px;"></div>
+
+                <div class="emoji-bar" style="display: flex; gap: 8px; margin: 6px 0; overflow-x: auto; padding-bottom: 2px;">
+                    <span class="emoji-btn" style="cursor: pointer; font-size: 1.3rem;">😊</span>
+                    <span class="emoji-btn" style="cursor: pointer; font-size: 1.3rem;">😂</span>
+                    <span class="emoji-btn" style="cursor: pointer; font-size: 1.3rem;">🔥</span>
+                    <span class="emoji-btn" style="cursor: pointer; font-size: 1.3rem;">👍</span>
+                    <span class="emoji-btn" style="cursor: pointer; font-size: 1.3rem;">♟️</span>
+                    <span class="emoji-btn" style="cursor: pointer; font-size: 1.3rem;">⚔️</span>
+                </div>
+
+                <div style="display: flex; gap: 6px; position: relative;">
+                    <button id="emote-menu-btn" style="padding: 6px 10px; cursor: pointer; border-radius: 6px;" class="glass-btn">...</button>
+                    <div id="emote-popup" style="display: none; position: absolute; bottom: 110%; left: 0; background: #1a1a24; border: 1px solid #444; border-radius: 8px; z-index: 9999; width: 160px; padding: 4px;">
+                        <button class="glass-btn emote-btn" data-msg="Viel Glück! 🍀" style="width: 100%; text-align: left; padding: 8px; font-size: 0.8rem;">Viel Glück! 🍀</button>
+                        <button class="glass-btn emote-btn" data-msg="Guter Zug! 👏" style="width: 100%; text-align: left; padding: 8px; font-size: 0.8rem;">Guter Zug! 👏</button>
+                        <button class="glass-btn emote-btn" data-msg="Ups! 😅" style="width: 100%; text-align: left; padding: 8px; font-size: 0.8rem;">Ups! 😅</button>
+                        <button class="glass-btn emote-btn" data-msg="Danke! 😊" style="width: 100%; text-align: left; padding: 8px; font-size: 0.8rem;">Danke! 😊</button>
+                    </div>
+                    <input type="text" id="chat-input" placeholder="Nachricht eingeben..." style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #444; background: rgba(0,0,0,0.5); color: white;">
+                    <button id="send-chat" class="glass-btn success" style="padding: 8px 14px; font-weight: bold;">Senden</button>
+                </div>
+            </div>
+
+            <!-- Freunde & Einladungen -->
+            <div class="glass-panel">
+                <span style="font-weight: bold; font-size: 0.9rem;">👥 Freunde & Einladungen</span>
+                <div style="display: flex; gap: 6px; margin-top: 8px;">
+                    <input type="text" id="friend-name-input" placeholder="Spieler suchen..." style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #555; background: rgba(0,0,0,0.5); color: white;">
+                    <button id="addFriendBtn" class="glass-btn success" style="padding: 8px 12px; font-weight: bold;">+</button>
+                </div>
+                <div id="friends-list" style="margin-top: 10px; font-size: 0.85rem; max-height: 120px; overflow-y: auto;">
+                    <div style="color: #aaa; text-align: center; font-style: italic;">Logge dich ein, um Freunde zu sehen</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= TAB 3: PROFIL & RANGLISTE ================= -->
+        <div id="tab-profile" class="sidebar-tab-content">
+            <div class="glass-panel">
+                <span style="font-weight: bold; font-size: 0.95rem;">👤 Dein Spieler-Profil</span>
+                <div id="profile-display" style="display: flex; flex-direction: column; gap: 8px; align-items: center; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; margin-top: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div id="profile-name" style="font-size: 1.15rem; font-weight: bold; color: #f1c40f;">Gastspieler</div>
+                        <button id="edit-name-btn" onclick="openNameModal()" class="glass-btn" style="background: none; border: none; cursor: pointer; color: #aaa;">✏️</button>
+                    </div>
+                    <div id="profile-stats" style="font-size: 0.85rem; color: #ccc;">Elo: 1200 | Siege: 0</div>
+                    
+                    <!-- Achievements -->
+                    <div style="width: 100%; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 4px; padding-top: 6px;">
+                        <div style="font-size: 0.75rem; text-transform: uppercase; color: #888; text-align: center; margin-bottom: 4px;">🏆 Erfolge</div>
+                        <div id="profile-achievements" style="display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;">
+                            <div class="achievement-badge locked" id="badge-first_victory_bot"><span>🤖</span></div>
+                            <div class="achievement-badge locked" id="badge-first_victory_stockfish"><span>🔥</span></div>
+                            <div class="achievement-badge locked" id="badge-first_victory_online"><span>⚔️</span></div>
+                            <div class="achievement-badge locked" id="badge-puzzle_streak_3"><span>🧠</span></div>
+                            <div class="achievement-badge locked" id="badge-speed_mate"><span>⚡</span></div>
+                        </div>
+                    </div>
+
+                    <button id="openAuthBtn" onclick="openAuthModal()" class="glass-btn primary" style="width: 100%; padding: 8px; font-weight: bold; margin-top: 4px;">🔐 Einloggen / Registrieren</button>
+                    <button id="logoutBtn" onclick="logout()" class="glass-btn danger" style="display: none; width: 100%; padding: 8px; font-weight: bold; margin-top: 4px;">🚪 Abmelden</button>
+                </div>
+            </div>
+
+            <!-- Rangliste -->
+            <div class="glass-panel">
+                <span style="font-weight: bold; font-size: 0.95rem;">🏆 Beste Spieler (Top-Rangliste)</span>
+                <div id="leaderboard-list" style="margin-top: 8px; font-size: 0.85rem;"></div>
+                <a href="stats.html" style="color: #3498db; text-decoration: none; font-size: 0.8rem; margin-top: 8px; display: block; text-align: center;">📊 Volle Rangliste ansehen</a>
+            </div>
+
+            <!-- Match History -->
+            <div class="glass-panel">
+                <span style="font-weight: bold; font-size: 0.95rem;">📜 Match-Historie & Replays</span>
+                <button id="loadHistoryBtn" class="glass-btn" style="width: 100%; margin-top: 8px; padding: 6px;">Spiele laden</button>
+                <div id="match-history-list" style="margin-top: 10px; font-size: 0.85rem; max-height: 150px; overflow-y: auto;">
+                    <div style="color: #aaa; text-align: center; font-style: italic;">Keine Matches gefunden</div>
+                </div>
+            </div>
+
+            <!-- Admin Panel if visible -->
+            <div class="glass-panel" id="admin-panel" style="display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span>🛡️ <strong>Admin-Verwaltung</strong></span>
+                    <button onclick="requestAdminUsersRefresh()" class="glass-btn primary" style="padding: 4px 8px; font-size: 0.75rem;">🔄 Laden</button>
+                </div>
+                <div id="admin-user-list" style="display: flex; flex-direction: column; gap: 6px; font-size: 0.8rem;"></div>
+                <div id="admin-tickets-section" style="margin-top: 10px; display: none;">
+                    <div id="admin-tickets-container"></div>
+                </div>
+                <div id="admin-logs-section" style="margin-top: 10px; display: none;">
+                    <div id="admin-logs-container">
+                        <div id="admin-logs-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= TAB 4: DESIGN & THEMES ================= -->
+        <div id="tab-design" class="sidebar-tab-content">
+            <div class="glass-panel">
+                <span style="font-weight: bold; font-size: 0.95rem;">🎨 Brett & Figuren Optik</span>
+                <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
+                    <div>
+                        <label style="font-size: 0.8rem; color: #ccc; display: block; margin-bottom: 3px;">Brett-Stil:</label>
+                        <select id="boardThemeSelect" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.5); color: white; border: 1px solid #444; border-radius: 6px;">
+                            <option value="classic">Klassisch (Default)</option>
+                            <option value="wood">Klassisches Holz 🪵</option>
+                            <option value="neon">Moderner Neon-Look ⚡</option>
+                            <option value="marble">Weißer Marmor 🏛️</option>
+                            <option value="slate">Luxuriöser 3D-Schiefer 💎</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label style="font-size: 0.8rem; color: #ccc; display: block; margin-bottom: 3px;">Figuren-Stil:</label>
+                        <select id="pieceThemeSelect" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.5); color: white; border: 1px solid #444; border-radius: 6px;">
+                            <option value="classic">Klassisch (Wikipedia)</option>
+                            <option value="goldsilver">Gold & Silber ✨</option>
+                            <option value="neon">Neon Glow 🔴🔵</option>
+                            <option value="vintage">Vintage Holz 🪵</option>
+                        </select>
+                    </div>
+
+                    <div id="customColorPickers" style="display: flex; gap: 8px; align-items: center; justify-content: space-between; font-size: 0.8rem;">
+                        <span style="color: #aaa;">Farben:</span>
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <label>Hell:</label>
+                            <input type="color" id="colorWhite" value="#f0d9b5" style="width: 25px; height: 25px; border: none; border-radius: 4px; cursor: pointer;">
+                            <label>Dunkel:</label>
+                            <input type="color" id="colorBlack" value="#b58863" style="width: 25px; height: 25px; border: none; border-radius: 4px; cursor: pointer;">
+                            <label>Züge:</label>
+                            <input type="color" id="colorMoveDot" value="#f1c40f" style="width: 25px; height: 25px; border: none; border-radius: 4px; cursor: pointer;">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label style="font-size: 0.8rem; color: #ccc; display: block; margin-bottom: 3px;">⚡ Performance Modus:</label>
+                        <select id="glassEffectsSelect" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.5); color: white; border: 1px solid #444; border-radius: 6px;">
+                            <option value="disabled">⚡ Performance (Empfohlen für Handys)</option>
+                            <option value="enabled">✨ Glassmorphism (Für High-End Geräte)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Taktik Rätsel -->
+            <div class="glass-panel" id="tactical-puzzle-panel">
+                <span style="font-weight: bold; font-size: 0.95rem;">🧩 Tägliches Taktik-Rätsel</span>
+                <div id="puzzle-details" style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; margin-top: 6px;">
+                    <div id="puzzle-title" style="font-weight: bold; color: #f1c40f; font-size: 0.9rem;">Lade Rätsel...</div>
+                    <div id="puzzle-desc" style="font-size: 0.8rem; color: #bdc3c7; margin-top: 2px;">Finde den besten Zug für +100 ELO!</div>
+                    <div id="puzzle-status" style="font-size: 0.8rem; color: #2ecc71; margin-top: 4px; font-weight: bold;"></div>
+                    <div style="display: flex; gap: 6px; margin-top: 8px;">
+                        <button id="loadPuzzleBtn" class="glass-btn purple" style="flex: 1; padding: 6px; font-size: 0.8rem; font-weight: bold;">Rätsel starten</button>
+                        <button id="resetPuzzleBtn" class="glass-btn danger" style="padding: 6px; font-size: 0.8rem; display: none;">Reset</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KI Analyse (Python Labor) -->
+            <div class="glass-panel" id="python-lab">
+                <span style="font-weight: bold; font-size: 0.95rem;">🐍 KI-Analyse</span>
+                <div style="margin-top: 6px; font-size: 0.85rem; display: flex; flex-direction: column; gap: 4px;">
+                    <div id="elo-display">Geschätzte Elo: <span style="color: #f1c40f;">Warte auf Spiel...</span></div>
+                    <div id="accuracy-display">Genauigkeit: 0%</div>
+                    <div id="aggro-display">Aggressivität: Normal</div>
+                    <div id="material-display">Gewonnenes Material: 0</div>
+                </div>
+            </div>
+
+            <!-- App Links & Info -->
+            <div style="text-align: center; margin: 10px 0;">
+                <a href="https://github.com/Max-code01/mein-schach/releases/latest" style="background: #28a745; color: white; padding: 10px 18px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; font-size: 0.85rem;">
+                    📥 Android APK herunterladen
+                </a>
+            </div>
+
+            <div style="text-align: center; font-size: 0.75rem; color: #888; display: flex; justify-content: center; gap: 10px; padding: 10px 0;">
+                <a href="AGB.html" target="_blank" style="color: #aaa; text-decoration: none;">AGB</a> |
+                <a href="datenschutz.html" target="_blank" style="color: #aaa; text-decoration: none;">Datenschutz</a> |
+                <a href="impressum.html" target="_blank" style="color: #aaa; text-decoration: none;">Impressum</a>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Fixed Bottom App Navigation Bar -->
+    <nav class="mobile-bottom-nav">
+        <button class="mobile-nav-item sidebar-tab-btn active" onclick="switchMobileTab('tab-game', this)">
+            <span class="nav-icon">🎮</span>
+            <span>Spiel</span>
+        </button>
+        <button class="mobile-nav-item sidebar-tab-btn" onclick="switchMobileTab('tab-chat', this)">
+            <span class="nav-icon">💬</span>
+            <span>Chat</span>
+        </button>
+        <button class="mobile-nav-item sidebar-tab-btn" onclick="switchMobileTab('tab-profile', this)">
+            <span class="nav-icon">🏆</span>
+            <span>Profil</span>
+        </button>
+        <button class="mobile-nav-item sidebar-tab-btn" onclick="switchMobileTab('tab-design', this)">
+            <span class="nav-icon">🎨</span>
+            <span>Design</span>
+        </button>
+        <button class="mobile-nav-item" onclick="openFeaturesModal()">
+            <span class="nav-icon">⚙️</span>
+            <span>Mehr</span>
+        </button>
+    </nav>
+
+    <!-- All Required Modals for Game Functionality -->
+
+    <!-- Checkmate Modal -->
+    <div id="checkmate-modal" class="modal-overlay">
+        <div class="modal-box" style="border-color: #f1c40f; box-shadow: 0 0 40px rgba(241, 196, 15, 0.3); max-width: 360px; width: 90%;">
+            <span class="close-modal" onclick="document.getElementById('checkmate-modal').style.display='none'">&times;</span>
+            <div class="checkmate-icon">👑</div>
+            <div class="checkmate-title">Schachmatt!</div>
+            <div class="checkmate-winner" id="checkmate-winner-text">Weiß gewinnt das Spiel.</div>
+            <button class="glass-btn checkmate-btn" onclick="document.getElementById('checkmate-modal').style.display='none'; resetGame();">Neue Partie starten</button>
+            <button class="glass-btn primary checkmate-btn" style="margin-top: 8px;" onclick="downloadReplay();">📥 Replay (PGN) herunterladen</button>
+            <button class="glass-btn purple checkmate-btn" style="margin-top: 8px;" onclick="shareGameForAnalysis();">🔍 Analyse (Lichess)</button>
+        </div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div id="auth-modal" class="modal-overlay">
+        <div class="modal-box" style="max-width: 380px; width: 92%;">
+            <span class="close-modal" onclick="document.getElementById('auth-modal').style.display='none'">&times;</span>
+            <h3 style="color: white; margin-top: 0; margin-bottom: 12px;">Einloggen / Registrieren</h3>
+            <p style="color: #bdc3c7; font-size: 0.8rem; margin-bottom: 12px;">Speichere deinen Elo-Wert und deine Statistiken.</p>
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;">
+                <input type="email" id="auth-email-input" class="auth-input" placeholder="E-Mail-Adresse" style="padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.5); color: white; width: 100%;">
+                <input type="password" id="auth-password-input" class="auth-input" placeholder="Passwort (min. 6 Zeichen)" style="padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.5); color: white; width: 100%;">
+                <div style="display: flex; gap: 8px;">
+                    <button class="glass-btn success auth-btn" style="flex: 1; padding: 8px; font-weight: bold;" onclick="submitAuthEmailLogin()">Einloggen</button>
+                    <button class="glass-btn primary auth-btn" style="flex: 1; padding: 8px; font-weight: bold;" onclick="submitAuthEmailRegister()">Registrieren</button>
+                </div>
+            </div>
+            <button id="auth-guest-btn" class="glass-btn auth-btn" style="width: 100%; background: rgba(255,255,255,0.1); color: #fff; padding: 8px; font-weight: bold;" onclick="playAsGuest()">👤 Als Gast spielen</button>
+            <div id="auth-status" style="margin-top: 10px; font-size: 0.85rem;"></div>
+        </div>
+    </div>
+
+    <!-- Name Modal -->
+    <div id="name-modal" class="modal-overlay">
+        <div class="modal-box" style="max-width: 360px; width: 90%;">
+            <span class="close-modal" onclick="document.getElementById('name-modal').style.display='none'">&times;</span>
+            <h3 style="color: white; margin-top: 0; margin-bottom: 15px;">Benutzername ändern</h3>
+            <input type="text" id="new-username" class="auth-input" placeholder="Neuer Name" maxlength="15" style="width: 100%; padding: 8px; margin-bottom: 10px;">
+            <button class="glass-btn auth-btn" onclick="submitNameChange()" style="width: 100%;">Speichern</button>
+            <div id="name-status" style="margin-top: 10px; font-size: 0.85rem;"></div>
+        </div>
+    </div>
+
+    <!-- Player Profile Modal -->
+    <div id="player-profile-modal" style="display:none; position:fixed; z-index:10000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.85); backdrop-filter:blur(5px); justify-content:center; align-items:center; padding: 15px;">
+        <div style="background:#1a1a24; padding:20px; border-radius:15px; border:1px solid #444; max-width:400px; width:100%; max-height:85vh; overflow-y:auto; color: white;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <h3 id="ppm-name" style="margin:0; color:#f1c40f;">Spielername</h3>
+                <button onclick="document.getElementById('player-profile-modal').style.display='none'" class="glass-btn" style="background:#e74c3c; padding: 4px 10px;">X</button>
+            </div>
+            <div style="display:flex; gap:10px; margin-bottom:12px; color:#ccc; font-size: 0.85rem;">
+                <span id="ppm-elo">Elo: 1200</span> | <span id="ppm-level">Level: 1</span> | <span id="ppm-role">Gast</span>
+            </div>
+            <h4 style="margin-bottom:8px;">🏆 Sieges-Historie</h4>
+            <div id="ppm-history" style="display:flex; flex-direction:column; gap:6px; font-size: 0.85rem;">
+                <div style="color:#888; font-style:italic;">Lädt...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Features & Settings Modal -->
+    <div id="features-modal" class="modal-overlay" style="display: none; z-index: 1000000; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px); justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%; padding: 15px;">
+        <div class="modal-box" style="background: #161926; border: 1px solid #8e44ad; padding: 18px; border-radius: 12px; max-width: 450px; width: 100%; max-height: 85vh; overflow-y: auto; text-align: left; color: white;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 8px; margin-bottom: 15px;">
+                <h3 style="margin: 0; color: #8e44ad; font-size: 1.1rem;">⚙️ Einstellungen & Features</h3>
+                <button onclick="document.getElementById('features-modal').style.display='none'" class="glass-btn danger" style="padding: 4px 8px;">X</button>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <div>
+                    <label style="display: block; margin-bottom: 4px; font-size: 0.85rem;">Schach-Variante:</label>
+                    <select id="variantSelect" style="width: 100%; padding: 8px; border-radius: 6px; background: #2c3e50; color: white; border: 1px solid #555; margin-bottom: 6px;">
+                        <option value="standard">Standard Schach</option>
+                        <option value="chess960">Chess960 (Fischer Random)</option>
+                        <option value="koth">King of the Hill</option>
+                        <option value="blindfold">Blindfold Chess</option>
+                    </select>
+                    <button id="startVariantBtn" onclick="startVariantGame()" class="glass-btn success" style="width: 100%; padding: 8px; font-weight: bold;">Variante starten</button>
+                    <button id="passPlayBtn" onclick="startPassAndPlay()" class="glass-btn warning" style="width: 100%; padding: 8px; font-weight: bold; margin-top: 4px;">👥 Pass & Play</button>
+                </div>
+
+                <div>
+                    <label style="display: block; margin-bottom: 4px; font-size: 0.85rem;">Sound-Pack:</label>
+                    <select id="soundPackSelect" onchange="changeSoundPack(this.value)" style="width: 100%; padding: 8px; border-radius: 6px; background: #2c3e50; color: white; border: 1px solid #555;">
+                        <option value="classic">Klassisches Holz</option>
+                        <option value="arcade">Arcade / 8-Bit</option>
+                        <option value="orchestra">Orchester / Episch</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label style="display: block; margin-bottom: 4px; font-size: 0.85rem;">Figuren-Set:</label>
+                    <select id="pieceSetSelect" onchange="changePieceSet(this.value)" style="width: 100%; padding: 8px; border-radius: 6px; background: #2c3e50; color: white; border: 1px solid #555;">
+                        <option value="neo">Klassisch (Neo)</option>
+                        <option value="pixel">8-Bit Pixel Art</option>
+                        <option value="wood">Holz-Stil</option>
+                    </select>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="confettiToggle" checked> 🎉 Konfetti bei Schachmatt
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="arrowToggle" checked> ↗️ Pfeile anzeigen
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="keyboardToggle"> ⌨️ Notationseingabe
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Request Modal -->
+    <div id="game-request-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(5px); z-index: 2500000; justify-content: center; align-items: center; padding: 15px;">
+        <div style="background: #1e2836; border: 2px solid #f39c12; border-radius: 12px; padding: 20px; width: 100%; max-width: 360px; text-align: center; color: white;">
+            <div id="game-request-icon" style="font-size: 2.8rem; margin-bottom: 8px;">🤝</div>
+            <h3 id="game-request-title" style="margin: 0 0 8px 0; color: #f39c12; font-size: 1.15rem;">Anfrage erhalten!</h3>
+            <p id="game-request-message" style="color: #ddd; font-size: 0.85rem; margin-bottom: 18px;">Dein Gegner bietet ein Remis an.</p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="game-request-accept-btn" class="glass-btn success" style="flex: 1; padding: 10px; font-weight: bold;">✅ Annehmen</button>
+                <button id="game-request-decline-btn" class="glass-btn danger" style="flex: 1; padding: 10px; font-weight: bold;">❌ Ablehnen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Custom Lobby Modal -->
+    <div id="createLobbyModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 10000; align-items: center; justify-content: center; padding: 15px;">
+        <div class="glass-panel" style="width: 100%; max-width: 360px; background: rgba(20, 20, 28, 0.98); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; padding: 18px; color: white;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;">
+                <h3 style="margin: 0; font-size: 1.05rem;">🏰 Neue Lobby Erstellen</h3>
+                <button id="closeCreateLobbyModalBtn" style="background: none; border: none; color: #aaa; font-size: 1.4rem; cursor: pointer;">&times;</button>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <div>
+                    <label style="font-size: 0.8rem; color: #ccc; display: block; margin-bottom: 4px;">Lobby Name *</label>
+                    <input type="text" id="newLobbyNameInput" placeholder="z. B. Handy Duell" maxlength="30" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #444; background: rgba(0,0,0,0.5); color: white;">
+                </div>
+                <div>
+                    <label style="font-size: 0.8rem; color: #ccc; display: block; margin-bottom: 4px;">Passwort (optional) 🔒</label>
+                    <input type="password" id="newLobbyPasswordInput" placeholder="Optionales Passwort" maxlength="30" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #444; background: rgba(0,0,0,0.5); color: white;">
+                </div>
+                <div id="createLobbyError" style="color: #e74c3c; font-size: 0.8rem; min-height: 16px;"></div>
+                <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                    <button id="cancelCreateLobbyBtn" class="glass-btn" style="padding: 6px 12px;">Abbrechen</button>
+                    <button id="submitCreateLobbyBtn" class="glass-btn success" style="padding: 6px 14px; font-weight: bold;">Erstellen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Join Lobby Password Modal -->
+    <div id="joinLobbyPasswordModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 10000; align-items: center; justify-content: center; padding: 15px;">
+        <div class="glass-panel" style="width: 100%; max-width: 340px; background: rgba(20, 20, 28, 0.98); border-radius: 12px; padding: 18px; color: white;">
+            <h3 style="margin: 0 0 10px 0; font-size: 1.05rem;">🔒 Passwort Geschützt</h3>
+            <p style="font-size: 0.85rem; color: #ccc; margin-bottom: 10px;">Lobby <strong id="targetLobbyNameDisplay" style="color: #3498db;"></strong></p>
+            <input type="password" id="joinLobbyPasswordInput" placeholder="Passwort eingeben..." style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #444; background: rgba(0,0,0,0.5); color: white; margin-bottom: 8px;">
+            <div id="joinLobbyPasswordError" style="color: #e74c3c; font-size: 0.8rem; min-height: 16px;"></div>
+            <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px;">
+                <button id="cancelJoinLobbyPasswordBtn" class="glass-btn" style="padding: 6px 12px;">Abbrechen</button>
+                <button id="submitJoinLobbyPasswordBtn" class="glass-btn success" style="padding: 6px 14px; font-weight: bold;">Beitreten</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Account Banned Modal -->
+    <div id="account-banned-modal" class="modal-overlay" style="display: none; z-index: 1000000; background: rgba(15, 5, 5, 0.95); padding: 15px;">
+        <div class="modal-box" style="max-width: 400px; width: 100%; border: 2px solid #e74c3c; background: #1a0c0c; text-align: center; border-radius: 12px; padding: 18px; color: white;">
+            <div style="font-size: 2.5rem;">⛔</div>
+            <h3 style="color: #ff4d4d; margin: 4px 0 8px 0;">Account gesperrt</h3>
+            <p id="account-banned-reason-text" style="color: #ff9999; font-size: 0.85rem; margin-bottom: 12px;">Gesperrt durch Administrator</p>
+            <button class="glass-btn danger" onclick="document.getElementById('account-banned-modal').style.display='none'" style="width: 100%; padding: 8px;">Schließen</button>
+        </div>
+    </div>
+
+    <!-- In-App Notification Toast Container -->
+    <div id="in-app-toast-container" style="position: fixed; top: 55px; left: 50%; transform: translateX(-50%); z-index: 2000000; display: flex; flex-direction: column; gap: 8px; width: 92%; max-width: 380px; pointer-events: none;"></div>
+
+    <!-- Mobile Navigation Script -->
+    <script>
+        function switchMobileTab(tabId, btn) {
+            document.querySelectorAll('.sidebar-tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.mobile-bottom-nav .sidebar-tab-btn').forEach(b => b.classList.remove('active'));
+            
+            const target = document.getElementById(tabId);
+            if (target) {
+                target.classList.add('active');
+            }
+            if (btn) {
+                btn.classList.add('active');
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Bridge to desktop switchSidebarTab
+        window.switchSidebarTab = function(tabId, btn) {
+            switchMobileTab(tabId, btn);
+        };
+
+        function setPcPreference() {
+            localStorage.setItem('device_preference', 'pc');
+        }
+
+        function openFeaturesModal() {
+            const modal = document.getElementById('features-modal');
+            if (modal) modal.style.display = 'flex';
+        }
+    </script>
+
+    <!-- Core Scripts -->
+    <script type="module" src="features.js"></script>
+    <script type="module" src="script.js"></script>
+    <script type="module" src="script2.js"></script>
+
+</body>
+</html>

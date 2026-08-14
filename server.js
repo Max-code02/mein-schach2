@@ -323,6 +323,16 @@ app.get('/', (req, res) => {
     }
 });
 
+app.get(['/handy', '/handy.html', '/mobile'], (req, res) => {
+    if (fs.existsSync(path.join(__dirname, 'handy.html'))) {
+        res.sendFile(path.join(__dirname, 'handy.html'));
+    } else if (fs.existsSync(path.join(__dirname, 'public', 'handy.html'))) {
+        res.sendFile(path.join(__dirname, 'public', 'handy.html'));
+    } else {
+        res.sendFile(path.join(__dirname, 'index.html'));
+    }
+});
+
 // REST Endpoints for Auth and Analysis
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body || {};
