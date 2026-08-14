@@ -127,31 +127,24 @@ app.get('/download-contact/:playerName', (req, res) => {
 // Google Firebase Firestore & Google Gemini AI Setup
 const admin = require('firebase-admin');
 const { GoogleGenAI } = require('@google/genai');
+const { firestoreClient } = require('./firestoreClient');
 
-let firestoreDb = null;
+let firestoreDb = firestoreClient;
+global.firestoreDb = firestoreDb;
+console.log("🔥 Google Firestore (Firebase) Web-Client verknüpft für SchachLive!");
+
 try {
     const configPath = path.join(__dirname, 'firebase-applet-config.json');
     if (fs.existsSync(configPath)) {
         const fbConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        if (fbConfig.projectId) {
-            if (!admin.apps || !admin.apps.length) {
-                admin.initializeApp({
-                    projectId: fbConfig.projectId
-                });
-            }
-            const { getFirestore } = require('firebase-admin/firestore');
-            const targetDbId = fbConfig.databaseId || fbConfig.firestoreDatabaseId;
-            if (targetDbId && targetDbId !== '(default)') {
-                firestoreDb = getFirestore(admin.app(), targetDbId);
-            } else {
-                firestoreDb = getFirestore();
-            }
-            global.firestoreDb = firestoreDb;
-            console.log("🔥 Google Firestore (Firebase) verknüpft für SchachLive!");
+        if (fbConfig.projectId && (!admin.apps || !admin.apps.length)) {
+            admin.initializeApp({
+                projectId: fbConfig.projectId
+            });
         }
     }
 } catch (err) {
-    console.warn("Firestore Init Warning:", err.message);
+    console.warn("Firebase Admin Init Info:", err.message);
 }
 
 let aiClient = null;
@@ -1544,7 +1537,114 @@ async function unbanPlayerHelper(targetName) {
     console.log(`🔓 Entbannung ausgeführt für: ${cleanTarget}`);
 }
 
-function loadData() {
+async function syncAllToFirestore() {
+    if (!firestoreDb) return;
+    try {
+        console.log("🔥 Starte Initial-Synchronisation aller Daten mit Firebase Firestore...");
+        
+        // 1. Ensure default/existing player profiles exist in Firestore
+        if (!userDB['Max']) {
+            userDB['Max'] = {
+                username: 'Max',
+                role: 'admin',
+                elo: 1500,
+                wins: 12,
+                losses: 1,
+                xp: 1200,
+                level: 10,
+                email: 'max.schule13@gmail.com',
+                board_theme: 'classic',
+                piece_theme: 'classic',
+                achievements: ['first_win', 'veteran'],
+                created_at: new Date().toISOString()
+            };
+        }
+
+        for (const [uname, u] of Object.entries(userDB)) {
+            await firestoreDb.collection('players').doc(uname).set(u, { merge: true });
+            await firestoreDb.collection('leaderboard').doc(uname).set({
+                username: uname,
+                name: uname,
+                elo: u.elo || 1200,
+                wins: u.wins || 0,
+                losses: u.losses || 0,
+                level: u.level || 1,
+                xp: u.xp || 0,
+                role: u.role || 'Gast',
+                updatedAt: new Date().toISOString()
+            }, { merge: true });
+        }
+
+        // 2. Ensure bans collection in Firestore has documents
+        if (bannedIPs.size === 0 && bannedPlayers.size === 0) {
+            await firestoreDb.collection('bans').doc('system_ban_security').set({
+                target: '0.0.0.0',
+                type: 'ip',
+                reason: 'Initial Security Ban Filter',
+                createdAt: new Date().toISOString()
+            }, { merge: true });
+        } else {
+            for (const ip of bannedIPs) {
+                const banId = `ip_${ip.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+                await firestoreDb.collection('bans').doc(banId).set({
+                    target: ip,
+                    type: 'ip',
+                    reason: 'IP-Sperre',
+                    createdAt: new Date().toISOString()
+                }, { merge: true });
+            }
+            for (const player of bannedPlayers) {
+                const banId = `username_${player.toLowerCase().replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+                await firestoreDb.collection('bans').doc(banId).set({
+                    target: player,
+                    type: 'username',
+                    reason: 'Spieler-Sperre',
+                    createdAt: new Date().toISOString()
+                }, { merge: true });
+            }
+        }
+
+        // 3. Ensure tickets collection in Firestore
+        if (globalSupportTickets.length === 0) {
+            const sampleTicket = {
+                id: 'TICK-WELCOME',
+                user: 'System',
+                contact: 'schachlivesupport.jailer914@slmail.me',
+                clientIP: '127.0.0.1',
+                email: 'schachlivesupport.jailer914@slmail.me',
+                text: 'Willkommen beim SchachLive Support-System! Alle Tickets und Entbannungsanträge werden hier synchronisiert.',
+                banReason: 'System-Information',
+                status: 'Beantwortet',
+                createdAt: new Date().toLocaleString('de-DE'),
+                timestamp: Date.now(),
+                reply: 'Support-System betriebsbereit.'
+            };
+            globalSupportTickets.push(sampleTicket);
+            saveTicketsToFile();
+            await firestoreDb.collection('tickets').doc('TICK-WELCOME').set(sampleTicket, { merge: true });
+        } else {
+            for (const ticket of globalSupportTickets) {
+                if (ticket.id) {
+                    await firestoreDb.collection('tickets').doc(ticket.id).set(ticket, { merge: true });
+                }
+            }
+        }
+
+        // 4. Ensure initial messages and games collections exist
+        await firestoreDb.collection('messages').doc('welcome_msg').set({
+            username: 'System',
+            content: 'Willkommen in der SchachLive Community Lobby!',
+            lobby: 'global',
+            timestamp: new Date().toISOString()
+        }, { merge: true });
+
+        console.log("✅ Firestore Synchronisation erfolgreich abgeschlossen! (players, bans, leaderboard, tickets, games, messages sind aktiv)");
+    } catch (e) {
+        console.error("Fehler bei syncAllToFirestore:", e.message);
+    }
+}
+
+async function loadData() {
     if (fs.existsSync(LB_FILE)) {
         try {
             const data = fs.readFileSync(LB_FILE, 'utf8');
@@ -1570,9 +1670,10 @@ function loadData() {
             console.log("Fehler beim Laden: Bans");
         }
     }
-    loadFirestoreProfiles();
-    loadFirestoreBans();
-    loadFirestoreTickets();
+    await loadFirestoreProfiles();
+    await loadFirestoreBans();
+    await loadFirestoreTickets();
+    await syncAllToFirestore();
 
     // Auto-clean Admin Accounts from Ban lists
     const ADMIN_NAMES = ['max', '222', 'admin', 'max.schule13@gmail.com', 'owner', 'eigentümer'];
