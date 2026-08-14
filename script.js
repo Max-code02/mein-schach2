@@ -1341,18 +1341,28 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
     }, animationDuration);
 }
 
-function resetGame(keepCurrentMode = false) {
+function resetGame(keepCurrentMode = true) {
     if (typeof window.switchSidebarTab === "function") {
         const gameBtn = document.querySelectorAll(".sidebar-tab-btn")[0];
         if (gameBtn) window.switchSidebarTab("tab-game", gameBtn);
     }
     const gameModeSelect = document.getElementById("gameMode");
-    if (!keepCurrentMode && gameModeSelect && (gameModeSelect.value === "random" || gameModeSelect.value === "online")) {
-        gameModeSelect.value = "local";
-        const timeCtrl = document.getElementById("time-control-container");
-        if (timeCtrl) timeCtrl.style.display = "block";
-        const botDiff = document.getElementById("bot-difficulty-container");
-        if (botDiff) botDiff.style.display = "none";
+    const currentMode = gameModeSelect ? gameModeSelect.value : "local";
+
+    const botDiff = document.getElementById("bot-difficulty-container");
+    if (botDiff) botDiff.style.display = (currentMode === "bot") ? "block" : "none";
+
+    const timeCtrl = document.getElementById("time-control-container");
+    if (timeCtrl) timeCtrl.style.display = "block";
+
+    if (currentMode === "bot") {
+        myColor = "white";
+        opponentName = "Computer (KI)";
+        onlineRoom = "";
+    } else if (currentMode === "local") {
+        myColor = "white";
+        opponentName = "Lokaler Spieler";
+        onlineRoom = "";
     }
 
     window.isTacticalPuzzleMode = false;
@@ -1409,7 +1419,16 @@ function resetGame(keepCurrentMode = false) {
     const listEl = document.getElementById('move-history-list');
     if (listEl) listEl.innerHTML = '';
 
-    if (typeof statusEl !== 'undefined' && statusEl) statusEl.textContent = "Weiß am Zug";
+    const statusEl = document.getElementById('status-display');
+    if (statusEl) {
+        if (currentMode === "bot") {
+            statusEl.textContent = "🤖 Partie gegen KI - Weiß am Zug";
+        } else if (currentMode === "online" || currentMode === "random") {
+            statusEl.textContent = "Online gegen " + (opponentName || "Gegner") + " (" + (myColor === "white" ? "Weiß" : "Schwarz") + ")";
+        } else {
+            statusEl.textContent = "Weiß am Zug";
+        }
+    }
     if (typeof draw === "function") draw();
 }
 window.resetGame = resetGame;
