@@ -793,21 +793,32 @@ let timeInc = 0;
 let timerInterval = null;
 
 function formatTime(secs) {
-    if (secs === Infinity || secs === 'unlimited') return '∞';
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
+    if (secs === Infinity || secs === 'unlimited' || secs === undefined || secs === null || isNaN(secs)) return '∞';
+    const totalSecs = Math.max(0, Math.floor(secs));
+    const m = Math.floor(totalSecs / 60);
+    const s = totalSecs % 60;
     return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
 function startTimer() {
     if (timerInterval) clearInterval(timerInterval);
+    const tcSelect = document.getElementById("timeControl");
+    const tc = tcSelect ? tcSelect.value : "unlimited";
+    if (tc === 'unlimited' || whiteTime === Infinity || blackTime === Infinity || isNaN(whiteTime)) {
+        updateTimerUI();
+        return;
+    }
     timerInterval = setInterval(() => {
         if (turn === 'white') {
-            whiteTime--;
-            if (whiteTime <= 0) { whiteTime = 0; handleTimeout('Weiß'); }
+            if (whiteTime > 0) {
+                whiteTime--;
+                if (whiteTime <= 0) { whiteTime = 0; handleTimeout('Weiß'); }
+            }
         } else {
-            blackTime--;
-            if (blackTime <= 0) { blackTime = 0; handleTimeout('Schwarz'); }
+            if (blackTime > 0) {
+                blackTime--;
+                if (blackTime <= 0) { blackTime = 0; handleTimeout('Schwarz'); }
+            }
         }
         updateTimerUI();
     }, 1000);
@@ -831,10 +842,10 @@ function updateTimerUI() {
             wClock.classList.remove('active');
         }
 
-        if (whiteTime < 60) wClock.classList.add('low-time');
+        if (whiteTime !== Infinity && !isNaN(whiteTime) && whiteTime < 30) wClock.classList.add('low-time');
         else wClock.classList.remove('low-time');
         
-        if (blackTime < 60) bClock.classList.add('low-time');
+        if (blackTime !== Infinity && !isNaN(blackTime) && blackTime < 30) bClock.classList.add('low-time');
         else bClock.classList.remove('low-time');
     }
 }
@@ -1742,6 +1753,34 @@ window.addEventListener('DOMContentLoaded', () => {
         };
     }
 
+    const timeControlSelect = document.getElementById("timeControl");
+    if (timeControlSelect) {
+        timeControlSelect.onchange = () => {
+            const val = timeControlSelect.value;
+            let tSecs = 600;
+            timeInc = 0;
+            if (val !== 'unlimited') {
+                if (val.includes('+')) {
+                    const pts = val.split('+');
+                    tSecs = parseInt(pts[0]) * 60;
+                    timeInc = parseInt(pts[1]) || 0;
+                } else {
+                    tSecs = (parseInt(val) || 10) * 60;
+                }
+            } else {
+                tSecs = Infinity;
+            }
+            whiteTime = tSecs;
+            blackTime = tSecs;
+            updateTimerUI();
+            if (val === 'unlimited') {
+                if (timerInterval) clearInterval(timerInterval);
+            } else {
+                startTimer();
+            }
+        };
+    }
+
     if (gameModeSelect) {
         gameModeSelect.onchange = () => {
             window.isTacticalPuzzleMode = false;
@@ -2041,17 +2080,27 @@ socket.onmessage = (e) => {
             if (data.color) myColor = data.color;
             if (data.opponent) opponentName = data.opponent;
             if (gameModeSelect) gameModeSelect.value = "online";
+            if (data.timeControl) {
+                const tcSelect = document.getElementById("timeControl");
+                if (tcSelect) tcSelect.value = data.timeControl;
+            }
 
             localStorage.setItem('active_game_room', onlineRoom);
             localStorage.setItem('my_color', myColor || 'white');
             if (opponentName) localStorage.setItem('opponent_name', opponentName);
 
-            resetGame();
+            resetGame(true);
+
+            if (data.timeWhite !== undefined && data.timeWhite !== null) whiteTime = data.timeWhite;
+            if (data.timeBlack !== undefined && data.timeBlack !== null) blackTime = data.timeBlack;
+            updateTimerUI();
+            startTimer();
+
             const statusEl = document.getElementById('status-display');
             if (statusEl) {
                 statusEl.textContent = "Online gegen " + (opponentName || "Gegner") + " (" + (myColor === "white" ? "Weiß" : "Schwarz") + ")";
             }
-                        if (typeof window.switchSidebarTab === 'function') {
+            if (typeof window.switchSidebarTab === 'function') {
                 const chatBtn = document.querySelectorAll('.sidebar-tab-btn')[2];
                 if (chatBtn) window.switchSidebarTab('tab-chat', chatBtn);
             }
@@ -2237,8 +2286,13 @@ socket.onmessage = (e) => {
             return;
         }
         if (data.type === 'time_sync') {
-            if (data.timeWhite !== undefined) document.getElementById('time-white').textContent = formatTime(data.timeWhite);
-            if (data.timeBlack !== undefined) document.getElementById('time-black').textContent = formatTime(data.timeBlack);
+            if (data.timeWhite !== undefined && data.timeWhite !== null && !isNaN(data.timeWhite)) {
+                whiteTime = data.timeWhite;
+            }
+            if (data.timeBlack !== undefined && data.timeBlack !== null && !isNaN(data.timeBlack)) {
+                blackTime = data.timeBlack;
+            }
+            updateTimerUI();
             return;
         }
         if (data.type === 'chat') {

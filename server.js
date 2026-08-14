@@ -2526,16 +2526,18 @@ wss.on('connection', function(ws, req) {
                     waitingPlayer.opponentName = ws.playerName || "Spieler 2";
                     
                     let tc = data.timeControl || 'unlimited';
-                    let tSecs = 0;
+                    let tSecs = 600;
                     let tInc = 0;
                     if (tc !== 'unlimited') {
                         if (tc.includes('+')) {
                             const pts = tc.split('+');
-                            tSecs = parseInt(pts[0]) * 60;
-                            tInc = parseInt(pts[1]);
+                            tSecs = (parseInt(pts[0]) || 10) * 60;
+                            tInc = parseInt(pts[1]) || 0;
                         } else {
-                            tSecs = parseInt(tc) * 60;
+                            tSecs = (parseInt(tc) || 10) * 60;
                         }
+                    } else {
+                        tSecs = null;
                     }
 
                     activeRoomStates.set(roomID, {
@@ -2555,13 +2557,19 @@ wss.on('connection', function(ws, req) {
                         type: 'gameStart', 
                         room: roomID, 
                         color: 'black', 
-                        opponent: ws.opponentName
+                        opponent: ws.opponentName,
+                        timeControl: tc,
+                        timeWhite: tSecs,
+                        timeBlack: tSecs
                     }));
                     waitingPlayer.send(JSON.stringify({ 
                         type: 'gameStart', 
                         room: roomID, 
                         color: 'white', 
-                        opponent: waitingPlayer.opponentName
+                        opponent: waitingPlayer.opponentName,
+                        timeControl: tc,
+                        timeWhite: tSecs,
+                        timeBlack: tSecs
                     }));
                     
                     waitingPlayer = null; 
