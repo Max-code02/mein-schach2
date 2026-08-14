@@ -447,24 +447,59 @@ window.renderAdminTickets = function(tickets) {
     }
 
     container.innerHTML = tickets.map(t => {
-        const statusColor = t.status === 'Offen' ? '#e74c3c' : (t.status === 'In Bearbeitung' ? '#f39c12' : '#2ecc71');
+        const statusColor = t.status === 'Offen' ? '#e74c3c' : (t.status === 'In Bearbeitung' ? '#f39c12' : (t.status === 'Entbannt' ? '#2ecc71' : '#95a5a6'));
         return `
-            <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-left: 3px solid ${statusColor}; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px;">
+            <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-left: 4px solid ${statusColor}; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <span style="font-weight: bold; color: #fff; font-size: 0.85em;">${t.user} <span style="font-size: 0.75em; color: #888;">(${t.id})</span></span>
+                    <span style="font-weight: bold; color: #fff; font-size: 0.85em;">👤 ${t.user} <span style="font-size: 0.75em; color: #888;">(${t.id})</span></span>
                     <span style="background: ${statusColor}; color: white; padding: 1px 6px; border-radius: 10px; font-size: 0.7em; font-weight: bold;">${t.status || 'Offen'}</span>
                 </div>
-                <div style="font-size: 0.75em; color: #aaa; margin-bottom: 4px;">Kontakt: ${t.contact || t.email || 'schachlivesupport.jailer914@slmail.me'} | ${t.createdAt || ''}</div>
+                <div style="font-size: 0.75em; color: #aaa; margin-bottom: 4px;">Kontakt: ${t.contact || t.email || 'N/A'} ${t.clientIP ? `| IP: ${t.clientIP}` : ''} | ${t.createdAt || ''}</div>
                 <div style="font-size: 0.8em; color: #ddd; background: rgba(0,0,0,0.3); padding: 6px; border-radius: 4px; margin-bottom: 6px;">${t.text}</div>
                 ${t.banReason ? `<div style="font-size: 0.75em; color: #ff9999; margin-bottom: 4px;">Bann-Grund: ${t.banReason}</div>` : ''}
                 ${t.reply ? `<div style="font-size: 0.75em; color: #2ecc71; margin-bottom: 4px;">Antwort: ${t.reply}</div>` : ''}
-                <div style="display: flex; gap: 6px; margin-top: 6px;">
-                    <button onclick="adminUnbanUser('${t.user}')" style="background: #27ae60; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer; font-weight: bold;">🔓 User Entbannen</button>
+                <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
+                    ${t.status !== 'Entbannt' ? `<button onclick="unbanTicket('${t.id}', '${t.user}')" style="background: #27ae60; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer; font-weight: bold;">🔓 Entbannen & Genehmigen</button>` : ''}
                     <button onclick="replyToTicket('${t.id}')" style="background: #3498db; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer;">💬 Antworten</button>
+                    ${t.status !== 'Abgelehnt' ? `<button onclick="rejectTicket('${t.id}')" style="background: #e74c3c; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer;">❌ Ablehnen</button>` : ''}
                 </div>
             </div>
         `;
     }).join('');
+};
+
+window.unbanTicket = function(ticketId, username) {
+    if (confirm(`Möchtest du das Ticket ${ticketId} genehmigen und den Spieler '${username}' sowie seine IP entsperren?`)) {
+        fetch('/api/admin/unban-ticket', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticketId, reply: 'Entbannungsantrag genehmigt! Account & IP wurden freigeschaltet.' })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                if (window.showInAppNotification) window.showInAppNotification("Admin", data.message || `Ticket ${ticketId} erfolgreich entbannt!`, "success");
+            }
+            window.requestAdminTicketsRefresh();
+            if (window.requestAdminUsersRefresh) window.requestAdminUsersRefresh();
+        })
+        .catch(err => {
+            if (socket && socket.readyState === 1) {
+                socket.send(JSON.stringify({ type: 'unban_ticket', ticketId, reply: 'Entbannungsantrag genehmigt!' }));
+            }
+        });
+    }
+};
+
+window.rejectTicket = function(ticketId) {
+    const reason = prompt("Grund für die Ablehnung des Support-Tickets:", "Entbannungsantrag abgelehnt.");
+    if (reason !== null) {
+        fetch('/api/admin/reply-ticket', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticketId, reply: reason, status: 'Abgelehnt' })
+        }).then(() => window.requestAdminTicketsRefresh());
+    }
 };
 
 window.replyToTicket = function(ticketId) {
@@ -499,9 +534,13 @@ window.adminBanUser = function(username) {
 
 window.adminUnbanUser = function(username) {
     if (socket && socket.readyState === 1) {
+        socket.send(JSON.stringify({ type: 'admin_unban_user', target: username }));
         socket.send(JSON.stringify({ type: 'chat_message', username: getMyName(), content: `/unban ${username}` }));
-        window.showInAppNotification("Admin", `Entbannungs-Befehl für ${username} gesendet.`, "info");
-        setTimeout(window.requestAdminUsersRefresh, 500);
+        window.showInAppNotification("Admin", `Entbannung für ${username} gesendet.`, "info");
+        setTimeout(() => {
+            if (window.requestAdminUsersRefresh) window.requestAdminUsersRefresh();
+            if (window.requestAdminTicketsRefresh) window.requestAdminTicketsRefresh();
+        }, 500);
     }
 };
 
@@ -2038,6 +2077,19 @@ socket.onmessage = (e) => {
         if (data.type === 'admin_users_update') {
             if (window.handleAdminUsersUpdate) {
                 window.handleAdminUsersUpdate(data.users);
+            }
+            return;
+        }
+        if (data.type === 'admin_tickets_update') {
+            if (data.tickets && window.renderAdminTickets) {
+                window.renderAdminTickets(data.tickets);
+            }
+            return;
+        }
+        if (data.type === 'support_ticket_response') {
+            const statusEl = document.getElementById('ban-ticket-status');
+            if (statusEl) {
+                statusEl.innerHTML = `✅ Ticket <strong>${data.ticketId}</strong> erfolgreich übermittelt! Support-E-Mail: <strong>schachlivesupport.jailer914@slmail.me</strong>`;
             }
             return;
         }

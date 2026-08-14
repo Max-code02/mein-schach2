@@ -71,6 +71,25 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["username"]
+    },
+    "Ticket": {
+      "title": "Ticket",
+      "description": "Support tickets and unban appeals",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user": { "type": "string" },
+        "contact": { "type": "string" },
+        "clientIP": { "type": "string" },
+        "email": { "type": "string" },
+        "text": { "type": "string" },
+        "banReason": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "reply": { "type": "string" }
+      },
+      "required": ["id", "text"]
     }
   },
   "firestore": {
@@ -93,6 +112,10 @@
     "/bans/{banId}": {
       "schema": { "$ref": "#/entities/Ban" },
       "description": "Banned IPs and accounts"
+    },
+    "/tickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/Ticket" },
+      "description": "Support tickets and unban appeals"
     }
   }
 }

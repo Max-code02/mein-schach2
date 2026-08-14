@@ -1,13 +1,44 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Spielerprofil-Daten (Elo, Level, Wins, Losses)
-    match /players/{userId} {
+
+    // 1. Spieler-Profile (Statistiken, Elo, XP, Themes)
+    match /players/{playerId} {
       allow read: if true;
-      allow write: if request.auth != null || request.resource.data.username != null;
+      allow write: if true;
     }
-    
-    // Bestenliste, Spiele, Chat & andere Dokumente
+
+    // 2. Globale Rangliste / Leaderboard
+    match /leaderboard/{entryDocId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // 3. Bann-Listen (Gesperrte Benutzer & IPs)
+    match /bans/{banId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // 4. Spielhistorie & Snapshots
+    match /games/{gameId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // 5. Chat-Nachrichten
+    match /messages/{messageId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // 6. Support-Tickets & Entbannungsanträge
+    match /tickets/{ticketId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Globaler Fallback für alle weiteren Dokumente
     match /{document=**} {
       allow read, write: if true;
     }

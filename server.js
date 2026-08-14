@@ -467,18 +467,87 @@ app.get('/api/leaderboard', async (req, res) => {
     res.json({ success: true, list: sorted });
 });
 
-const globalSupportTickets = [];
+let globalSupportTickets = [];
+const TICKETS_FILE = path.join(__dirname, 'support_tickets.json');
+
+function loadTicketsFromFile() {
+    if (fs.existsSync(TICKETS_FILE)) {
+        try {
+            const data = fs.readFileSync(TICKETS_FILE, 'utf8');
+            globalSupportTickets = JSON.parse(data);
+            console.log(`📩 ${globalSupportTickets.length} Support-Tickets aus lokaler Datei geladen.`);
+        } catch (e) {
+            console.error("Fehler beim Laden von support_tickets.json:", e.message);
+        }
+    }
+}
+loadTicketsFromFile();
+
+async function loadFirestoreTickets() {
+    if (!firestoreDb) return;
+    try {
+        const snapshot = await firestoreDb.collection('tickets').orderBy('timestamp', 'desc').limit(100).get();
+        if (!snapshot.empty) {
+            const firestoreTickets = [];
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                firestoreTickets.push({ id: doc.id, ...data });
+            });
+            if (firestoreTickets.length > 0) {
+                globalSupportTickets = firestoreTickets;
+                saveTicketsToFile();
+                console.log(`🔥 ${firestoreTickets.length} Support-Tickets aus Firestore geladen.`);
+            }
+        }
+    } catch (e) {
+        console.warn("Firestore tickets load warning:", e.message);
+    }
+}
+
+function saveTicketsToFile() {
+    try {
+        fs.writeFileSync(TICKETS_FILE, JSON.stringify(globalSupportTickets, null, 2));
+    } catch (e) {
+        console.error("Fehler beim Speichern von support_tickets.json:", e.message);
+    }
+}
+
+async function saveTicketToFirestore(ticket) {
+    if (!firestoreDb || !ticket || !ticket.id) return;
+    try {
+        await firestoreDb.collection('tickets').doc(ticket.id).set(ticket, { merge: true });
+    } catch (e) {
+        console.error("Fehler beim Speichern des Tickets in Firestore:", e.message);
+    }
+}
+
+function broadcastTicketsUpdate() {
+    const msgStr = JSON.stringify({
+        type: 'admin_tickets_update',
+        tickets: globalSupportTickets,
+        supportEmail: 'schachlivesupport.jailer914@slmail.me'
+    });
+    if (wss && wss.clients) {
+        wss.clients.forEach(c => {
+            if (c.readyState === 1 && (isUserAdmin(c.playerName) || c.role === 'admin' || c.role === 'moderator')) {
+                c.send(msgStr);
+            }
+        });
+    }
+}
 
 app.post('/api/support-ticket', (req, res) => {
     const { user, contact, text, banReason } = req.body || {};
     if (!text) {
         return res.status(400).json({ success: false, message: 'Nachricht ist erforderlich.' });
     }
+    const detectedIP = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || '';
     const ticketId = 'TICK-' + Date.now().toString(36).toUpperCase();
     const newTicket = {
         id: ticketId,
-        user: user || 'Gesperrter Spieler',
+        user: user || contact || 'Gesperrter Spieler',
         contact: contact || user || 'Unbekannt',
+        clientIP: detectedIP,
         email: 'schachlivesupport.jailer914@slmail.me',
         text: text,
         banReason: banReason || 'Admin-Gesperrt',
@@ -488,7 +557,10 @@ app.post('/api/support-ticket', (req, res) => {
         reply: ''
     };
     globalSupportTickets.unshift(newTicket);
-    console.log(`📩 Support-Ticket [${ticketId}] von ${user} erfasst.`);
+    saveTicketsToFile();
+    saveTicketToFirestore(newTicket);
+    broadcastTicketsUpdate();
+    console.log(`📩 Support-Ticket [${ticketId}] von ${user || contact} (IP: ${detectedIP}) erfasst.`);
     res.json({
         success: true,
         ticketId: ticketId,
@@ -501,15 +573,70 @@ app.get('/api/admin/tickets', (req, res) => {
     res.json({ success: true, tickets: globalSupportTickets, supportEmail: 'schachlivesupport.jailer914@slmail.me' });
 });
 
-app.post('/api/admin/reply-ticket', (req, res) => {
+app.post('/api/admin/unban-ticket', async (req, res) => {
+    const { ticketId, reply } = req.body || {};
+    const ticket = globalSupportTickets.find(t => t.id === ticketId);
+    if (!ticket) {
+        return res.status(404).json({ success: false, message: 'Ticket nicht gefunden' });
+    }
+
+    const targetUser = ticket.user;
+    const targetContact = ticket.contact;
+    const targetIP = ticket.clientIP || ticket.ip;
+
+    if (targetUser) await unbanPlayerHelper(targetUser);
+    if (targetContact && targetContact !== targetUser) await unbanPlayerHelper(targetContact);
+    if (targetIP) {
+        bannedIPs.delete(targetIP);
+        if (firestoreDb) {
+            try {
+                const banIdIP = `ip_${targetIP.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+                await firestoreDb.collection('bans').doc(banIdIP).delete();
+            } catch(e) {}
+        }
+    }
+
+    ticket.status = 'Entbannt';
+    ticket.reply = reply || 'Entbannungsantrag genehmigt! Dein Account/IP wurde erfolgreich entsperrt.';
+    saveTicketsToFile();
+
+    broadcastTicketsUpdate();
+    broadcastAdminUsersUpdate();
+
+    return res.json({
+        success: true,
+        message: `✅ Entbannung für Ticket ${ticketId} [${targetUser}] erfolgreich ausgeführt!`,
+        ticket
+    });
+});
+
+app.post('/api/admin/reply-ticket', async (req, res) => {
     const { ticketId, reply, status } = req.body || {};
     const ticket = globalSupportTickets.find(t => t.id === ticketId);
-    if (ticket) {
-        if (reply) ticket.reply = reply;
-        if (status) ticket.status = status;
-        return res.json({ success: true, ticket });
+    if (!ticket) {
+        return res.status(404).json({ success: false, message: 'Ticket nicht gefunden' });
     }
-    res.status(404).json({ success: false, message: 'Ticket nicht gefunden' });
+
+    if (reply) ticket.reply = reply;
+    if (status) ticket.status = status;
+
+    const isUnbanAction = status === 'Entbannt' || status === 'Genehmigt' || (reply && reply.toLowerCase().includes('entbann'));
+    if (isUnbanAction) {
+        const targetUser = ticket.user;
+        const targetContact = ticket.contact;
+        const targetIP = ticket.clientIP || ticket.ip;
+
+        if (targetUser) await unbanPlayerHelper(targetUser);
+        if (targetContact && targetContact !== targetUser) await unbanPlayerHelper(targetContact);
+        if (targetIP) bannedIPs.delete(targetIP);
+        ticket.status = 'Entbannt';
+    }
+
+    saveTicketsToFile();
+    broadcastTicketsUpdate();
+    broadcastAdminUsersUpdate();
+
+    return res.json({ success: true, ticket });
 });
 
 app.post('/analyse', async (req, res) => {
@@ -1360,14 +1487,43 @@ async function unbanPlayerHelper(targetName) {
     const cleanTarget = targetName.trim();
     const cleanTargetLower = cleanTarget.toLowerCase();
 
+    // 1. Delete target directly from Sets
     bannedPlayers.delete(cleanTargetLower);
     bannedIPs.delete(cleanTarget);
 
+    // 2. Check and unban target in userDB
     if (userDB[cleanTarget]) {
         userDB[cleanTarget].is_banned = false;
         userDB[cleanTarget].ip_ban = false;
+        if (userDB[cleanTarget].ip_address) {
+            bannedIPs.delete(userDB[cleanTarget].ip_address);
+        }
     }
 
+    // 3. Search userDB for matching username, email, or IP
+    for (const uname in userDB) {
+        const u = userDB[uname];
+        if (!u) continue;
+        if (uname.toLowerCase() === cleanTargetLower || 
+            (u.email && u.email.toLowerCase() === cleanTargetLower) || 
+            u.ip_address === cleanTarget) {
+            u.is_banned = false;
+            u.ip_ban = false;
+            bannedPlayers.delete(uname.toLowerCase());
+            if (u.ip_address) bannedIPs.delete(u.ip_address);
+        }
+    }
+
+    // 4. Update status in support tickets for this user
+    globalSupportTickets.forEach(t => {
+        if (t.user?.toLowerCase() === cleanTargetLower || t.contact?.toLowerCase() === cleanTargetLower || t.clientIP === cleanTarget) {
+            t.status = 'Entbannt';
+            t.reply = t.reply || 'Entbannungsantrag genehmigt!';
+        }
+    });
+    saveTicketsToFile();
+
+    // 5. Delete ban documents in Firestore
     if (firestoreDb) {
         try {
             const banIdUser = `username_${cleanTargetLower}`;
@@ -1382,7 +1538,10 @@ async function unbanPlayerHelper(targetName) {
 
     try {
         fs.writeFileSync(BAN_FILE, JSON.stringify([...bannedIPs], null, 2));
+        fs.writeFileSync(USER_FILE, JSON.stringify(userDB, null, 2));
     } catch (e) {}
+
+    console.log(`🔓 Entbannung ausgeführt für: ${cleanTarget}`);
 }
 
 function loadData() {
@@ -1413,6 +1572,7 @@ function loadData() {
     }
     loadFirestoreProfiles();
     loadFirestoreBans();
+    loadFirestoreTickets();
 
     // Auto-clean Admin Accounts from Ban lists
     const ADMIN_NAMES = ['max', '222', 'admin', 'max.schule13@gmail.com', 'owner', 'eigentümer'];
@@ -1771,6 +1931,87 @@ wss.on('connection', function(ws, req) {
                     type: 'admin_logs_update',
                     logs: adminBanLogs
                 }));
+                return;
+            }
+
+            if (data.type === 'get_admin_tickets') {
+                ws.send(JSON.stringify({
+                    type: 'admin_tickets_update',
+                    tickets: globalSupportTickets,
+                    supportEmail: 'schachlivesupport.jailer914@slmail.me'
+                }));
+                return;
+            }
+
+            if (data.type === 'submit_support_ticket') {
+                const ticketId = 'TICK-' + Date.now().toString(36).toUpperCase();
+                const newTicket = {
+                    id: ticketId,
+                    user: data.user || ws.playerName || 'Gesperrter Spieler',
+                    contact: data.contact || data.user || 'Unbekannt',
+                    clientIP: ws.clientIP || '127.0.0.1',
+                    email: 'schachlivesupport.jailer914@slmail.me',
+                    text: data.text || 'Kein Text übermittelt',
+                    banReason: data.banReason || 'IP/Account Gesperrt',
+                    status: 'Offen',
+                    createdAt: new Date().toLocaleString('de-DE'),
+                    timestamp: Date.now(),
+                    reply: ''
+                };
+                globalSupportTickets.unshift(newTicket);
+                saveTicketsToFile();
+                broadcastTicketsUpdate();
+                ws.send(JSON.stringify({
+                    type: 'support_ticket_response',
+                    success: true,
+                    ticketId: ticketId,
+                    message: 'Support-Ticket erfolgreich übermittelt.'
+                }));
+                return;
+            }
+
+            if (data.type === 'unban_ticket' || data.type === 'admin_unban_ticket') {
+                if (!isUserAdmin(ws.playerName) && ws.role !== 'admin' && ws.role !== 'moderator') {
+                    ws.send(JSON.stringify({ type: 'system_alert', message: 'Keine Berechtigung, um Tickets zu entbannen.' }));
+                    return;
+                }
+                const ticketId = data.ticketId;
+                const ticket = globalSupportTickets.find(t => t.id === ticketId);
+                if (ticket) {
+                    const targetUser = ticket.user;
+                    const targetContact = ticket.contact;
+                    const targetIP = ticket.clientIP || ticket.ip;
+
+                    if (targetUser) await unbanPlayerHelper(targetUser);
+                    if (targetContact && targetContact !== targetUser) await unbanPlayerHelper(targetContact);
+                    if (targetIP) bannedIPs.delete(targetIP);
+
+                    ticket.status = 'Entbannt';
+                    ticket.reply = data.reply || 'Entbannungsantrag genehmigt! Account/IP wurde freigeschaltet.';
+                    saveTicketsToFile();
+                    broadcastTicketsUpdate();
+                    broadcastAdminUsersUpdate();
+                    ws.send(JSON.stringify({
+                        type: 'chat',
+                        text: `🔓 Ticket ${ticketId}: Spieler '${targetUser}' (${targetIP || ''}) wurde erfolgreich entbannt!`,
+                        system: true
+                    }));
+                }
+                return;
+            }
+
+            if (data.type === 'admin_unban_user') {
+                if (!isUserAdmin(ws.playerName) && ws.role !== 'admin' && ws.role !== 'moderator') {
+                    ws.send(JSON.stringify({ type: 'system_alert', message: 'Keine Berechtigung, um Spieler zu entbannen.' }));
+                    return;
+                }
+                const target = data.target || data.username;
+                if (target) {
+                    await unbanPlayerHelper(target);
+                    ws.send(JSON.stringify({ type: 'chat', text: `🔓 Spieler/IP '${target}' wurde erfolgreich entbannt!`, system: true }));
+                    broadcastAdminUsersUpdate();
+                    broadcastTicketsUpdate();
+                }
                 return;
             }
 
