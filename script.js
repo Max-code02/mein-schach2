@@ -1918,7 +1918,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 const tcSelect = document.getElementById("timeControl");
                 const timeControl = tcSelect ? tcSelect.value : "unlimited";
                 if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify({ type: 'find_random', playerName: getMyName(), timeControl: timeControl }));
+                    socket.send(JSON.stringify({ type: 'find_random', playerName: getMyName(), timeControl: timeControl, bet: window.casinoBet || 0 }));
                     addChat("System", "⚢ Elixir Hub sucht nach einem Gegner...", "system");
                 } else {
                     addChat("System", "Nicht mit dem Server verbunden.", "system");
@@ -2569,6 +2569,8 @@ socket.onmessage = (e) => {
                 const profileStats = document.getElementById('profile-stats');
                 if (profileName) profileName.innerText = data.name;
                 if (profileStats) profileStats.innerText = `Elo: ${data.elo || 1200} | Siege: ${data.wins || 0}`;
+                const profileCoins = document.getElementById('profile-coins');
+                if (profileCoins) profileCoins.innerText = '🏦 Coins: ' + (data.coins !== undefined ? data.coins : 1000);
                 
                 const authBtn = document.getElementById('openAuthBtn');
                 if (authBtn) {
@@ -4234,4 +4236,18 @@ window.requestAdminElixirRefresh = function() {
         socket.send(JSON.stringify({ type: 'get_admin_elixir' }));
         document.getElementById('admin-elixir-container').innerHTML = '<div style="color: #aaa; text-align: center; font-style: italic; font-size: 0.85em; padding: 10px 0;">Lade Queue...</div>';
     }
+};
+
+
+window.casinoBet = 0;
+window.setCasinoBet = function(amount) {
+    window.casinoBet = amount;
+    document.getElementById('current-bet-display').innerText = amount + ' Coins';
+    
+    // Update active class on buttons
+    const btns = document.querySelectorAll('.casino-bet-btn');
+    btns.forEach(btn => btn.classList.remove('active-bet'));
+    
+    const targetBtn = Array.from(btns).find(b => parseInt(b.innerText) === amount || (amount===1000 && b.innerText.includes('1000')));
+    if (targetBtn) targetBtn.classList.add('active-bet');
 };

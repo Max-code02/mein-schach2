@@ -7,6 +7,7 @@ const cors = require('cors');
 const http = require('http');
 const fs = require('fs');
 const WebSocket = require('ws');
+const { Chess } = require('chess.js');
 let bannedIPs = new Set();
 let bannedPlayers = new Set();
 const ADMIN_PASSWORDS_LIST = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi', '222'];
@@ -791,6 +792,23 @@ function processElixirMatchmaking() {
                     p1.ws.opponentName = p2.playerName || "Spieler 2";
                     p2.ws.opponentName = p1.playerName || "Spieler 1";
                     
+                    
+                    // === COBOL BANKING SYSTEM: BETTING ===
+                    let p1Coins = userDB[p1.playerName] ? (userDB[p1.playerName].coins || 1000) : 1000;
+                    let p2Coins = userDB[p2.playerName] ? (userDB[p2.playerName].coins || 1000) : 1000;
+                    let pot = 0;
+                    
+                    if (p1Coins >= 50 && p2Coins >= 50) {
+                        p1Coins -= 50;
+                        p2Coins -= 50;
+                        pot = 100;
+                        if (userDB[p1.playerName]) userDB[p1.playerName].coins = p1Coins;
+                        if (userDB[p2.playerName]) userDB[p2.playerName].coins = p2Coins;
+                        console.log(`🏦 [COBOL BANK] 50 Coins von ${p1.playerName} und ${p2.playerName} abgebucht. Pot: 100`);
+                    } else {
+                        console.log(`🏦 [COBOL BANK] Match ohne Einsatz (nicht genug Coins).`);
+                    }
+                    // ===================================
                     let tc = p1.timeControl;
                     let tSecs = 600, tInc = 0;
                     if (tc !== 'unlimited') {
@@ -806,6 +824,8 @@ function processElixirMatchmaking() {
                     }
                     
                     activeRoomStates.set(roomID, {
+                        chess: new Chess(),
+                        pot: pot,
                         board: null, turn: 'white', isGhostMatch: false,
                         whitePlayer: p2.playerName, blackPlayer: p1.playerName,
                         timeControl: tc, timeWhite: tSecs, timeBlack: tSecs, timeInc: tInc, gameOver: false
@@ -2213,6 +2233,7 @@ wss.on('connection', function(ws, req) {
                     elo: user.elo || 1200,
                     wins: user.wins || 0,
                     losses: user.losses || 0,
+                    coins: user.coins !== undefined ? user.coins : 1000,
                     level: user.level || 1,
                     xp: user.xp || 0,
                     board_theme: user.board_theme || 'classic',
@@ -2313,7 +2334,7 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'get_admin_elixir') {
-                const q = elixirMatchQueue.map(p => ({ playerName: p.playerName, timeControl: p.timeControl }));
+                const q = elixirMatchQueue.map(p => ({ playerName: p.playerName, timeControl: p.timeControl, bet: p.bet || 0 }));
                 ws.send(JSON.stringify({
                     type: 'admin_elixir_update',
                     queue: q
@@ -2820,6 +2841,8 @@ wss.on('connection', function(ws, req) {
                 }
 
                 activeRoomStates.set(roomID, {
+                    chess: new Chess(),
+                    pot: 0,
                     board: null,
                     turn: 'white',
                     isGhostMatch: false,
@@ -2938,7 +2961,7 @@ wss.on('connection', function(ws, req) {
                 } else {
                     console.log(`⚢ [Elixir BEAM Engine] Spieler ${ws.playerName || "Gast"} in die Matchmaking-Queue eingereiht!`);
                     // Use Elixir Matchmaking Queue
-                    elixirMatchQueue.push({ ws: ws, playerName: ws.playerName || "Gast", timeControl: data.timeControl || 'unlimited' });
+                    elixirMatchQueue.push({ ws: ws, playerName: ws.playerName || "Gast", timeControl: data.timeControl || 'unlimited', bet: parseInt(data.bet) || 0 });
                     
                     // Broadcast to client about Elixir queue
                     ws.send(JSON.stringify({ type: 'chat', text: '⚢ [Elixir Hub] In der Matchmaking-Queue eingereiht...', playerName: 'System', lobby: 'global' }));
@@ -2965,7 +2988,17 @@ wss.on('connection', function(ws, req) {
                                 }
                             } else { tSecs = Infinity; }
                             
-                            activeRoomStates.set(roomID, { board: null, turn: 'white', isGhostMatch: true, whitePlayer: ws.playerName || "Gast", blackPlayer: botName, timeControl: tc, timeWhite: tSecs, timeBlack: tSecs, timeInc: tInc, gameOver: false });
+                            
+                            let pCoins = userDB[ws.playerName] ? (userDB[ws.playerName].coins !== undefined ? userDB[ws.playerName].coins : 1000) : 1000;
+                            let pot = 0;
+                            let betAmount = parseInt(data.bet) || 0;
+                            if (pCoins >= betAmount && betAmount > 0) {
+                                if (userDB[ws.playerName]) userDB[ws.playerName].coins = pCoins - betAmount;
+                                pot = betAmount * 2; // Ghost covers the bet
+                                console.log(`🏦 [COBOL BANK] ${betAmount} Coins von ${ws.playerName} abgebucht. Ghost covert. Pot: ${pot}`);
+                            }
+                            
+                            activeRoomStates.set(roomID, { pot: pot, chess: new Chess(), board: null, turn: 'white', isGhostMatch: true, whitePlayer: ws.playerName || "Gast", blackPlayer: botName, timeControl: tc, timeWhite: tSecs, timeBlack: tSecs, timeInc: tInc, gameOver: false });
                             ws.room = roomID;
                             ws.isGhostMatch = true;
                             ws.opponentName = botName;
@@ -3089,13 +3122,37 @@ wss.on('connection', function(ws, req) {
                         return; 
                     }
                     const targetRoom = data.room || ws.room || "global";
+                    let roomState = activeRoomStates.get(targetRoom);
+                    
+                    if (roomState && roomState.chess) {
+                        // === RUST ANTI-CHEAT ENGINE ===
+                        const cols = ['a','b','c','d','e','f','g','h'];
+                        const fromSq = cols[data.fc] + (8 - data.fr);
+                        const toSq = cols[data.tc] + (8 - data.tr);
+                        
+                        try {
+                            const move = roomState.chess.move({ from: fromSq, to: toSq, promotion: 'q' });
+                            if (!move) {
+                                throw new Error("Illegal Move");
+                            }
+                            console.log(`🛡️ [RUST ENGINE] Zug genehmigt: ${fromSq} -> ${toSq}`);
+                            data.fen = roomState.chess.fen();
+                        } catch (e) {
+                            console.log(`🛡️ [RUST ENGINE] ILLEGALER ZUG BLOCKIERT! ${fromSq} -> ${toSq} von ${ws.playerName}`);
+                            ws.send(JSON.stringify({ type: 'chat', text: '🛡️ [RUST ANTI-CHEAT] Manipulierter oder ungültiger Zug blockiert!', system: true, lobby: targetRoom }));
+                            ws.send(JSON.stringify({ type: 'sync_board', fen: roomState.chess.fen() }));
+                            return; // STOP EXECUTION!
+                        }
+                        // =============================
+                    }
+                    
                     if (!moveCounters[targetRoom]) moveCounters[targetRoom] = 0;
                     moveCounters[targetRoom]++; 
                     
                     captureMoveSnapshot(targetRoom, data.board, moveCounters[targetRoom]);
                     ws.lastBoardState = data.board; 
 
-                    let roomState = activeRoomStates.get(targetRoom);
+                    roomState = activeRoomStates.get(targetRoom);
                     if (!roomState) {
                         roomState = {
                             whitePlayer: ws.color === 'white' ? (ws.playerName || 'Weiß') : (ws.opponentName || 'Weiß'),
@@ -3644,7 +3701,7 @@ wss.on('connection', function(ws, req) {
             if (data.type === 'rejoin_room') {
                 const targetRoom = data.room;
                 const pName = data.playerName || ws.playerName;
-                const roomState = activeRoomStates.get(targetRoom);
+                /* replaced const */
 
                 if (roomState && !roomState.gameOver) {
                     ws.room = targetRoom;
@@ -3691,13 +3748,38 @@ wss.on('connection', function(ws, req) {
 
             if (data.type === 'game_over') {
                 const targetRoom = data.room || ws.room || "global";
-                const roomState = activeRoomStates.get(targetRoom);
+                // === COBOL BANKING: POT PAYOUT ===
+                let roomState = activeRoomStates.get(targetRoom);
+                if (roomState && roomState.pot > 0) {
+                    let winnerName = null;
+                    if (data.winner === 'white' || (data.text && data.text.includes('Weiß'))) {
+                        winnerName = roomState.whitePlayer;
+                    } else if (data.winner === 'black' || (data.text && data.text.includes('Schwarz'))) {
+                        winnerName = roomState.blackPlayer;
+                    }
+                    
+                    if (winnerName && userDB[winnerName]) {
+                        userDB[winnerName].coins = (userDB[winnerName].coins || 1000) + roomState.pot;
+                        console.log(`🏦 [COBOL BANK] ${winnerName} gewinnt den Pot von ${roomState.pot} Coins!`);
+                        broadcastRoomMessage({ type: 'chat', text: `🏦 [COBOL BANK] ${winnerName} hat den Casino-Pot von ${roomState.pot} Coins gewonnen!`, system: true }, targetRoom);
+                        saveAll(winnerName);
+                    } else if (data.text && (data.text.includes('Remis') || data.text.includes('Unentschieden'))) {
+                         // Refund on draw
+                         if (userDB[roomState.whitePlayer]) userDB[roomState.whitePlayer].coins = (userDB[roomState.whitePlayer].coins || 1000) + (roomState.pot / 2);
+                         if (userDB[roomState.blackPlayer]) userDB[roomState.blackPlayer].coins = (userDB[roomState.blackPlayer].coins || 1000) + (roomState.pot / 2);
+                         broadcastRoomMessage({ type: 'chat', text: `🏦 [COBOL BANK] Unentschieden! Einsatz von ${roomState.pot} Coins wurde zurückerstattet.`, system: true }, targetRoom);
+                    }
+                    roomState.pot = 0;
+                }
+                // =================================
+
+                /* replaced const */
                 if (roomState) roomState.gameOver = true;
                 generateGameVideo(targetRoom, ws);
 
                 if (firestoreDb) {
                     try {
-                        const roomState = activeRoomStates.get(targetRoom);
+                        /* replaced const */
                         const finalBoard = roomState ? roomState.board : ws.lastBoardState;
                         const whiteP = roomState ? roomState.whitePlayer : (ws.color === 'white' ? ws.playerName : ws.opponentName) || 'Weiß';
                         const blackP = roomState ? roomState.blackPlayer : (ws.color === 'black' ? ws.playerName : ws.opponentName) || 'Schwarz';

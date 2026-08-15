@@ -16,6 +16,7 @@
     "@vitejs/plugin-react": "^5.0.4",
     "axios": "^1.18.1",
     "canvas": "^3.2.3",
+    "chess.js": "^1.4.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",

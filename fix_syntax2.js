@@ -1,7 +1,6 @@
 const fs = require('fs');
-let script = fs.readFileSync('script.js', 'utf8');
+let code = fs.readFileSync('server.js', 'utf8');
 
-const regex = /    \}\s*const joinBtn = document\.getElementById\('join-custom-lobby-btn'\);[\s\S]*?\}\);\s*\}\);/;
-script = script.replace(regex, '');
-
-fs.writeFileSync('script.js', script);
+code = code.replace("                    let roomState = activeRoomStates.get(targetRoom);\n                    if (!roomState) {", "                    roomState = activeRoomStates.get(targetRoom);\n                    if (!roomState) {");
+fs.writeFileSync('server.js', code);
+console.log("Fixed syntax error 2");

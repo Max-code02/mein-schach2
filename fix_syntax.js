@@ -1,11 +1,10 @@
 const fs = require('fs');
-let script = fs.readFileSync('script.js', 'utf8');
+let code = fs.readFileSync('server.js', 'utf8');
 
-script = script.replace(/function loadChatHistory\(\) \{\n    if \(socket && socket\.readyState === WebSocket\.OPEN\) \{\n        socket\.send\(JSON\.stringify\(\{ type: 'get_chat_history' \}\)\);\n    \}\n\}\n\}/,
-`function loadChatHistory() {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: 'get_chat_history' }));
-    }
-}`);
+const errorRegex = /ws\.lastBoardState = data\.board; \n                    let roomState = activeRoomStates\.get\(targetRoom\);/;
+const replacement = `ws.lastBoardState = data.board; 
+                    roomState = activeRoomStates.get(targetRoom) || roomState;`; // Just re-assign if needed, though it's already defined
 
-fs.writeFileSync('script.js', script);
+code = code.replace(errorRegex, replacement);
+fs.writeFileSync('server.js', code);
+console.log("Fixed syntax error");
