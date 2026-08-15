@@ -1723,13 +1723,14 @@ window.addEventListener('DOMContentLoaded', () => {
                 const timeControl = tcSelect ? tcSelect.value : "unlimited";
                 if (socket && socket.readyState === WebSocket.OPEN) {
                     socket.send(JSON.stringify({
-                        type: 'find_random',
+                        type: 'join_room',
                         room: roomId,
                         playerName: getMyName(),
-                        timeControl: timeControl
+                        timeControl: timeControl,
+                        allowBotFallback: false
                     }));
                 }
-                addChat("System", "Raum '" + roomId + "' beigetreten.", "system");
+                addChat("System", "Raum '" + roomId + "' beigetreten. Warte auf Mitspieler...", "system");
             } else {
                 alert("Bitte eine Raum-ID eingeben.");
             }
@@ -1749,13 +1750,14 @@ window.addEventListener('DOMContentLoaded', () => {
         const tcSelect = document.getElementById("timeControl");
         const tc = tcSelect ? tcSelect.value : "10";
 
-        // Raum aktiv beitreten / registrieren
+        // Raum aktiv beitreten / registrieren OHNE Bots
         if (socket && socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({
-                type: 'find_random',
+                type: 'join_room',
                 room: rId,
                 playerName: getMyName(),
-                timeControl: tc
+                timeControl: tc,
+                allowBotFallback: false
             }));
         }
 
@@ -2787,6 +2789,20 @@ socket.onmessage = (e) => {
             return;
         }
 
+        if (data.type === 'room_joined') {
+            const rName = data.room || onlineRoom || 'Duell';
+            if (typeof window.showInAppNotification === 'function') {
+                window.showInAppNotification('⏳ Raum erstellt / beigetreten', `Raum '${rName}'. Warte auf deinen Freund (WhatsApp)...`, 'info');
+            }
+            addChat("System", `⏳ Du bist in Raum '${rName}'. Warte auf deinen Freund...`, "system");
+            const statusDisplay = document.getElementById("status-display");
+            if (statusDisplay) {
+                statusDisplay.style.display = "block";
+                statusDisplay.innerText = `⏳ Warte auf Freund in Raum '${rName}'...`;
+            }
+            return;
+        }
+
         if (data.type === 'open_challenges_list') {
             renderOpenChallenges(data.challenges);
             return;
@@ -2882,12 +2898,13 @@ function checkUrlInviteParam() {
         setTimeout(() => {
             if (socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({
-                    type: 'find_random',
+                    type: 'join_room',
                     room: roomParam,
                     playerName: getMyName(),
-                    timeControl: tcParam || '10'
+                    timeControl: tcParam || '10',
+                    allowBotFallback: false
                 }));
-                addChat("System", `🔗 Du bist über einen Einladungs-Link Raum '${roomParam}' beigetreten!`, "system");
+                addChat("System", `🔗 Du bist über einen Einladungs-Link Raum '${roomParam}' beigetreten! Warte auf Gegner...`, "system");
             }
         }, 800);
     }

@@ -2863,7 +2863,11 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'find_random' || data.type === 'findGame') {
-                if (waitingPlayer && waitingPlayer !== ws && waitingPlayer.readyState === 1 && waitingPlayer.timeControl === data.timeControl) {
+                // If a specific room ID was provided (e.g. from WhatsApp / Invite / Room Code), route to join_room so no bot spawns!
+                if (data.room && data.room.trim().length > 0) {
+                    data.type = 'join_room';
+                    // Let the execution continue to join_room handler below
+                } else if (waitingPlayer && waitingPlayer !== ws && waitingPlayer.readyState === 1 && waitingPlayer.timeControl === data.timeControl) {
                     if (waitingPlayer.botTimeout) {
                         clearTimeout(waitingPlayer.botTimeout);
                         console.log("🛑 Timer gestoppt - Menschlicher Gegner gefunden!");
