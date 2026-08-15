@@ -2,16 +2,20 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="google-site-verification" content="0JpVd6y2K5Tg-MRFKbDSECCUZ5eNc-WvGvUzDrlcIb4" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <title>Schach Live | Profi-Schach</title>
     <meta name="description" content="Spiele Schach live gegen Freunde oder KI. Mit Echtzeit-Statistiken, Leaderboard und moderner Rust- & Python-Analyse.">
     <meta name="keywords" content="Schach, Online-Schach, KI-Analyse, Rust, Python, Leaderboard, Online">
 
-    <meta property="og:title" content=" Schach Live---Spiele Schach gegen Freunde & KI und chatte">
-    <meta property="og:description" content="Komm vorbei und spiel eine Runde gegen meine KI oder andere!">
+    <meta property="og:title" content="⚔️ Schach Live | Spiele Schach gegen Freunde & Online">
+    <meta property="og:description" content="Kostenlos Schach spielen ohne Download! Fordere Freunde per WhatsApp-Link heraus oder spiele gegen intelligente Gegner & erklimme das Leaderboard.">
     <meta property="og:type" content="website">
     <meta property="og:image" content="https://max-code01.github.io/mein-schach/schach-vorschau.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="⚔️ Schach Live | Online Schachspiel">
+    <meta name="twitter:description" content="Kostenlos Schach online spielen. Fordere Freunde mit 1 Klick heraus!">
 
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
@@ -487,8 +491,11 @@
             <div class="checkmate-title">Schachmatt!</div>
             <div class="checkmate-winner" id="checkmate-winner-text">Weiß gewinnt das Spiel.</div>
             <button class="glass-btn checkmate-btn" onclick="document.getElementById('checkmate-modal').style.display='none'; resetGame();">Neue Partie starten</button>
-            <button class="glass-btn primary checkmate-btn" style="/*bg-removed*/; margin-top: 10px;" onclick="downloadReplay();">📥 Replay (PGN) herunterladen</button>
-            <button class="glass-btn purple checkmate-btn" style="/*bg-removed*/; margin-top: 10px;" onclick="shareGameForAnalysis();">🔍 Spiel-Analyse (Lichess)</button>
+            <button class="glass-btn success checkmate-btn" style="margin-top: 10px; background: linear-gradient(135deg, #25D366 0%, #128C7E 100%); color: white; border: 1px solid rgba(255,255,255,0.3); font-weight: bold;" onclick="shareVictoryWhatsApp();">
+                💬 Sieg auf WhatsApp / Freunde teilen 🏆
+            </button>
+            <button class="glass-btn primary checkmate-btn" style="margin-top: 10px;" onclick="downloadReplay();">📥 Replay (PGN) herunterladen</button>
+            <button class="glass-btn purple checkmate-btn" style="margin-top: 10px;" onclick="shareGameForAnalysis();">🔍 Spiel-Analyse (Lichess)</button>
         </div>
     </div>
 
@@ -652,7 +659,7 @@
                     </div>
                     <div class="status-item">
                         <span>👥 Spieler Online:</span>
-                        <span id="online-users-count" style="color: #2ecc71; font-weight: bold;">🟢 24 online</span>
+                        <span id="online-users-count" style="color: #2ecc71; font-weight: bold;">🟢 1 online</span>
                     </div>
                     <div class="status-item">
                         <span>⏱ Latenz (Ping):</span>
@@ -725,11 +732,19 @@
                     </div>
 
                     <!-- 1-KLICK EINLADUNGSLINK FÜR FREUNDE -->
-                    <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 6px;">
-                        <button id="inviteFriendBtn" class="glass-btn success" style="width: 100%; padding: 10px; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.9em; cursor: pointer;">
-                            <span>🔗</span> Freund per Link / WhatsApp einladen
+                    <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+                        <button id="inviteFriendBtn" class="glass-btn success" style="width: 100%; padding: 10px; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.9em; cursor: pointer; background: linear-gradient(135deg, #25D366 0%, #128C7E 100%); color: white; border: 1px solid rgba(255,255,255,0.3); box-shadow: 0 4px 15px rgba(37, 211, 102, 0.3);">
+                            <span>💬</span> Freund per WhatsApp / Link herausfordern
                         </button>
-                        <div id="invite-feedback" style="font-size: 0.8em; text-align: center; color: #2ecc71; display: none;"></div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                            <button id="copyInviteLinkBtn" onclick="quickCopyInviteLink()" class="glass-btn" style="padding: 8px; font-size: 0.8em; display: flex; align-items: center; justify-content: center; gap: 4px; border: 1px solid rgba(255,255,255,0.2);">
+                                <span>📋</span> Link kopieren
+                            </button>
+                            <button id="shareNativeBtn" onclick="quickNativeShare()" class="glass-btn primary" style="padding: 8px; font-size: 0.8em; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                                <span>📱</span> Teilen (Apps)
+                            </button>
+                        </div>
+                        <div id="invite-feedback" style="font-size: 0.8em; text-align: center; color: #2ecc71; display: none; font-weight: bold; background: rgba(46, 204, 113, 0.15); padding: 4px 8px; border-radius: 4px;"></div>
                     </div>
                     
                     <div style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 15px;">

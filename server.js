@@ -871,19 +871,15 @@ function broadcastOpenChallenges() {
 
 function broadcastOnlineStats() {
     let activeUsers = 0;
-    let activeGames = 0;
     wss.clients.forEach(c => {
         if (c.readyState === 1) activeUsers++;
     });
-    activeGames = activeRoomStates.size;
-    // Basis-Zahl für lebendige Plattform
-    const displayUsers = Math.max(activeUsers, 18 + (activeUsers * 3) + Math.floor(Math.sin(Date.now() / 60000) * 4));
-    const displayGames = Math.max(activeGames, 6 + activeGames * 2);
+    const activeGames = activeRoomStates.size;
     
     const msgStr = JSON.stringify({
         type: 'online_stats',
-        onlineCount: displayUsers,
-        activeGamesCount: displayGames
+        onlineCount: activeUsers,
+        activeGamesCount: activeGames
     });
     wss.clients.forEach(client => {
         if (client.readyState === 1) {

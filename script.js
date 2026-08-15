@@ -1736,56 +1736,95 @@ window.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // 1-Klick WhatsApp / Freunde Einladungslink
+    // 1-Klick WhatsApp / Freunde Einladungslink Generator
+    function getActiveInviteUrl() {
+        const roomInput = document.getElementById("roomID");
+        let rId = roomInput ? roomInput.value.trim() : "";
+        if (!rId) {
+            rId = "duell_" + Math.random().toString(36).substr(2, 6);
+            if (roomInput) roomInput.value = rId;
+        }
+        onlineRoom = rId;
+
+        const tcSelect = document.getElementById("timeControl");
+        const tc = tcSelect ? tcSelect.value : "10";
+
+        // Raum aktiv beitreten / registrieren
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+                type: 'find_random',
+                room: rId,
+                playerName: getMyName(),
+                timeControl: tc
+            }));
+        }
+
+        const origin = window.location.origin + window.location.pathname;
+        const inviteUrl = `${origin}?room=${rId}&tc=${encodeURIComponent(tc)}`;
+        return { inviteUrl, rId, tc };
+    }
+    window.getActiveInviteUrl = getActiveInviteUrl;
+
+    function quickCopyInviteLink() {
+        const { inviteUrl, rId } = getActiveInviteUrl();
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(inviteUrl).then(() => {
+                showInviteFeedback("✅ Einladungs-Link kopiert! Sende ihn an deine Freunde.");
+            }).catch(() => {
+                prompt("Kopiere deinen Einladungslink:", inviteUrl);
+            });
+        } else {
+            prompt("Kopiere deinen Einladungslink:", inviteUrl);
+        }
+        if (typeof addChat === 'function') {
+            addChat("System", `🔗 Einladungs-Link für Raum '${rId}' kopiert! Warte auf Gegner...`, "system");
+        }
+    }
+    window.quickCopyInviteLink = quickCopyInviteLink;
+
+    function quickNativeShare() {
+        const { inviteUrl } = getActiveInviteUrl();
+        if (navigator.share) {
+            navigator.share({
+                title: "Schach Duell Einladung",
+                text: "⚔️ Lass uns eine Runde Schach spielen!",
+                url: inviteUrl
+            }).catch(() => {});
+        } else {
+            quickCopyInviteLink();
+        }
+    }
+    window.quickNativeShare = quickNativeShare;
+
+    function shareVictoryWhatsApp() {
+        const origin = window.location.origin + window.location.pathname;
+        const myName = getMyName ? getMyName() : 'Ich';
+        const msg = encodeURIComponent(`🏆 ${myName} hat gerade eine spannende Schachpartie mit Schachmatt gewonnen!\n\nTraust du dich gegen mich anzutreten? Klick hier und spiel direkt im Browser:\n${origin}`);
+        window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
+    }
+    window.shareVictoryWhatsApp = shareVictoryWhatsApp;
+
+    function showInviteFeedback(text) {
+        const fbs = document.querySelectorAll("#invite-feedback");
+        fbs.forEach(fb => {
+            fb.innerText = text;
+            fb.style.display = "block";
+            setTimeout(() => { fb.style.display = "none"; }, 5000);
+        });
+    }
+
     const inviteFriendBtn = document.getElementById("inviteFriendBtn");
     if (inviteFriendBtn) {
         inviteFriendBtn.onclick = () => {
-            const roomInput = document.getElementById("roomID");
-            let rId = roomInput ? roomInput.value.trim() : "";
-            if (!rId) {
-                rId = "duell_" + Math.random().toString(36).substr(2, 6);
-                if (roomInput) roomInput.value = rId;
-            }
-            onlineRoom = rId;
-
-            const tcSelect = document.getElementById("timeControl");
-            const tc = tcSelect ? tcSelect.value : "10";
+            const { inviteUrl, rId } = getActiveInviteUrl();
+            const shareText = encodeURIComponent(`⚔️ Schach-Duell!\n\nIch fordere dich zu einer Partie Schach heraus! Klick hier, um sofort gegen mich anzutreten:\n${inviteUrl}`);
             
-            // Spielraum direkt beitreten / erstellen
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({
-                    type: 'find_random',
-                    room: rId,
-                    playerName: getMyName(),
-                    timeControl: tc
-                }));
+            // Öffne WhatsApp direkt für maximale virale Verbreitung
+            window.open(`https://api.whatsapp.com/send?text=${shareText}`, '_blank');
+            showInviteFeedback(`💬 WhatsApp geöffnet! Warte auf Raum '${rId}'...`);
+            if (typeof addChat === 'function') {
+                addChat("System", `🔗 Einladungs-Link für Raum '${rId}' erstellt! Warte auf deinen Freund...`, "system");
             }
-
-            const origin = window.location.origin + window.location.pathname;
-            const inviteUrl = `${origin}?room=${rId}&tc=${encodeURIComponent(tc)}`;
-            const shareText = `⚔️ Schach-Duell! Fordere mich jetzt direkt im Browser heraus: ${inviteUrl}`;
-
-            if (navigator.share) {
-                navigator.share({
-                    title: "Schach Duell Einladung",
-                    text: `⚔️ Lass uns eine Runde Schach spielen!`,
-                    url: inviteUrl
-                }).catch(() => {});
-            } else if (navigator.clipboard) {
-                navigator.clipboard.writeText(inviteUrl).then(() => {
-                    const fb = document.getElementById("invite-feedback");
-                    if (fb) {
-                        fb.innerText = "✅ Einladungs-Link kopiert! Sende ihn an deine Freunde.";
-                        fb.style.display = "block";
-                        setTimeout(() => { fb.style.display = "none"; }, 5000);
-                    }
-                }).catch(() => {
-                    prompt("Kopiere deinen Einladungslink:", inviteUrl);
-                });
-            } else {
-                prompt("Kopiere deinen Einladungslink:", inviteUrl);
-            }
-            addChat("System", `🔗 Einladungs-Link für Raum '${rId}' erstellt! Warte auf Gegner...`, "system");
         };
     }
 
@@ -2736,9 +2775,14 @@ socket.onmessage = (e) => {
         }
 
         if (data.type === 'online_stats') {
+            const count = data.onlineCount !== undefined ? data.onlineCount : 1;
             const onlineEl = document.getElementById('online-users-count');
-            if (onlineEl && data.onlineCount) {
-                onlineEl.innerText = `🟢 ${data.onlineCount} online`;
+            if (onlineEl) {
+                onlineEl.innerText = `🟢 ${count} online`;
+            }
+            const navCounter = document.getElementById('nav-user-counter');
+            if (navCounter) {
+                navCounter.innerText = `${count} Online`;
             }
             return;
         }

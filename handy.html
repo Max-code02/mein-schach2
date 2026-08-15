@@ -6,6 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Schach Live - Mobile | Smartphone Schach</title>
     <meta name="description" content="Optimiertes Handy-Schach live gegen Freunde oder KI. Vollbild-Brett, Touch-Steuerung und Echtzeit-Chat.">
+    <meta property="og:title" content="⚔️ Schach Live | Smartphone Schachspiel">
+    <meta property="og:description" content="Kostenlos Schach spielen ohne Download! Fordere Freunde per WhatsApp-Link heraus oder spiele gegen intelligente Gegner.">
+    <meta property="og:image" content="https://max-code01.github.io/mein-schach/schach-vorschau.jpg">
     <meta name="theme-color" content="#121522">
     
     <link rel="stylesheet" href="style.css">
@@ -180,26 +183,52 @@
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 8px 25px rgba(0,0,0,0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
         #chess-board {
             width: 100% !important;
             height: 100% !important;
+            max-width: 100% !important;
+            max-height: 100% !important;
+            aspect-ratio: 1 / 1 !important;
             display: grid !important;
             grid-template-columns: repeat(8, 1fr) !important;
             grid-template-rows: repeat(8, 1fr) !important;
+            border: 4px solid rgba(255, 255, 255, 0.2) !important;
+            box-sizing: border-box !important;
             user-select: none;
             -webkit-user-select: none;
         }
 
-        .cell {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            position: relative;
-            font-size: clamp(2rem, 8vw, 3.2rem);
-            cursor: pointer;
-            touch-action: manipulation;
+        .square, .cell {
+            width: 100% !important;
+            height: 100% !important;
+            min-width: 0 !important;
+            min-height: 0 !important;
+            aspect-ratio: 1 / 1 !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            position: relative !important;
+            box-sizing: border-box !important;
+            cursor: pointer !important;
+            touch-action: manipulation !important;
+            user-select: none !important;
+            -webkit-user-select: none !important;
+        }
+
+        .square img, .cell img {
+            width: 85% !important;
+            height: 85% !important;
+            max-width: 85% !important;
+            max-height: 85% !important;
+            object-fit: contain !important;
+            pointer-events: none !important;
+            user-select: none !important;
+            -webkit-user-select: none !important;
         }
 
         /* Mobile Quick Action Buttons */
@@ -490,6 +519,22 @@
                         <input type="text" id="roomID" placeholder="Raum ID" style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #444; background: rgba(0,0,0,0.5); color: white;">
                         <button id="connectMP" class="glass-btn primary" style="padding: 8px 12px; font-weight: bold;">Beitreten</button>
                     </div>
+
+                    <!-- 1-KLICK WHATSAPP / FREUNDE EINLADUNG -->
+                    <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 6px;">
+                        <button id="inviteFriendBtn" class="glass-btn success" style="width: 100%; padding: 10px; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 0.85rem; background: linear-gradient(135deg, #25D366 0%, #128C7E 100%); color: white; border: 1px solid rgba(255,255,255,0.3); box-shadow: 0 3px 12px rgba(37, 211, 102, 0.3);">
+                            <span>💬</span> Freund per WhatsApp herausfordern
+                        </button>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                            <button id="copyInviteLinkBtn" onclick="quickCopyInviteLink()" class="glass-btn" style="padding: 6px 8px; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 4px; border: 1px solid rgba(255,255,255,0.2);">
+                                <span>📋</span> Link kopieren
+                            </button>
+                            <button id="shareNativeBtn" onclick="quickNativeShare()" class="glass-btn primary" style="padding: 6px 8px; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                                <span>📱</span> Teilen (Apps)
+                            </button>
+                        </div>
+                        <div id="invite-feedback" style="font-size: 0.75rem; text-align: center; color: #2ecc71; display: none; font-weight: bold; background: rgba(46, 204, 113, 0.15); padding: 4px; border-radius: 4px;"></div>
+                    </div>
                 </div>
             </div>
 
@@ -745,6 +790,9 @@
             <div class="checkmate-title">Schachmatt!</div>
             <div class="checkmate-winner" id="checkmate-winner-text">Weiß gewinnt das Spiel.</div>
             <button class="glass-btn checkmate-btn" onclick="document.getElementById('checkmate-modal').style.display='none'; resetGame();">Neue Partie starten</button>
+            <button class="glass-btn success checkmate-btn" style="margin-top: 8px; background: linear-gradient(135deg, #25D366 0%, #128C7E 100%); color: white; border: 1px solid rgba(255,255,255,0.3); font-weight: bold;" onclick="shareVictoryWhatsApp();">
+                💬 Sieg auf WhatsApp teilen 🏆
+            </button>
             <button class="glass-btn primary checkmate-btn" style="margin-top: 8px;" onclick="downloadReplay();">📥 Replay (PGN) herunterladen</button>
             <button class="glass-btn purple checkmate-btn" style="margin-top: 8px;" onclick="shareGameForAnalysis();">🔍 Analyse (Lichess)</button>
         </div>
