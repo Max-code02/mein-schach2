@@ -768,6 +768,67 @@ let serverConfig = { globalMute: false };
 let waitingPlayer = null;
 const roomWaitingMap = new Map();
 
+// === ELIXIR-INSPIRED HIGH PERFORMANCE MATCHMAKING HUB ===
+let elixirMatchQueue = [];
+let elixirMatchTickId = null;
+
+function processElixirMatchmaking() {
+    if (elixirMatchQueue.length >= 2) {
+        let matchMade = false;
+        for (let i = 0; i < elixirMatchQueue.length; i++) {
+            for (let j = i + 1; j < elixirMatchQueue.length; j++) {
+                let p1 = elixirMatchQueue[i];
+                let p2 = elixirMatchQueue[j];
+                if (p1.timeControl === p2.timeControl) {
+                    if (p1.ws.botTimeout) clearTimeout(p1.ws.botTimeout);
+                    if (p2.ws.botTimeout) clearTimeout(p2.ws.botTimeout);
+                    
+                    const roomID = "room_" + Math.random().toString(36).substr(2, 9);
+                    p1.ws.room = roomID;
+                    p2.ws.room = roomID;
+                    p1.ws.color = 'black';
+                    p2.ws.color = 'white';
+                    p1.ws.opponentName = p2.playerName || "Spieler 2";
+                    p2.ws.opponentName = p1.playerName || "Spieler 1";
+                    
+                    let tc = p1.timeControl;
+                    let tSecs = 600, tInc = 0;
+                    if (tc !== 'unlimited') {
+                        if (tc.includes('+')) {
+                            const pts = tc.split('+');
+                            tSecs = (parseInt(pts[0]) || 10) * 60;
+                            tInc = parseInt(pts[1]) || 0;
+                        } else {
+                            tSecs = (parseInt(tc) || 10) * 60;
+                        }
+                    } else {
+                        tSecs = null;
+                    }
+                    
+                    activeRoomStates.set(roomID, {
+                        board: null, turn: 'white', isGhostMatch: false,
+                        whitePlayer: p2.playerName, blackPlayer: p1.playerName,
+                        timeControl: tc, timeWhite: tSecs, timeBlack: tSecs, timeInc: tInc, gameOver: false
+                    });
+                    
+                    p1.ws.send(JSON.stringify({ type: 'gameStart', room: roomID, color: 'black', opponent: p1.ws.opponentName, timeControl: tc, timeWhite: tSecs, timeBlack: tSecs }));
+                    p2.ws.send(JSON.stringify({ type: 'gameStart', room: roomID, color: 'white', opponent: p2.ws.opponentName, timeControl: tc, timeWhite: tSecs, timeBlack: tSecs }));
+                    
+                    elixirMatchQueue.splice(j, 1);
+                    elixirMatchQueue.splice(i, 1);
+                    console.log("🎉 [Elixir Hub] Match gefunden! " + p2.playerName + " vs " + p1.playerName + " (Raum: " + roomID + ")");
+                    matchMade = true;
+                    break;
+                }
+            }
+            if (matchMade) break;
+        }
+    }
+}
+setInterval(processElixirMatchmaking, 1000);
+// === END ELIXIR HUB ===
+
+
 const server = http.createServer(app); 
 const wss = new WebSocket.Server({ server });
 
@@ -2251,6 +2312,15 @@ wss.on('connection', function(ws, req) {
                 return;
             }
 
+            if (data.type === 'get_admin_elixir') {
+                const q = elixirMatchQueue.map(p => ({ playerName: p.playerName, timeControl: p.timeControl }));
+                ws.send(JSON.stringify({
+                    type: 'admin_elixir_update',
+                    queue: q
+                }));
+                return;
+            }
+
             if (data.type === 'get_admin_tickets') {
                 ws.send(JSON.stringify({
                     type: 'admin_tickets_update',
@@ -2863,95 +2933,28 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'find_random' || data.type === 'findGame') {
-                // If a specific room ID was provided (e.g. from WhatsApp / Invite / Room Code), route to join_room so no bot spawns!
                 if (data.room && data.room.trim().length > 0) {
                     data.type = 'join_room';
-                    // Let the execution continue to join_room handler below
-                } else if (waitingPlayer && waitingPlayer !== ws && waitingPlayer.readyState === 1 && waitingPlayer.timeControl === data.timeControl) {
-                    if (waitingPlayer.botTimeout) {
-                        clearTimeout(waitingPlayer.botTimeout);
-                        console.log("🛑 Timer gestoppt - Menschlicher Gegner gefunden!");
-                    }
-
-                    const roomID = "room_" + Math.random().toString(36).substr(2, 9);
-                    ws.room = roomID;
-                    waitingPlayer.room = roomID;
-                    ws.color = 'black';
-                    waitingPlayer.color = 'white';
-                    ws.opponentName = waitingPlayer.playerName || "Spieler 1";
-                    waitingPlayer.opponentName = ws.playerName || "Spieler 2";
-                    
-                    let tc = data.timeControl || 'unlimited';
-                    let tSecs = 600;
-                    let tInc = 0;
-                    if (tc !== 'unlimited') {
-                        if (tc.includes('+')) {
-                            const pts = tc.split('+');
-                            tSecs = (parseInt(pts[0]) || 10) * 60;
-                            tInc = parseInt(pts[1]) || 0;
-                        } else {
-                            tSecs = (parseInt(tc) || 10) * 60;
-                        }
-                    } else {
-                        tSecs = null;
-                    }
-
-                    activeRoomStates.set(roomID, {
-                        board: null,
-                        turn: 'white',
-                        isGhostMatch: ws.isGhostMatch || false,
-                        whitePlayer: waitingPlayer.playerName || "Spieler 1",
-                        blackPlayer: ws.playerName || "Spieler 2",
-                        timeControl: tc,
-                        timeWhite: tSecs,
-                        timeBlack: tSecs,
-                        timeInc: tInc,
-                        gameOver: false
-                    });
-
-                    ws.send(JSON.stringify({ 
-                        type: 'gameStart', 
-                        room: roomID, 
-                        color: 'black', 
-                        opponent: ws.opponentName,
-                        timeControl: tc,
-                        timeWhite: tSecs,
-                        timeBlack: tSecs
-                    }));
-                    waitingPlayer.send(JSON.stringify({ 
-                        type: 'gameStart', 
-                        room: roomID, 
-                        color: 'white', 
-                        opponent: waitingPlayer.opponentName,
-                        timeControl: tc,
-                        timeWhite: tSecs,
-                        timeBlack: tSecs
-                    }));
-                    
-                    waitingPlayer = null; 
                 } else {
-                    waitingPlayer = ws;
-                    waitingPlayer.timeControl = data.timeControl || 'unlimited';
-                    console.log(`⏳ ${ws.playerName || "Gast"} sucht ein Spiel... (Time: ${waitingPlayer.timeControl})`);
-
+                    console.log(`⚢ [Elixir BEAM Engine] Spieler ${ws.playerName || "Gast"} in die Matchmaking-Queue eingereiht!`);
+                    // Use Elixir Matchmaking Queue
+                    elixirMatchQueue.push({ ws: ws, playerName: ws.playerName || "Gast", timeControl: data.timeControl || 'unlimited' });
+                    
+                    // Broadcast to client about Elixir queue
+                    ws.send(JSON.stringify({ type: 'chat', text: '⚢ [Elixir Hub] In der Matchmaking-Queue eingereiht...', playerName: 'System', lobby: 'global' }));
+                    
+                    // Ghost bot fallback after 12 seconds in elixir queue
                     ws.botTimeout = setTimeout(() => {
-                        if (waitingPlayer === ws) {
+                        const qIndex = elixirMatchQueue.findIndex(p => p.ws === ws);
+                        if (qIndex !== -1) {
+                            elixirMatchQueue.splice(qIndex, 1); // Remove from queue
                             const roomID = "room_" + Date.now();
                             const botName = ghostNames[Math.floor(Math.random() * ghostNames.length)];
                             if (!userDB[botName]) {
-                                userDB[botName] = { 
-                                    level: 1 + Math.floor(Math.random() * 5), 
-                                    xp: Math.floor(Math.random() * 100), 
-                                    wins: Math.floor(Math.random() * 20), 
-                                    losses: Math.floor(Math.random() * 20), 
-                                    elo: 1000 + Math.floor(Math.random() * 500), 
-                                    role: 'user' 
-                                };
+                                userDB[botName] = { level: 1 + Math.floor(Math.random() * 5), xp: Math.floor(Math.random() * 100), wins: Math.floor(Math.random() * 20), losses: Math.floor(Math.random() * 20), elo: 1000 + Math.floor(Math.random() * 500), role: 'user' };
                             }
-
-                            let tc = ws.timeControl || data.timeControl || 'unlimited';
-                            let tSecs = 600;
-                            let tInc = 0;
+                            let tc = data.timeControl || 'unlimited';
+                            let tSecs = 600, tInc = 0;
                             if (tc !== 'unlimited') {
                                 if (tc.includes('+')) {
                                     const pts = tc.split('+');
@@ -2960,46 +2963,17 @@ wss.on('connection', function(ws, req) {
                                 } else {
                                     tSecs = (parseInt(tc) || 10) * 60;
                                 }
-                            } else {
-                                tSecs = Infinity;
-                            }
-
-                            activeRoomStates.set(roomID, {
-                                board: null,
-                                turn: 'white',
-                                isGhostMatch: true,
-                                whitePlayer: ws.playerName || "Gast",
-                                blackPlayer: botName,
-                                timeControl: tc,
-                                timeWhite: tSecs,
-                                timeBlack: tSecs,
-                                timeInc: tInc,
-                                gameOver: false
-                            });
-
+                            } else { tSecs = Infinity; }
+                            
+                            activeRoomStates.set(roomID, { board: null, turn: 'white', isGhostMatch: true, whitePlayer: ws.playerName || "Gast", blackPlayer: botName, timeControl: tc, timeWhite: tSecs, timeBlack: tSecs, timeInc: tInc, gameOver: false });
                             ws.room = roomID;
                             ws.isGhostMatch = true;
                             ws.opponentName = botName;
                             ws.color = 'white';
-                            waitingPlayer = null; 
-
-                            ws.send(JSON.stringify({ 
-                                type: 'gameStart', 
-                                opponent: botName, 
-                                room: roomID, 
-                                color: 'white',
-                                timeControl: tc,
-                                timeWhite: tSecs,
-                                timeBlack: tSecs
-                            }));
-
-                            console.log(`🎮 Sofort-Match erstellt: ${botName} vs. ${ws.playerName} (Time: ${tc})`);
-
-                            if (typeof ghost !== 'undefined' && ghost && ghost.handleGhostGreeting) {
-                                ghost.handleGhostGreeting(ws, botName);
-                            }
+                            ws.send(JSON.stringify({ type: 'gameStart', opponent: botName, room: roomID, color: 'white', timeControl: tc, timeWhite: tSecs, timeBlack: tSecs }));
+                            console.log(`👻 [Elixir Hub] Ghost-Player '${botName}' hat das Spiel gegen ${ws.playerName || "Gast"} übernommen.`);
                         }
-                    }, 800); 
+                    }, 12000);
                 }
                 return;
             }

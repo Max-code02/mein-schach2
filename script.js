@@ -1919,7 +1919,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 const timeControl = tcSelect ? tcSelect.value : "unlimited";
                 if (socket && socket.readyState === WebSocket.OPEN) {
                     socket.send(JSON.stringify({ type: 'find_random', playerName: getMyName(), timeControl: timeControl }));
-                    addChat("System", "Suche nach einem zufälligen Gegner...", "system");
+                    addChat("System", "⚢ Elixir Hub sucht nach einem Gegner...", "system");
                 } else {
                     addChat("System", "Nicht mit dem Server verbunden.", "system");
                 }
@@ -4227,3 +4227,11 @@ window.toggleChessMode = function() {
 // Automaticaly enable when match starts (optional but good idea)
 const originalDoMove = window.doMove;
 // we don't necessarily override doMove, we just provide the toggle so users can use it.
+
+
+window.requestAdminElixirRefresh = function() {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'get_admin_elixir' }));
+        document.getElementById('admin-elixir-container').innerHTML = '<div style="color: #aaa; text-align: center; font-style: italic; font-size: 0.85em; padding: 10px 0;">Lade Queue...</div>';
+    }
+};

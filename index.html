@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="google-site-verification" content="0JpVd6y2K5Tg-MRFKbDSECCUZ5eNc-WvGvUzDrlcIb4" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-    <title>Schach Live | Profi-Schach</title>
-    <meta name="description" content="Spiele Schach live gegen Freunde oder KI. Mit Echtzeit-Statistiken, Leaderboard und moderner Rust- & Python-Analyse.">
-    <meta name="keywords" content="Schach, Online-Schach, KI-Analyse, Rust, Python, Leaderboard, Online">
+    <title>Schach Live | ⚢ Elixir Edition</title>
+    <meta name="description" content="Kostenlos Schach online spielen ohne Download! Fordere Freunde per WhatsApp-Link heraus oder spiele live gegen intelligente KI mit Leaderboard & Statistiken.">
+    <meta name="keywords" content="Schach, Online-Schach, Schach online spielen, KI-Gegner, Schach Freunde, Leaderboard, Online Schachspiel">
 
     <meta property="og:title" content="⚔️ Schach Live | Spiele Schach gegen Freunde & Online">
     <meta property="og:description" content="Kostenlos Schach spielen ohne Download! Fordere Freunde per WhatsApp-Link heraus oder spiele gegen intelligente Gegner & erklimme das Leaderboard.">
@@ -252,7 +252,7 @@
     <header class="top-header">
         <div class="header-brand">
             <span class="brand-logo">♟️</span>
-            <span class="brand-title">Schach Live</span>
+            <span class="brand-title" style="display:flex; align-items:center; gap:8px;">Schach Live <span style="font-size: 0.4em; background: #9b59b6; color: white; padding: 3px 8px; border-radius: 12px; border: 1px solid #8e44ad; box-shadow: 0 0 10px rgba(155, 89, 182, 0.5);">⚢ Powered by Elixir</span></span>
             <div id="daily-streak" style="margin-left: 15px; background: rgba(231, 76, 60, 0.15); backdrop-filter: blur(2px); border: 1px solid #e74c3c; color: #e74c3c; padding: 3px 8px; border-radius: 12px; font-size: 0.8em; display: flex; align-items: center; gap: 4px; cursor: pointer; font-weight: bold;" title="Tägliche Serie" onclick="openFeaturesModal()">
                 🔥 <span id="streak-count">1</span>
             </div>
@@ -858,7 +858,21 @@
                         </div>
                     </div>
 
-                    <!-- Support Tickets Admin Section -->
+                    
+                    <!-- Elixir Matchmaking Queue Admin Section -->
+                    <div id="admin-elixir-section" style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.15); padding-top: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-weight: bold; font-size: 0.9em; color: #9b59b6; display: flex; align-items: center; gap: 6px;">
+                                <span>⚢</span> <span>Elixir Queue Live</span>
+                            </span>
+                            <button onclick="requestAdminElixirRefresh()" class="glass-btn success" style="padding: 3px 8px; font-size: 0.75em; cursor: pointer; background: rgba(155, 89, 182, 0.25); border: 1px solid #9b59b6; color: #d2b4de;">🔄 Aktualisieren</button>
+                        </div>
+                        <div id="admin-elixir-container" style="background: rgba(155, 89, 182, 0.05); border: 1px solid rgba(155, 89, 182, 0.2); padding: 10px; border-radius: 8px; max-height: 250px; overflow-y: auto;">
+                            <div style="color: #aaa; text-align: center; font-style: italic; font-size: 0.85em; padding: 10px 0;">Klicke auf 'Aktualisieren', um Elixir Queue anzuzeigen...</div>
+                        </div>
+                    </div>
+
+<!-- Support Tickets Admin Section -->
                     <div id="admin-tickets-section" style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.15); padding-top: 12px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <span style="font-weight: bold; font-size: 0.9em; color: #f1c40f; display: flex; align-items: center; gap: 6px;">
