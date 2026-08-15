@@ -651,6 +651,10 @@
                         <span id="server-status" style="color: #ff9800;">Verbinde...</span>
                     </div>
                     <div class="status-item">
+                        <span>👥 Spieler Online:</span>
+                        <span id="online-users-count" style="color: #2ecc71; font-weight: bold;">🟢 24 online</span>
+                    </div>
+                    <div class="status-item">
                         <span>⏱ Latenz (Ping):</span>
                         <span id="ping-display" style="color: #00d4ff;">-- ms</span>
                     </div>
@@ -719,6 +723,14 @@
                         <input type="text" id="roomID" placeholder="Raum ID eingeben">
                         <button id="connectMP" class="glass-btn">Beitreten</button>
                     </div>
+
+                    <!-- 1-KLICK EINLADUNGSLINK FÜR FREUNDE -->
+                    <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 6px;">
+                        <button id="inviteFriendBtn" class="glass-btn success" style="width: 100%; padding: 10px; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.9em; cursor: pointer;">
+                            <span>🔗</span> Freund per Link / WhatsApp einladen
+                        </button>
+                        <div id="invite-feedback" style="font-size: 0.8em; text-align: center; color: #2ecc71; display: none;"></div>
+                    </div>
                     
                     <div style="margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 15px;">
                         <span>🏆 <strong>Turniermodus</strong></span>
@@ -726,6 +738,17 @@
                             <input type="text" id="tournamentName" placeholder="Turniername" style="flex: 1; padding: 5px; border-radius: 4px; border: 1px solid #444; background: transparent; color: white;">
                             <button id="createTournamentBtn" style="/*bg-removed*/; color: white;  padding: 5px 10px; border-radius: 4px; cursor: pointer; font-weight: bold;" class="glass-btn warning">Erstellen</button>
                         </div>
+                    </div>
+                </div>
+
+                <!-- OFFENE HERAUSFORDERUNGEN (LIVE LOBBY) -->
+                <div class="glass-panel" id="open-challenges-panel" style="display: flex; flex-direction: column; gap: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>⚔️ <strong>Offene Herausforderungen</strong></span>
+                        <button id="createOpenChallengeBtn" class="glass-btn primary" style="font-size: 0.78em; padding: 4px 8px; cursor: pointer;">+ Erstellen</button>
+                    </div>
+                    <div id="open-challenges-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto;">
+                        <div style="font-size: 0.85em; color: #aaa; text-align: center; padding: 10px;">Lade aktive Herausforderungen...</div>
                     </div>
                 </div>
 

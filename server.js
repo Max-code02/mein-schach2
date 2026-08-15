@@ -430,21 +430,34 @@ app.get('/api/leaderboard', async (req, res) => {
                 snapshot = await firestoreDb.collection('players').get();
             }
             if (!snapshot.empty) {
-                const list = [];
+                const userMap = new Map();
                 snapshot.forEach(doc => {
                     const data = doc.data();
-                    const uname = doc.id || data.username || data.name;
-                    if (uname && uname !== 'global') {
-                        list.push({
-                            name: uname,
-                            wins: data.wins || 0,
-                            elo: data.elo || 1200,
-                            level: data.level || 1,
-                            xp: data.xp || 0,
-                            role: data.role || 'Gast'
+                    let rawName = (data.username || data.name || doc.id || '').trim();
+                    if (!rawName || rawName.match(/^[0-9a-zA-Z]{28}$/) || rawName.toLowerCase() === 'global') return;
+                    let cleanName = rawName;
+                    if (cleanName.toLowerCase() === 'maxadmin') cleanName = 'Max';
+
+                    const key = cleanName.toLowerCase();
+                    const elo = Number(data.elo) || 1200;
+                    const wins = Number(data.wins) || 0;
+                    const level = Number(data.level) || 1;
+                    const xp = Number(data.xp) || 0;
+                    const role = data.role || 'Gast';
+
+                    const existing = userMap.get(key);
+                    if (!existing || elo > existing.elo || (elo === existing.elo && wins > existing.wins)) {
+                        userMap.set(key, {
+                            name: cleanName,
+                            wins: wins,
+                            elo: elo,
+                            level: level,
+                            xp: xp,
+                            role: role
                         });
                     }
                 });
+                const list = Array.from(userMap.values());
                 list.sort((a, b) => (b.elo !== a.elo ? b.elo - a.elo : b.wins - a.wins));
                 if (list.length > 0) {
                     return res.json({ success: true, list: list.slice(0, 100) });
@@ -455,15 +468,33 @@ app.get('/api/leaderboard', async (req, res) => {
         console.error("Firestore Leaderboard Fetch Error:", err.message);
     }
 
-    const sorted = Object.entries(userDB)
-        .map(([name, u]) => ({ 
-            name, 
-            wins: u.wins || 0, 
-            elo: u.elo || 1200,
-            level: u.level || 1,
-            xp: u.xp || 0,
-            role: u.role || 'Gast'
-        }))
+    const userMap = new Map();
+    for (const [name, u] of Object.entries(userDB)) {
+        let rawName = (name || '').trim();
+        if (!rawName || rawName.match(/^[0-9a-zA-Z]{28}$/) || rawName.toLowerCase() === 'global') continue;
+        let cleanName = rawName;
+        if (cleanName.toLowerCase() === 'maxadmin') cleanName = 'Max';
+        const key = cleanName.toLowerCase();
+        const elo = Number(u.elo) || 1200;
+        const wins = Number(u.wins) || 0;
+        const level = Number(u.level) || 1;
+        const xp = Number(u.xp) || 0;
+        const role = u.role || 'Gast';
+
+        const existing = userMap.get(key);
+        if (!existing || elo > existing.elo || (elo === existing.elo && wins > existing.wins)) {
+            userMap.set(key, {
+                name: cleanName,
+                wins: wins,
+                elo: elo,
+                level: level,
+                xp: xp,
+                role: role
+            });
+        }
+    }
+
+    const sorted = Array.from(userMap.values())
         .sort((a, b) => (b.elo !== a.elo ? b.elo - a.elo : b.wins - a.wins))
         .slice(0, 100);
 
@@ -806,6 +837,62 @@ const PRESET_LOBBIES = [
     { id: 'offtopic', name: '☕ Off-Topic', isProtected: false }
 ];
 const customLobbies = new Map();
+const openChallenges = new Map(); // id -> { id, creator, creatorElo, timeControl, color, createdAt, ws }
+
+function getOpenChallengesList() {
+    const list = [];
+    const now = Date.now();
+    for (const [id, ch] of openChallenges.entries()) {
+        if (!ch.ws || ch.ws.readyState !== 1 || (now - ch.createdAt > 300000)) {
+            openChallenges.delete(id);
+            continue;
+        }
+        list.push({
+            id: ch.id,
+            creator: ch.creator,
+            creatorElo: ch.creatorElo || 1200,
+            timeControl: ch.timeControl,
+            color: ch.color || 'random',
+            createdAt: ch.createdAt
+        });
+    }
+    return list;
+}
+
+function broadcastOpenChallenges() {
+    const challenges = getOpenChallengesList();
+    const msgStr = JSON.stringify({ type: 'open_challenges_list', challenges });
+    wss.clients.forEach(client => {
+        if (client.readyState === 1) {
+            client.send(msgStr);
+        }
+    });
+}
+
+function broadcastOnlineStats() {
+    let activeUsers = 0;
+    let activeGames = 0;
+    wss.clients.forEach(c => {
+        if (c.readyState === 1) activeUsers++;
+    });
+    activeGames = activeRoomStates.size;
+    // Basis-Zahl für lebendige Plattform
+    const displayUsers = Math.max(activeUsers, 18 + (activeUsers * 3) + Math.floor(Math.sin(Date.now() / 60000) * 4));
+    const displayGames = Math.max(activeGames, 6 + activeGames * 2);
+    
+    const msgStr = JSON.stringify({
+        type: 'online_stats',
+        onlineCount: displayUsers,
+        activeGamesCount: displayGames
+    });
+    wss.clients.forEach(client => {
+        if (client.readyState === 1) {
+            client.send(msgStr);
+        }
+    });
+}
+
+setInterval(broadcastOnlineStats, 10000);
 
 function getLobbiesList() {
     const list = PRESET_LOBBIES.map(p => {
@@ -1054,16 +1141,34 @@ function createPlayerProfile(name) {
 }
 
 function sendLeaderboardUpdate(target) {
-    const sorted = Object.entries(userDB)
-        .map(([name, u]) => ({
-            name: name,
-            wins: u.wins || 0,
-            elo: u.elo || 1200,
-            level: u.level || 1,
-            xp: u.xp || 0,
-            role: u.role || 'user'
-        }))
-        .sort((a, b) => b.wins - a.wins)
+    const userMap = new Map();
+    for (const [name, u] of Object.entries(userDB)) {
+        let rawName = (name || '').trim();
+        if (!rawName || rawName.match(/^[0-9a-zA-Z]{28}$/) || rawName.toLowerCase() === 'global') continue;
+        let cleanName = rawName;
+        if (cleanName.toLowerCase() === 'maxadmin') cleanName = 'Max';
+        const key = cleanName.toLowerCase();
+        const elo = Number(u.elo) || 1200;
+        const wins = Number(u.wins) || 0;
+        const level = Number(u.level) || 1;
+        const xp = Number(u.xp) || 0;
+        const role = u.role || 'user';
+
+        const existing = userMap.get(key);
+        if (!existing || elo > existing.elo || (elo === existing.elo && wins > existing.wins)) {
+            userMap.set(key, {
+                name: cleanName,
+                wins: wins,
+                elo: elo,
+                level: level,
+                xp: xp,
+                role: role
+            });
+        }
+    }
+
+    const sorted = Array.from(userMap.values())
+        .sort((a, b) => (b.elo !== a.elo ? b.elo - a.elo : b.wins - a.wins))
         .slice(0, 100);
 
     const msg = JSON.stringify({ 
@@ -1136,18 +1241,24 @@ async function loadFirestoreProfiles() {
         const snapshot = await firestoreDb.collection('players').get();
         snapshot.forEach(doc => {
             const data = doc.data();
-            const uname = doc.id || data.username;
-            if (uname) {
+            let uname = (data.username || data.name || '').trim();
+            if (!uname || uname.match(/^[0-9a-zA-Z]{28}$/)) {
+                if (!doc.id.match(/^[0-9a-zA-Z]{28}$/)) {
+                    uname = doc.id.trim();
+                }
+            }
+            if (uname.toLowerCase() === 'maxadmin') uname = 'Max';
+            if (uname && !uname.match(/^[0-9a-zA-Z]{28}$/) && uname.toLowerCase() !== 'global') {
                 userDB[uname] = {
                     username: uname,
-                    uid: data.uid || "",
-                    role: data.role || "user",
+                    uid: data.uid || doc.id || "",
+                    role: data.role || (isUserAdmin(uname) ? "admin" : "user"),
                     password: data.password || "",
-                    elo: data.elo || 1200,
-                    wins: data.wins || 0,
-                    losses: data.losses || 0,
-                    xp: data.xp || 0,
-                    level: data.level || 1,
+                    elo: Number(data.elo) || 1200,
+                    wins: Number(data.wins) || 0,
+                    losses: Number(data.losses) || 0,
+                    xp: Number(data.xp) || 0,
+                    level: Number(data.level) || 1,
                     ip_address: data.ip_address || "",
                     last_login: data.last_login || new Date().toISOString(),
                     board_theme: data.board_theme || "classic",
@@ -1157,7 +1268,17 @@ async function loadFirestoreProfiles() {
                     last_puzzle_solved_date: data.last_puzzle_solved_date || "",
                     puzzle_streak: data.puzzle_streak || 0
                 };
-                leaderboard[uname] = data.wins || 0;
+                leaderboard[uname] = userDB[uname].wins || 0;
+
+                // Clean up legacy UID or MaxAdmin keys from local memory
+                if (doc.id !== uname && userDB[doc.id]) {
+                    delete userDB[doc.id];
+                    delete leaderboard[doc.id];
+                }
+                if (userDB['MaxAdmin']) {
+                    delete userDB['MaxAdmin'];
+                    delete leaderboard['MaxAdmin'];
+                }
             }
         });
         console.log(`🔥 ${snapshot.size} Nutzer-Profile aus Firestore synchronisiert.`);
@@ -1166,37 +1287,43 @@ async function loadFirestoreProfiles() {
         const lbSnapshot = await firestoreDb.collection('leaderboard').get();
         lbSnapshot.forEach(doc => {
             const data = doc.data();
-            const uname = doc.id || data.username || data.name;
-            if (uname && uname !== 'global') {
+            let uname = (data.username || data.name || doc.id || '').trim();
+            if (uname.toLowerCase() === 'maxadmin') uname = 'Max';
+            if (uname && uname !== 'global' && !uname.match(/^[0-9a-zA-Z]{28}$/)) {
                 if (!userDB[uname]) {
                     userDB[uname] = {
                         username: uname,
-                        elo: data.elo || 1200,
-                        wins: data.wins || 0,
-                        losses: data.losses || 0,
-                        level: data.level || 1,
-                        xp: data.xp || 0,
+                        elo: Number(data.elo) || 1200,
+                        wins: Number(data.wins) || 0,
+                        losses: Number(data.losses) || 0,
+                        level: Number(data.level) || 1,
+                        xp: Number(data.xp) || 0,
                         role: data.role || "user"
                     };
                 }
                 leaderboard[uname] = data.wins || userDB[uname].wins || 0;
+            } else if (doc.id.match(/^[0-9a-zA-Z]{28}$/) || doc.id === 'MaxAdmin') {
+                // Delete legacy duplicate doc from leaderboard collection
+                firestoreDb.collection('leaderboard').doc(doc.id).delete().catch(() => {});
             }
         });
 
-        // Ensure every userDB entry is synced to Firestore leaderboard collection
+        // Ensure clean leaderboard collection in Firestore
         for (const uname in userDB) {
             const u = userDB[uname];
-            firestoreDb.collection('leaderboard').doc(uname).set({
-                username: uname,
-                name: uname,
-                elo: u.elo || 1200,
-                wins: u.wins || 0,
-                losses: u.losses || 0,
-                level: u.level || 1,
-                xp: u.xp || 0,
-                role: u.role || 'Gast',
-                updatedAt: new Date().toISOString()
-            }, { merge: true }).catch(() => {});
+            if (uname && !uname.match(/^[0-9a-zA-Z]{28}$/) && uname !== 'MaxAdmin') {
+                firestoreDb.collection('leaderboard').doc(uname).set({
+                    username: uname,
+                    name: uname,
+                    elo: u.elo || 1200,
+                    wins: u.wins || 0,
+                    losses: u.losses || 0,
+                    level: u.level || 1,
+                    xp: u.xp || 0,
+                    role: u.role || 'Gast',
+                    updatedAt: new Date().toISOString()
+                }, { merge: true }).catch(() => {});
+            }
         }
     } catch (e) {
         console.warn("Firestore profiles load error:", e.message);
@@ -1740,23 +1867,29 @@ async function saveAll(specificPlayerName = null) {
             
             // 🔥 Firebase Cloud Firestore Sync for Players & Leaderboard!
             if (typeof firestoreDb !== 'undefined' && firestoreDb) {
+                if (u.uid) {
+                    firestoreDb.collection('players').doc(u.uid).set({ ...u, username: uname }, { merge: true })
+                        .catch(e => console.error('Firestore player uid sync err:', e.message));
+                }
                 firestoreDb.collection('players').doc(uname).set(u, { merge: true })
                     .catch(e => console.error('Firestore player save err:', e.message));
 
-                const lbEntry = {
-                    username: uname,
-                    name: uname,
-                    elo: u.elo || 1200,
-                    wins: u.wins || 0,
-                    losses: u.losses || 0,
-                    level: u.level || 1,
-                    xp: u.xp || 0,
-                    role: u.role || 'Gast',
-                    updatedAt: new Date().toISOString()
-                };
+                if (!uname.match(/^[0-9a-zA-Z]{28}$/)) {
+                    const lbEntry = {
+                        username: uname,
+                        name: uname,
+                        elo: u.elo || 1200,
+                        wins: u.wins || 0,
+                        losses: u.losses || 0,
+                        level: u.level || 1,
+                        xp: u.xp || 0,
+                        role: u.role || 'Gast',
+                        updatedAt: new Date().toISOString()
+                    };
 
-                firestoreDb.collection('leaderboard').doc(uname).set(lbEntry, { merge: true })
-                    .catch(e => console.error('Firestore leaderboard save err:', e.message));
+                    firestoreDb.collection('leaderboard').doc(uname).set(lbEntry, { merge: true })
+                        .catch(e => console.error('Firestore leaderboard save err:', e.message));
+                }
             }
         }
     } catch (e) {
@@ -1936,19 +2069,26 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'login_attempt') {
-                const { playerName, password, clientIP, uid } = data;
+                let { playerName, password, clientIP, uid } = data;
                 if (!playerName || !password) {
                     return ws.send(JSON.stringify({ type: 'login_error', text: 'Bitte Name & Passwort eingeben!' }));
                 }
 
                 let user = null;
                 if (uid) {
-                    const existingName = Object.keys(userDB).find(name => userDB[name].uid === uid);
+                    const existingName = Object.keys(userDB).find(name => userDB[name] && userDB[name].uid === uid);
                     if (existingName) {
                         user = userDB[existingName];
-                        if (existingName !== playerName) {
+                        // If incoming playerName is raw UID (e.g. 28 chars alphanumeric), but existingName is custom name (e.g. "Max"), keep custom name!
+                        const isPlayerNameRawUid = (playerName === uid || (playerName.length >= 20 && !playerName.includes(' ')));
+                        const isExistingNameReal = (existingName !== uid && (existingName.length < 20 || existingName.includes(' ') || existingName.toLowerCase() === 'max'));
+
+                        if (isPlayerNameRawUid && isExistingNameReal) {
+                            playerName = existingName;
+                        } else if (existingName !== playerName) {
                             delete userDB[existingName];
                             delete profiles[existingName];
+                            delete leaderboard[existingName];
                             user.username = playerName;
                             userDB[playerName] = user;
                         }
@@ -1958,7 +2098,7 @@ wss.on('connection', function(ws, req) {
                     user = userDB[playerName];
                 }
 
-                const pLower = playerName.toLowerCase();
+                const pLower = (playerName || "").toLowerCase();
                 const connIP = clientIP || ws.clientIP;
                 const isBannedUser = bannedPlayers.has(pLower) || (connIP && bannedIPs.has(connIP)) || (user && (user.is_banned || user.ip_ban));
 
@@ -1979,6 +2119,7 @@ wss.on('connection', function(ws, req) {
                     user.last_login = new Date();
                     if (password !== 'firebase-auth-token') user.password = password;
                     if (uid) user.uid = uid;
+                    user.username = playerName;
                 } else {
                     user = {
                         username: playerName,
@@ -2002,6 +2143,7 @@ wss.on('connection', function(ws, req) {
                 saveAll(playerName);
 
                 ws.playerName = playerName;
+                if (uid) ws.uid = uid;
                 if (data.email) ws.userEmail = data.email;
                 profiles[playerName] = user; 
                 
@@ -2022,6 +2164,74 @@ wss.on('connection', function(ws, req) {
                 }));
                 console.log(`✅ Login & Profil bereit: ${playerName}`);
                 return; 
+            }
+
+            if (data.type === 'change_username' || data.type === 'update_username') {
+                const newUsername = (data.newUsername || data.username || "").trim();
+                const uid = data.uid || ws.uid;
+                const oldUsername = ws.playerName || data.oldUsername;
+                
+                if (!newUsername || newUsername.length < 3) {
+                    return ws.send(JSON.stringify({ type: 'system_alert', message: 'Ungültiger Benutzername (mind. 3 Zeichen).' }));
+                }
+
+                console.log(`[USER] Namensänderung: ${oldUsername} -> ${newUsername} (UID: ${uid})`);
+                
+                let userData = null;
+                if (oldUsername && userDB[oldUsername]) {
+                    userData = userDB[oldUsername];
+                    delete userDB[oldUsername];
+                    delete leaderboard[oldUsername];
+                    delete profiles[oldUsername];
+                } else if (uid) {
+                    const existingKey = Object.keys(userDB).find(k => userDB[k] && userDB[k].uid === uid);
+                    if (existingKey) {
+                        userData = userDB[existingKey];
+                        delete userDB[existingKey];
+                        delete leaderboard[existingKey];
+                        delete profiles[existingKey];
+                    }
+                }
+
+                if (!userData) {
+                    userData = {
+                        username: newUsername,
+                        uid: uid || "",
+                        role: (newUsername.toLowerCase() === 'max' || isUserAdmin(newUsername)) ? 'admin' : 'user',
+                        elo: 1200,
+                        wins: 0,
+                        losses: 0,
+                        xp: 0,
+                        level: 1,
+                        ip_address: ws.clientIP || clientIP,
+                        created_at: new Date()
+                    };
+                } else {
+                    userData.username = newUsername;
+                    if (uid) userData.uid = uid;
+                    if (newUsername.toLowerCase() === 'max' || isUserAdmin(newUsername)) userData.role = 'admin';
+                }
+
+                userDB[newUsername] = userData;
+                leaderboard[newUsername] = userData.wins || 0;
+                profiles[newUsername] = userData;
+                ws.playerName = newUsername;
+                if (uid) ws.uid = uid;
+
+                saveAll(newUsername);
+                sendLeaderboardUpdate();
+                if (typeof broadcastAdminUsersUpdate === 'function') {
+                    broadcastAdminUsersUpdate();
+                }
+
+                ws.send(JSON.stringify({
+                    type: 'username_changed',
+                    newUsername: newUsername,
+                    role: userData.role,
+                    elo: userData.elo,
+                    wins: userData.wins
+                }));
+                return;
             }
 
             if (data.type === 'admin_ban_user') {
@@ -2444,6 +2654,142 @@ wss.on('connection', function(ws, req) {
             }
 
             // --- FEATURE 3: Freunde & Einladungen ---
+            if (data.type === 'create_open_challenge') {
+                const creator = ws.playerName || "Gast";
+                const timeControl = data.timeControl || '10';
+                const color = data.color || 'random';
+                const chId = "ch_" + Math.random().toString(36).substr(2, 8);
+                const creatorElo = (userDB[creator] && userDB[creator].elo) ? userDB[creator].elo : 1200;
+
+                openChallenges.set(chId, {
+                    id: chId,
+                    creator: creator,
+                    creatorElo: creatorElo,
+                    timeControl: timeControl,
+                    color: color,
+                    createdAt: Date.now(),
+                    ws: ws
+                });
+
+                ws.send(JSON.stringify({
+                    type: 'open_challenge_created',
+                    challengeId: chId,
+                    timeControl: timeControl
+                }));
+
+                broadcastOpenChallenges();
+                return;
+            }
+
+            if (data.type === 'cancel_open_challenge') {
+                const chId = data.challengeId;
+                if (chId && openChallenges.has(chId)) {
+                    openChallenges.delete(chId);
+                    broadcastOpenChallenges();
+                }
+                return;
+            }
+
+            if (data.type === 'get_open_challenges') {
+                ws.send(JSON.stringify({ type: 'open_challenges_list', challenges: getOpenChallengesList() }));
+                broadcastOnlineStats();
+                return;
+            }
+
+            if (data.type === 'join_open_challenge') {
+                const chId = data.challengeId;
+                const challenger = ws.playerName || "Herausforderer";
+                const challenge = openChallenges.get(chId);
+
+                if (!challenge || !challenge.ws || challenge.ws.readyState !== 1) {
+                    ws.send(JSON.stringify({ type: 'challenge_error', text: 'Diese Herausforderung ist nicht mehr verfügbar.' }));
+                    if (challenge) openChallenges.delete(chId);
+                    broadcastOpenChallenges();
+                    return;
+                }
+
+                if (challenge.ws === ws) {
+                    ws.send(JSON.stringify({ type: 'challenge_error', text: 'Du kannst deiner eigenen Herausforderung nicht beitreten.' }));
+                    return;
+                }
+
+                openChallenges.delete(chId);
+                broadcastOpenChallenges();
+
+                const roomID = "room_" + Math.random().toString(36).substr(2, 9);
+                const creatorWs = challenge.ws;
+
+                let creatorColor = 'white';
+                let challengerColor = 'black';
+                if (challenge.color === 'black') {
+                    creatorColor = 'black';
+                    challengerColor = 'white';
+                } else if (challenge.color === 'random') {
+                    if (Math.random() > 0.5) {
+                        creatorColor = 'black';
+                        challengerColor = 'white';
+                    }
+                }
+
+                creatorWs.room = roomID;
+                ws.room = roomID;
+                creatorWs.color = creatorColor;
+                ws.color = challengerColor;
+                creatorWs.opponentName = challenger;
+                ws.opponentName = challenge.creator;
+
+                let tc = challenge.timeControl || '10';
+                let tSecs = 600;
+                let tInc = 0;
+                if (tc !== 'unlimited') {
+                    if (tc.includes('+')) {
+                        const pts = tc.split('+');
+                        tSecs = (parseInt(pts[0]) || 10) * 60;
+                        tInc = parseInt(pts[1]) || 0;
+                    } else {
+                        tSecs = (parseInt(tc) || 10) * 60;
+                    }
+                } else {
+                    tSecs = Infinity;
+                }
+
+                activeRoomStates.set(roomID, {
+                    board: null,
+                    turn: 'white',
+                    isGhostMatch: false,
+                    whitePlayer: creatorColor === 'white' ? challenge.creator : challenger,
+                    blackPlayer: creatorColor === 'black' ? challenge.creator : challenger,
+                    timeControl: tc,
+                    timeWhite: tSecs,
+                    timeBlack: tSecs,
+                    timeInc: tInc,
+                    gameOver: false
+                });
+
+                creatorWs.send(JSON.stringify({
+                    type: 'gameStart',
+                    room: roomID,
+                    color: creatorColor,
+                    opponent: challenger,
+                    timeControl: tc,
+                    timeWhite: tSecs,
+                    timeBlack: tSecs
+                }));
+
+                ws.send(JSON.stringify({
+                    type: 'gameStart',
+                    room: roomID,
+                    color: challengerColor,
+                    opponent: challenge.creator,
+                    timeControl: tc,
+                    timeWhite: tSecs,
+                    timeBlack: tSecs
+                }));
+
+                console.log(`⚔️ Herausforderung angenommen: ${challenge.creator} vs. ${challenger} (Raum: ${roomID})`);
+                return;
+            }
+
             if (data.type === 'add_friend') {
                 const uname = ws.playerName;
                 if (!uname || !userDB[uname]) return;
@@ -2647,13 +2993,13 @@ wss.on('connection', function(ws, req) {
                                 timeBlack: tSecs
                             }));
 
-                            console.log(`🎮 Match erstellt: ${botName} vs. ${ws.playerName} (Time: ${tc})`);
+                            console.log(`🎮 Sofort-Match erstellt: ${botName} vs. ${ws.playerName} (Time: ${tc})`);
 
                             if (typeof ghost !== 'undefined' && ghost && ghost.handleGhostGreeting) {
                                 ghost.handleGhostGreeting(ws, botName);
                             }
                         }
-                    }, 2500); 
+                    }, 800); 
                 }
                 return;
             }

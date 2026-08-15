@@ -891,7 +891,7 @@ const fixedRandomName = "Spieler_" + Math.floor(Math.random() * 10000);
 
 function getMyName() { 
     // 1. Wenn eingeloggt, nimm den gespeicherten Namen aus dem localStorage
-    const savedName = localStorage.getItem("playerName");
+    const savedName = localStorage.getItem("customUsername") || localStorage.getItem("playerName");
     if (savedName && savedName.trim() !== "") {
         return savedName.trim();
     }
@@ -1345,8 +1345,14 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
         if (premove && turn === myColor) {
             const pm = premove;
             premove = null;
-            if (board[pm.fr][pm.fc] && isOwn(board[pm.fr][pm.fc], turn) && canMoveLogic(pm.fr, pm.fc, pm.tr, pm.tc) && isSafeMove(pm.fr, pm.fc, pm.tr, pm.tc)) {
-                setTimeout(() => doMove(pm.fr, pm.fc, pm.tr, pm.tc), 10);
+            if (board[pm.fr] && board[pm.fr][pm.fc] && isOwn(board[pm.fr][pm.fc], turn) && canMoveLogic(pm.fr, pm.fc, pm.tr, pm.tc) && isSafeMove(pm.fr, pm.fc, pm.tr, pm.tc)) {
+                let pPiece = board[pm.fr][pm.fc];
+                if (pPiece.toLowerCase() === 'p' && (pm.tr === 0 || pm.tr === 7)) {
+                    board[pm.fr][pm.fc] = (pPiece === 'P') ? 'Q' : 'q';
+                }
+                setTimeout(() => doMove(pm.fr, pm.fc, pm.tr, pm.tc, true), 10);
+            } else {
+                draw();
             }
         }
     }, animationDuration);
@@ -1726,6 +1732,77 @@ window.addEventListener('DOMContentLoaded', () => {
                 addChat("System", "Raum '" + roomId + "' beigetreten.", "system");
             } else {
                 alert("Bitte eine Raum-ID eingeben.");
+            }
+        };
+    }
+
+    // 1-Klick WhatsApp / Freunde Einladungslink
+    const inviteFriendBtn = document.getElementById("inviteFriendBtn");
+    if (inviteFriendBtn) {
+        inviteFriendBtn.onclick = () => {
+            const roomInput = document.getElementById("roomID");
+            let rId = roomInput ? roomInput.value.trim() : "";
+            if (!rId) {
+                rId = "duell_" + Math.random().toString(36).substr(2, 6);
+                if (roomInput) roomInput.value = rId;
+            }
+            onlineRoom = rId;
+
+            const tcSelect = document.getElementById("timeControl");
+            const tc = tcSelect ? tcSelect.value : "10";
+            
+            // Spielraum direkt beitreten / erstellen
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'find_random',
+                    room: rId,
+                    playerName: getMyName(),
+                    timeControl: tc
+                }));
+            }
+
+            const origin = window.location.origin + window.location.pathname;
+            const inviteUrl = `${origin}?room=${rId}&tc=${encodeURIComponent(tc)}`;
+            const shareText = `⚔️ Schach-Duell! Fordere mich jetzt direkt im Browser heraus: ${inviteUrl}`;
+
+            if (navigator.share) {
+                navigator.share({
+                    title: "Schach Duell Einladung",
+                    text: `⚔️ Lass uns eine Runde Schach spielen!`,
+                    url: inviteUrl
+                }).catch(() => {});
+            } else if (navigator.clipboard) {
+                navigator.clipboard.writeText(inviteUrl).then(() => {
+                    const fb = document.getElementById("invite-feedback");
+                    if (fb) {
+                        fb.innerText = "✅ Einladungs-Link kopiert! Sende ihn an deine Freunde.";
+                        fb.style.display = "block";
+                        setTimeout(() => { fb.style.display = "none"; }, 5000);
+                    }
+                }).catch(() => {
+                    prompt("Kopiere deinen Einladungslink:", inviteUrl);
+                });
+            } else {
+                prompt("Kopiere deinen Einladungslink:", inviteUrl);
+            }
+            addChat("System", `🔗 Einladungs-Link für Raum '${rId}' erstellt! Warte auf Gegner...`, "system");
+        };
+    }
+
+    // Offene Herausforderung erstellen Button
+    const createOpenChBtn = document.getElementById("createOpenChallengeBtn");
+    if (createOpenChBtn) {
+        createOpenChBtn.onclick = () => {
+            const tcSelect = document.getElementById("timeControl");
+            const tc = tcSelect ? tcSelect.value : "10";
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'create_open_challenge',
+                    timeControl: tc,
+                    color: 'random',
+                    playerName: getMyName()
+                }));
+                addChat("System", `⚔️ Offene Herausforderung (${tc} min) in der Live-Lobby platziert!`, "system");
             }
         };
     }
@@ -2538,7 +2615,31 @@ socket.onmessage = (e) => {
                 // script2.js has a nicer rendering, so let's let script2.js handle it if it exists.
                 // If not, we do a nice fallback:
                 if (typeof window.script2Loaded === 'undefined') {
-                    listEl.innerHTML = data.list.map((p, i) => {
+                    const userMap = new Map();
+                    data.list.forEach(p => {
+                        let rawName = (p.name || '').trim();
+                        if (!rawName || rawName.match(/^[0-9a-zA-Z]{28}$/) || rawName.toLowerCase() === 'global') return;
+                        let cleanName = rawName;
+                        if (cleanName.toLowerCase() === 'maxadmin') cleanName = 'Max';
+                        const key = cleanName.toLowerCase();
+                        const elo = Number(p.elo) || 1200;
+                        const wins = Number(p.wins) || 0;
+                        const level = Number(p.level) || 1;
+                        const existing = userMap.get(key);
+                        if (!existing || elo > existing.elo || (elo === existing.elo && wins > existing.wins)) {
+                            userMap.set(key, {
+                                name: cleanName,
+                                elo: elo,
+                                wins: wins,
+                                level: level
+                            });
+                        }
+                    });
+                    const cleanList = Array.from(userMap.values())
+                        .sort((a, b) => (b.elo !== a.elo ? b.elo - a.elo : b.wins - a.wins))
+                        .slice(0, 100);
+
+                    listEl.innerHTML = cleanList.map((p, i) => {
                         let badge = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
                         let color = i === 0 ? '#f1c40f' : i === 1 ? '#bdc3c7' : i === 2 ? '#cd7f32' : 'rgba(255,255,255,0.7)';
                         let bg = i === 0 ? 'linear-gradient(135deg, rgba(241,196,15,0.2) 0%, rgba(0,0,0,0) 100%)' : 'rgba(255,255,255,0.03)';
@@ -2633,10 +2734,121 @@ socket.onmessage = (e) => {
             addVideoToFeed({ url: data.url, prompt: data.prompt, playerName: data.playerName });
             return;
         }
+
+        if (data.type === 'online_stats') {
+            const onlineEl = document.getElementById('online-users-count');
+            if (onlineEl && data.onlineCount) {
+                onlineEl.innerText = `🟢 ${data.onlineCount} online`;
+            }
+            return;
+        }
+
+        if (data.type === 'open_challenges_list') {
+            renderOpenChallenges(data.challenges);
+            return;
+        }
+
+        if (data.type === 'open_challenge_created') {
+            if (typeof window.showInAppNotification === 'function') {
+                window.showInAppNotification('⚔️ Herausforderung erstellt', 'Warte darauf, dass ein Spieler deine Herausforderung annimmt...', 'info');
+            }
+            return;
+        }
+
+        if (data.type === 'challenge_error') {
+            alert(data.text || "Herausforderung nicht mehr verfügbar.");
+            return;
+        }
     } catch(err) {
         console.error("Fehler beim Verarbeiten der Server-Nachricht:", err);
     }
 };
+
+function renderOpenChallenges(challenges) {
+    const listEl = document.getElementById('open-challenges-list');
+    if (!listEl) return;
+
+    if (!Array.isArray(challenges) || challenges.length === 0) {
+        listEl.innerHTML = `<div style="font-size: 0.85em; color: #888; text-align: center; padding: 12px; font-style: italic;">Keine offenen Herausforderungen. Erstelle die erste! ⚡</div>`;
+        return;
+    }
+
+    const myName = getMyName();
+    listEl.innerHTML = challenges.map(ch => {
+        const isMyChallenge = ch.creator === myName;
+        const colorIcon = ch.color === 'white' ? '⚪ Weiß' : ch.color === 'black' ? '⚫ Schwarz' : '🎲 Zufall';
+        const tcLabel = ch.timeControl === 'unlimited' ? 'Unbegrenzt' : `${ch.timeControl} min`;
+
+        return `
+            <div style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                <div style="display: flex; flex-direction: column;">
+                    <strong style="color: #f1c40f; font-size: 0.95em;">${ch.creator} <span style="font-size: 0.8em; color: #aaa;">(${ch.creatorElo} ELO)</span></strong>
+                    <span style="font-size: 0.8em; color: #bdc3c7;">⏱️ ${tcLabel} • ${colorIcon}</span>
+                </div>
+                ${isMyChallenge ? 
+                    `<button onclick="cancelOpenChallenge('${ch.id}')" class="glass-btn danger" style="padding: 4px 8px; font-size: 0.8em; cursor: pointer;">Abbrechen</button>` :
+                    `<button onclick="joinOpenChallenge('${ch.id}')" class="glass-btn success" style="padding: 6px 12px; font-size: 0.85em; font-weight: bold; cursor: pointer;">⚔️ Annehmen</button>`
+                }
+            </div>
+        `;
+    }).join('');
+}
+window.renderOpenChallenges = renderOpenChallenges;
+
+function joinOpenChallenge(chId) {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            type: 'join_open_challenge',
+            challengeId: chId,
+            playerName: getMyName()
+        }));
+    }
+}
+window.joinOpenChallenge = joinOpenChallenge;
+
+function cancelOpenChallenge(chId) {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            type: 'cancel_open_challenge',
+            challengeId: chId
+        }));
+    }
+}
+window.cancelOpenChallenge = cancelOpenChallenge;
+
+function checkUrlInviteParam() {
+    const params = new URLSearchParams(window.location.search);
+    const roomParam = params.get('room');
+    const tcParam = params.get('tc');
+
+    if (roomParam) {
+        console.log("🔗 Raum aus Einladungs-Link erkannt:", roomParam);
+        const roomInput = document.getElementById("roomID");
+        if (roomInput) roomInput.value = roomParam;
+        onlineRoom = roomParam;
+
+        if (tcParam) {
+            const tcSelect = document.getElementById("timeControl");
+            if (tcSelect) tcSelect.value = tcParam;
+        }
+
+        const modeSelect = document.getElementById("gameMode");
+        if (modeSelect) modeSelect.value = "online";
+
+        setTimeout(() => {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'find_random',
+                    room: roomParam,
+                    playerName: getMyName(),
+                    timeControl: tcParam || '10'
+                }));
+                addChat("System", `🔗 Du bist über einen Einladungs-Link Raum '${roomParam}' beigetreten!`, "system");
+            }
+        }, 800);
+    }
+}
+window.addEventListener('DOMContentLoaded', checkUrlInviteParam);
 
 function attemptGameRejoin() {
     const savedRoom = localStorage.getItem('active_game_room');
@@ -2654,6 +2866,14 @@ window.attemptGameRejoin = attemptGameRejoin;
 
 socket.onopen = () => {
     loadChatHistory();
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'get_open_challenges' }));
+    }
+    setInterval(() => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: 'get_open_challenges' }));
+        }
+    }, 8000);
     
     // Auto-Login, falls bereits eingeloggt
     const savedName = localStorage.getItem('playerName');
@@ -2777,8 +2997,9 @@ function draw() {
 
             d.oncontextmenu = (e) => {
                 e.preventDefault();
-                if (typeof premove !== 'undefined') {
+                if (typeof premove !== 'undefined' && premove) {
                     premove = null;
+                    selected = null;
                     draw();
                 }
             };
@@ -2786,6 +3007,37 @@ function draw() {
             currentBoardEl.appendChild(d);
         });
     });
+
+    // Premove als roten Leuchtpfad zeichnen (SVG Overlay)
+    if (typeof premove !== 'undefined' && premove) {
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("class", "board-overlay-svg premove-overlay-svg");
+        svg.style.position = "absolute";
+        svg.style.top = "0";
+        svg.style.left = "0";
+        svg.style.width = "100%";
+        svg.style.height = "100%";
+        svg.style.pointerEvents = "none";
+        svg.style.zIndex = "12";
+        
+        const x1 = (premove.fc + 0.5) * 12.5;
+        const y1 = (premove.fr + 0.5) * 12.5;
+        const x2 = (premove.tc + 0.5) * 12.5;
+        const y2 = (premove.tr + 0.5) * 12.5;
+        
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", `M ${x1}% ${y1}% L ${x2}% ${y2}%`);
+        path.setAttribute("stroke", "rgba(231, 76, 60, 0.9)"); // Roter Premove-Pfad
+        path.setAttribute("stroke-width", "3.5");
+        path.setAttribute("stroke-linecap", "round");
+        path.setAttribute("fill", "none");
+        path.style.strokeDasharray = "6, 4";
+        path.style.animation = "dash 15s linear infinite";
+        path.setAttribute("filter", "drop-shadow(0px 0px 6px rgba(231, 76, 60, 0.95))");
+        
+        svg.appendChild(path);
+        currentBoardEl.appendChild(svg);
+    }
 
     // Letzten Zug als dezenten Leuchtpfad zeichnen (SVG Overlay)
     if (typeof lastMove !== 'undefined' && lastMove) {
@@ -2854,15 +3106,26 @@ function handleSquareClick(r, c) {
     const isLocal = gameModeSelect && gameModeSelect.value === "local";
     if (!isLocal && turn !== myColor) {
         if (selected) {
-            if (selected.r !== r || selected.c !== c) {
+            if (board[r] && board[r][c] && isOwn(board[r][c], myColor)) {
+                if (selected.r === r && selected.c === c) {
+                    selected = null; // Klick auf selbe Figur hebt Auswahl auf
+                } else {
+                    selected = { r, c }; // Klick auf andere eigene Figur wechselt Auswahl
+                }
+            } else {
+                // Klick auf Zielfeld setzt Premove
                 premove = { fr: selected.r, fc: selected.c, tr: r, tc: c };
                 selected = null;
-                console.log("🐍 Premove gesetzt:", premove);
-            } else {
-                selected = null;
+                console.log("⚡ Premove gesetzt:", premove);
             }
-        } else if (board[r][c] && isOwn(board[r][c], myColor)) {
-            selected = { r, c };
+        } else {
+            if (board[r] && board[r][c] && isOwn(board[r][c], myColor)) {
+                selected = { r, c };
+                premove = null;
+            } else if (premove) {
+                // Klick auf leeres Feld bricht bestehenden Premove ab
+                premove = null;
+            }
         }
         draw(); 
         return;

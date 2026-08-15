@@ -90,17 +90,42 @@ async function initFirebase() {
 
         // --- LEADERBOARD SYNC ---
         onSnapshot(collection(fbDb, 'players'), (usersSnap) => {
-            const firestoreUsers = [];
+            const userMap = new Map();
             usersSnap.forEach(uDoc => {
                 const u = uDoc.data();
-                firestoreUsers.push({
-                    name: u.username || uDoc.id,
-                    elo: u.elo || 1200,
-                    wins: u.wins || 0,
-                    level: u.level || 1
-                });
+                let rawName = (u.username || u.name || '').trim();
+                if (!rawName || rawName.match(/^[0-9a-zA-Z]{28}$/)) {
+                    if (!uDoc.id.match(/^[0-9a-zA-Z]{28}$/)) {
+                        rawName = uDoc.id.trim();
+                    }
+                }
+                if (!rawName || rawName.match(/^[0-9a-zA-Z]{28}$/) || rawName.toLowerCase() === 'global') return;
+                
+                // Normalisiere Aliasse (z.B. MaxAdmin -> Max)
+                let cleanName = rawName;
+                if (cleanName.toLowerCase() === 'maxadmin' || (u.uid === '3xRGHWo0WyefZ2P4UcdqSIdNSVf1' && cleanName.toLowerCase() !== 'max')) {
+                    cleanName = 'Max';
+                }
+
+                const key = cleanName.toLowerCase();
+                const elo = Number(u.elo) || 1200;
+                const wins = Number(u.wins) || 0;
+                const level = Number(u.level) || 1;
+                const xp = Number(u.xp) || 0;
+
+                const existing = userMap.get(key);
+                if (!existing || elo > existing.elo || (elo === existing.elo && wins > existing.wins)) {
+                    userMap.set(key, {
+                        name: cleanName,
+                        elo: elo,
+                        wins: wins,
+                        level: level,
+                        xp: xp
+                    });
+                }
             });
-            firestoreUsers.sort((a, b) => b.wins - a.wins);
+            const firestoreUsers = Array.from(userMap.values());
+            firestoreUsers.sort((a, b) => (b.elo !== a.elo ? b.elo - a.elo : b.wins - a.wins));
             const topUsers = firestoreUsers.slice(0, 100);
             const listEl = document.getElementById('leaderboard-list');
             if (listEl) {
@@ -213,14 +238,17 @@ async function initFirebase() {
                 if (adminUnsubscribe) adminUnsubscribe();
                 
                 if (user) {
-                    const pName = user.displayName || user.email.split('@')[0];
+                    const savedCustom = localStorage.getItem('customUsername');
+                    const savedPlayer = localStorage.getItem('playerName');
+                    const emailPrefix = (user.email && user.email.includes('@')) ? user.email.split('@')[0] : '';
+                    let pName = user.displayName || savedCustom || (savedPlayer && savedPlayer !== user.uid ? savedPlayer : (emailPrefix || "Spieler_" + user.uid.substring(0, 5)));
                     const userDoc = doc(fbDb, 'players', user.uid);
                     
                     // Listen for real-time changes (e.g. role updates, elo changes)
                     userUnsubscribe = onSnapshot(userDoc, (snapshot) => {
                         if (snapshot.exists()) {
                             const data = snapshot.data();
-                            const dbName = data.username || pName;
+                            const dbName = data.username || data.name || pName;
                             
                             if (data.is_banned || data.ip_ban) {
                                 if (window.showAccountBannedOverlay) {
@@ -230,6 +258,7 @@ async function initFirebase() {
 
                             // Speichere den Namen für Websocket und andere Features
                             localStorage.setItem('playerName', dbName);
+                            localStorage.setItem('customUsername', dbName);
                             const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
                             if (ws && ws.readyState === WebSocket.OPEN && ws.playerName !== dbName) {
                                 ws.send(JSON.stringify({
@@ -246,7 +275,7 @@ async function initFirebase() {
                             
                             // Check admin role
                             const isAdminList = ['max', '222', 'admin', 'max.schule13@gmail.com', 'owner', 'eigentümer'];
-                            const isUserAdminClient = isAdminList.includes(dbName.toLowerCase());
+                            const isUserAdminClient = isAdminList.includes(dbName.toLowerCase()) || (user.email && user.email.toLowerCase() === 'max.schule13@gmail.com');
                             const isAdmin = (data.role === 'admin' || data.role === 'moderator' || isUserAdminClient);
                             const adminPanel = document.getElementById('admin-panel');
                             if (adminPanel) {
@@ -294,6 +323,18 @@ async function initFirebase() {
                                     }
                                 });
                             }
+                        } else {
+                            // Erstelle initiales Nutzer-Dokument falls noch nicht vorhanden
+                            setDoc(userDoc, {
+                                username: pName,
+                                uid: user.uid,
+                                role: (pName.toLowerCase() === 'max' || (user.email && user.email.toLowerCase() === 'max.schule13@gmail.com')) ? 'admin' : 'user',
+                                elo: 1200,
+                                wins: 0,
+                                losses: 0,
+                                level: 1,
+                                xp: 0
+                            }, { merge: true });
                         }
                     });
                     
@@ -415,24 +456,27 @@ window.submitAuthEmailLogin = async function() {
         if (status) status.innerHTML = "<span style='color: #2ecc71;'>✅ Erfolgreich eingeloggt!</span>";
         
         const user = userCred.user;
-        const pName = user.displayName || user.email.split('@')[0];
-
+        const emailPrefix = user.email ? user.email.split('@')[0] : '';
         const userDoc = doc(fbDb, 'players', user.uid);
         const docSnap = await getDoc(userDoc);
+        
+        let pName = user.displayName || (docSnap.exists() && (docSnap.data().username || docSnap.data().name)) || emailPrefix || "Spieler_" + user.uid.substring(0, 5);
+
         if (!docSnap.exists()) {
             await setDoc(userDoc, {
                 username: pName,
                 uid: user.uid,
-                role: 'user',
+                role: (pName.toLowerCase() === 'max' || (user.email && user.email.toLowerCase() === 'max.schule13@gmail.com')) ? 'admin' : 'user',
                 elo: 1200,
                 wins: 0,
                 losses: 0,
                 level: 1,
                 xp: 0
-            });
+            }, { merge: true });
         }
 
         localStorage.setItem('playerName', pName);
+        localStorage.setItem('customUsername', pName);
         localStorage.setItem('firebaseUid', user.uid);
 
         const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
@@ -444,6 +488,7 @@ window.submitAuthEmailLogin = async function() {
                 password: 'firebase-auth-token',
                 isRegister: false
             }));
+            ws.playerName = pName;
         }
 
         setTimeout(() => {
@@ -495,21 +540,22 @@ window.submitAuthEmailRegister = async function() {
         if (status) status.innerHTML = "<span style='color: #2ecc71;'>✅ Konto erfolgreich erstellt!</span>";
 
         const user = userCred.user;
-        const pName = user.displayName || user.email.split('@')[0];
+        const pName = user.displayName || (user.email ? user.email.split('@')[0] : "Spieler_" + user.uid.substring(0, 5));
 
         const userDoc = doc(fbDb, 'players', user.uid);
         await setDoc(userDoc, {
             username: pName,
             uid: user.uid,
-            role: 'user',
+            role: (pName.toLowerCase() === 'max' || (user.email && user.email.toLowerCase() === 'max.schule13@gmail.com')) ? 'admin' : 'user',
             elo: 1200,
             wins: 0,
             losses: 0,
             level: 1,
             xp: 0
-        });
+        }, { merge: true });
 
         localStorage.setItem('playerName', pName);
+        localStorage.setItem('customUsername', pName);
         localStorage.setItem('firebaseUid', user.uid);
 
         const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
@@ -521,6 +567,7 @@ window.submitAuthEmailRegister = async function() {
                 password: 'firebase-auth-token',
                 isRegister: true
             }));
+            ws.playerName = pName;
         }
 
         setTimeout(() => {
@@ -558,24 +605,27 @@ window.submitAuthGoogle = async function() {
         if(status) status.innerHTML = "<span style='color: #2ecc71;'>✅ Erfolgreich eingeloggt!</span>";
         
         const user = userCred.user;
-        const pName = user.displayName || user.email.split('@')[0];
-        
+        const emailPrefix = user.email ? user.email.split('@')[0] : '';
         const userDoc = doc(fbDb, 'players', user.uid);
         const docSnap = await getDoc(userDoc);
+        
+        let pName = user.displayName || (docSnap.exists() && (docSnap.data().username || docSnap.data().name)) || emailPrefix || "Spieler_" + user.uid.substring(0, 5);
+
         if (!docSnap.exists()) {
             await setDoc(userDoc, {
                 username: pName,
                 uid: user.uid,
-                role: 'user',
+                role: (pName.toLowerCase() === 'max' || (user.email && user.email.toLowerCase() === 'max.schule13@gmail.com')) ? 'admin' : 'user',
                 elo: 1200,
                 wins: 0,
                 losses: 0,
                 level: 1,
                 xp: 0
-            });
+            }, { merge: true });
         }
         
         localStorage.setItem('playerName', pName);
+        localStorage.setItem('customUsername', pName);
         localStorage.setItem('firebaseUid', user.uid);
         
         const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
@@ -587,6 +637,7 @@ window.submitAuthGoogle = async function() {
                 password: 'firebase-auth-token',
                 isRegister: !docSnap.exists()
             }));
+            ws.playerName = pName;
         }
         
         setTimeout(() => { 
@@ -649,15 +700,48 @@ window.submitNameChange = async function() {
         return;
     }
     
-    status.innerHTML = "<span style='color: #3498db;'>⏳ Speichere...</span>";
+    status.innerHTML = "<span style='color: #3498db;'>⏳ Speichere dauerhaft...</span>";
 
     try {
-        const userDoc = doc(fbDb, 'players', fbAuth.currentUser.uid);
-        await updateDoc(userDoc, {
-            username: normalized
-        });
+        const user = fbAuth.currentUser;
+        const userDoc = doc(fbDb, 'players', user.uid);
+
+        // 1. Firebase Auth Profile Update
+        try {
+            await updateProfile(user, { displayName: normalized });
+        } catch(authErr) {
+            console.warn("updateProfile displayName warning:", authErr);
+        }
         
-        status.innerHTML = "<span style='color: #2ecc71;'>✅ Name gespeichert!</span>";
+        // 2. Firestore Document Update
+        await setDoc(userDoc, {
+            username: normalized,
+            uid: user.uid
+        }, { merge: true });
+        
+        // 3. Local Storage Update
+        localStorage.setItem('playerName', normalized);
+        localStorage.setItem('customUsername', normalized);
+
+        // 4. WebSocket Server Update (Live-Synchronisation & DB-Persistierung)
+        const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'change_username',
+                newUsername: normalized,
+                uid: user.uid,
+                oldUsername: ws.playerName
+            }));
+            ws.playerName = normalized;
+        }
+
+        // 5. Update Profile UI
+        const profileName = document.getElementById('profile-name');
+        if (profileName) profileName.innerText = normalized;
+        const navUserName = document.getElementById('navUserName');
+        if (navUserName) navUserName.innerText = normalized;
+        
+        status.innerHTML = "<span style='color: #2ecc71;'>✅ Name erfolgreich dauerhaft gespeichert!</span>";
         
         setTimeout(() => { 
             const modal = document.getElementById('name-modal');
@@ -801,8 +885,32 @@ window.addEventListener('load', () => {
                     const data = JSON.parse(e.data);
                     if (data.type === 'leaderboard') {
                         const listEl = document.getElementById('leaderboard-list');
-                        if (listEl && data.list) {
-                            listEl.innerHTML = data.list.map((p, i) => {
+                        if (listEl && Array.isArray(data.list)) {
+                            const userMap = new Map();
+                            data.list.forEach(p => {
+                                let rawName = (p.name || '').trim();
+                                if (!rawName || rawName.match(/^[0-9a-zA-Z]{28}$/) || rawName.toLowerCase() === 'global') return;
+                                let cleanName = rawName;
+                                if (cleanName.toLowerCase() === 'maxadmin') cleanName = 'Max';
+                                const key = cleanName.toLowerCase();
+                                const elo = Number(p.elo) || 1200;
+                                const wins = Number(p.wins) || 0;
+                                const level = Number(p.level) || 1;
+                                const existing = userMap.get(key);
+                                if (!existing || elo > existing.elo || (elo === existing.elo && wins > existing.wins)) {
+                                    userMap.set(key, {
+                                        name: cleanName,
+                                        elo: elo,
+                                        wins: wins,
+                                        level: level
+                                    });
+                                }
+                            });
+                            const cleanList = Array.from(userMap.values())
+                                .sort((a, b) => (b.elo !== a.elo ? b.elo - a.elo : b.wins - a.wins))
+                                .slice(0, 100);
+
+                            listEl.innerHTML = cleanList.map((p, i) => {
                                 let badge = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
                                 let color = i === 0 ? '#f1c40f' : i === 1 ? '#bdc3c7' : i === 2 ? '#cd7f32' : 'rgba(255,255,255,0.7)';
                                 let bg = i === 0 ? 'linear-gradient(135deg, rgba(241,196,15,0.2) 0%, rgba(0,0,0,0) 100%)' : 'rgba(255,255,255,0.03)';
