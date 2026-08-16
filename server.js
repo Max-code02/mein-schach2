@@ -1843,42 +1843,86 @@ async function unbanPlayerHelper(targetName) {
     if (!targetName) return;
     const cleanTarget = targetName.trim();
     const cleanTargetLower = cleanTarget.toLowerCase();
+    const targetNoPrefix = cleanTargetLower.replace(/^(username_|ip_|ban_)/i, '');
+    const isUnbanAll = cleanTargetLower === 'all' || cleanTargetLower === '*' || cleanTargetLower === 'clear';
+
+    console.log(`🔓 UNBAN-HELPER GESTARTET für: "${cleanTarget}" (Prefix-Free: "${targetNoPrefix}", isUnbanAll: ${isUnbanAll})`);
 
     // 1. Delete target directly from Sets (both cases & target string)
-    bannedPlayers.delete(cleanTargetLower);
-    bannedPlayers.delete(cleanTarget);
-    bannedIPs.delete(cleanTarget);
+    if (isUnbanAll) {
+        bannedPlayers.clear();
+        bannedIPs.clear();
+        for (const uname in userDB) {
+            userDB[uname].is_banned = false;
+            userDB[uname].ip_ban = false;
+            userDB[uname].ban_reason = null;
+        }
+    } else {
+        bannedPlayers.delete(cleanTargetLower);
+        bannedPlayers.delete(cleanTarget);
+        bannedPlayers.delete(targetNoPrefix);
+        bannedIPs.delete(cleanTarget);
+        bannedIPs.delete(targetNoPrefix);
 
-    // 2. Check and unban target in userDB
-    if (userDB[cleanTarget]) {
-        userDB[cleanTarget].is_banned = false;
-        userDB[cleanTarget].ip_ban = false;
-        userDB[cleanTarget].ban_reason = null;
-        if (userDB[cleanTarget].ip_address) {
-            bannedIPs.delete(userDB[cleanTarget].ip_address);
+        // Check and unban target in userDB
+        if (userDB[cleanTarget]) {
+            userDB[cleanTarget].is_banned = false;
+            userDB[cleanTarget].ip_ban = false;
+            userDB[cleanTarget].ban_reason = null;
+            if (userDB[cleanTarget].ip_address) {
+                bannedIPs.delete(userDB[cleanTarget].ip_address);
+            }
+        }
+
+        // Search userDB for matching username, email, or IP
+        for (const uname in userDB) {
+            const u = userDB[uname];
+            if (!u) continue;
+            const unameLower = uname.toLowerCase();
+            if (unameLower === cleanTargetLower || 
+                unameLower === targetNoPrefix ||
+                (u.email && u.email.toLowerCase() === cleanTargetLower) || 
+                (u.email && u.email.toLowerCase() === targetNoPrefix) ||
+                u.ip_address === cleanTarget ||
+                u.ip_address === targetNoPrefix) {
+                u.is_banned = false;
+                u.ip_ban = false;
+                u.ban_reason = null;
+                bannedPlayers.delete(unameLower);
+                bannedPlayers.delete(uname);
+                if (u.ip_address) bannedIPs.delete(u.ip_address);
+            }
         }
     }
 
-    // 3. Search userDB for matching username, email, or IP
-    for (const uname in userDB) {
-        const u = userDB[uname];
-        if (!u) continue;
-        if (uname.toLowerCase() === cleanTargetLower || 
-            (u.email && u.email.toLowerCase() === cleanTargetLower) || 
-            u.ip_address === cleanTarget) {
-            u.is_banned = false;
-            u.ip_ban = false;
-            u.ban_reason = null;
-            bannedPlayers.delete(uname.toLowerCase());
-            bannedPlayers.delete(uname);
-            if (u.ip_address) bannedIPs.delete(u.ip_address);
+    // 2. Clean .htaccess IP denylist if exists
+    try {
+        const htaccessPath = path.join(__dirname, '.htaccess');
+        if (fs.existsSync(htaccessPath)) {
+            let htContent = fs.readFileSync(htaccessPath, 'utf8');
+            if (isUnbanAll) {
+                htContent = htContent.replace(/Deny from .*\n?/g, '');
+            } else {
+                const targetEscaped = cleanTarget.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const noPrefixEscaped = targetNoPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                htContent = htContent.replace(new RegExp(`Deny from (${targetEscaped}|${noPrefixEscaped})\\n?`, 'g'), '');
+            }
+            fs.writeFileSync(htaccessPath, htContent);
         }
+    } catch (htErr) {
+        console.warn("Notice: .htaccess update warning:", htErr.message);
     }
 
-    // 4. Update status in support tickets for this user
+    // 3. Update status in support tickets for this user
     if (globalSupportTickets && Array.isArray(globalSupportTickets)) {
         globalSupportTickets.forEach(t => {
-            if (t.user?.toLowerCase() === cleanTargetLower || t.contact?.toLowerCase() === cleanTargetLower || t.clientIP === cleanTarget) {
+            if (isUnbanAll || 
+                t.user?.toLowerCase() === cleanTargetLower || 
+                t.user?.toLowerCase() === targetNoPrefix ||
+                t.contact?.toLowerCase() === cleanTargetLower || 
+                t.contact?.toLowerCase() === targetNoPrefix ||
+                t.clientIP === cleanTarget ||
+                t.clientIP === targetNoPrefix) {
                 t.status = 'Entbannt';
                 t.reply = t.reply || 'Entbannungsantrag genehmigt! Dein Account/IP wurde freigeschaltet.';
             }
@@ -1886,51 +1930,115 @@ async function unbanPlayerHelper(targetName) {
         saveTicketsToFile();
     }
 
-    // 5. Delete ban documents in Firestore AND update players collection
+    // 4. Delete ban documents in Firestore AND update players collection
     if (firestoreDb) {
         try {
-            // Delete standard ban document IDs
-            const banIdUser = `username_${cleanTargetLower}`;
-            await firestoreDb.collection('bans').doc(banIdUser).delete().catch(() => {});
-            
-            const banIdIP = `ip_${cleanTarget.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
-            await firestoreDb.collection('bans').doc(banIdIP).delete().catch(() => {});
+            // Direct ID deletion attempts for common patterns
+            const directDocIds = [
+                cleanTarget,
+                cleanTargetLower,
+                targetNoPrefix,
+                `username_${cleanTargetLower}`,
+                `username_${targetNoPrefix}`,
+                `username_${cleanTarget}`,
+                `ip_${cleanTarget}`,
+                `ip_${targetNoPrefix}`,
+                `ip_${cleanTarget.replace(/\./g, '_')}`,
+                `ip_${targetNoPrefix.replace(/\./g, '_')}`,
+                `ip_${cleanTarget.replace(/[^a-zA-Z0-9_.-]/g, '_')}`,
+                `ip_${targetNoPrefix.replace(/[^a-zA-Z0-9_.-]/g, '_')}`,
+                `ip_${cleanTarget.replace(/[^a-zA-Z0-9]/g, '_')}`,
+                `ip_${targetNoPrefix.replace(/[^a-zA-Z0-9]/g, '_')}`
+            ];
 
-            // Query Firestore bans collection for ANY documents matching the target (username or IP)
-            const bansSnap = await firestoreDb.collection('bans').get().catch(() => null);
-            if (bansSnap && !bansSnap.empty) {
-                const toDelete = [];
-                bansSnap.forEach(doc => {
-                    const data = doc.data() || {};
-                    const t = (data.target || '').toLowerCase().trim();
-                    if (t === cleanTargetLower || t === cleanTarget.toLowerCase() || (userDB[cleanTarget] && userDB[cleanTarget].ip_address && t === userDB[cleanTarget].ip_address.toLowerCase())) {
-                        toDelete.push(firestoreDb.collection('bans').doc(doc.id).delete().catch(() => {}));
-                    }
-                });
-                await Promise.all(toDelete);
+            for (const dId of directDocIds) {
+                if (dId) {
+                    await firestoreDb.collection('bans').doc(dId).delete().catch(() => {});
+                }
             }
 
-            // Update player document in Firestore 'players' collection
-            await firestoreDb.collection('players').doc(cleanTarget).set({
-                is_banned: false,
-                ip_ban: false,
-                ban_reason: null
-            }, { merge: true }).catch(() => {});
+            // Query ALL Firestore bans collection documents to guarantee complete purge of matching bans
+            const bansSnap = await firestoreDb.collection('bans').get().catch(() => null);
+            if (bansSnap && !bansSnap.empty && bansSnap.docs) {
+                const deletePromises = [];
+                bansSnap.forEach(doc => {
+                    const dId = (doc.id || '').toLowerCase();
+                    const data = (typeof doc.data === 'function' ? doc.data() : doc) || {};
+                    const t = (data.target || '').toLowerCase().trim();
+                    const u = (data.username || data.name || data.player || '').toLowerCase().trim();
+                    const ip = (data.ip || data.ip_address || '').toLowerCase().trim();
 
-            // In case the player doc is keyed with different casing or UID
-            for (const uname in userDB) {
-                if (uname.toLowerCase() === cleanTargetLower) {
+                    let shouldDelete = false;
+                    if (isUnbanAll) {
+                        shouldDelete = true;
+                    } else if (
+                        dId === cleanTargetLower ||
+                        dId === targetNoPrefix ||
+                        dId === `username_${cleanTargetLower}` ||
+                        dId === `username_${targetNoPrefix}` ||
+                        dId === `ip_${cleanTargetLower}` ||
+                        dId === `ip_${targetNoPrefix}` ||
+                        dId.includes(cleanTargetLower) ||
+                        dId.includes(targetNoPrefix) ||
+                        t === cleanTargetLower ||
+                        t === targetNoPrefix ||
+                        u === cleanTargetLower ||
+                        u === targetNoPrefix ||
+                        ip === cleanTargetLower ||
+                        ip === targetNoPrefix
+                    ) {
+                        shouldDelete = true;
+                    }
+
+                    if (shouldDelete) {
+                        console.log(`🔥 LÖSCHE FIRESTORE-BAN DOKUMENT: "${doc.id}" (Target: "${t || u || ip || dId}")`);
+                        deletePromises.push(firestoreDb.collection('bans').doc(doc.id).delete().catch(err => {
+                            console.warn(`Warning deleting ban doc ${doc.id}:`, err.message);
+                        }));
+                    }
+                });
+                await Promise.all(deletePromises);
+            }
+
+            // Update player documents in Firestore 'players' collection
+            if (isUnbanAll) {
+                for (const uname in userDB) {
                     await firestoreDb.collection('players').doc(uname).set({
                         is_banned: false,
                         ip_ban: false,
                         ban_reason: null
                     }, { merge: true }).catch(() => {});
-                    if (userDB[uname].uid) {
-                        await firestoreDb.collection('players').doc(userDB[uname].uid).set({
+                }
+            } else {
+                await firestoreDb.collection('players').doc(cleanTarget).set({
+                    is_banned: false,
+                    ip_ban: false,
+                    ban_reason: null
+                }, { merge: true }).catch(() => {});
+                
+                if (targetNoPrefix && targetNoPrefix !== cleanTarget) {
+                    await firestoreDb.collection('players').doc(targetNoPrefix).set({
+                        is_banned: false,
+                        ip_ban: false,
+                        ban_reason: null
+                    }, { merge: true }).catch(() => {});
+                }
+
+                // In case player doc is keyed with different casing or UID
+                for (const uname in userDB) {
+                    if (uname.toLowerCase() === cleanTargetLower || uname.toLowerCase() === targetNoPrefix) {
+                        await firestoreDb.collection('players').doc(uname).set({
                             is_banned: false,
                             ip_ban: false,
                             ban_reason: null
                         }, { merge: true }).catch(() => {});
+                        if (userDB[uname].uid) {
+                            await firestoreDb.collection('players').doc(userDB[uname].uid).set({
+                                is_banned: false,
+                                ip_ban: false,
+                                ban_reason: null
+                            }, { merge: true }).catch(() => {});
+                        }
                     }
                 }
             }
@@ -1944,7 +2052,7 @@ async function unbanPlayerHelper(targetName) {
         fs.writeFileSync(USER_FILE, JSON.stringify(userDB, null, 2));
     } catch (e) {}
 
-    console.log(`🔓 Entbannung erfolgreich ausgeführt für: ${cleanTarget}`);
+    console.log(`🔓 Entbannung erfolgreich abgeschlossen für: ${cleanTarget}`);
 }
 
 async function syncAllToFirestore() {

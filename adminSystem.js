@@ -190,17 +190,43 @@ async function handleAdminCommand(ws, text, context) {
             }
             break;
 
-        // --- PARDON / UNBAN ---
+        // --- PARDON / UNBAN / CLEARBANS ---
         case 'pardon':
         case 'unban':
         case 'unbanip':
+        case 'entbann':
+        case 'entbannen':
+        case 'unbanall':
+        case 'clearbans':
         case 'p':
+            if (cmd === 'clearbans' || cmd === 'unbanall' || targetName.toLowerCase() === 'all' || targetName === '*') {
+                if (bannedIPs) bannedIPs.clear();
+                if (bannedPlayers) bannedPlayers.clear();
+                if (typeof unbanPlayer === 'function') {
+                    await unbanPlayer('all');
+                }
+                ws.send(JSON.stringify({ 
+                    type: 'chat', 
+                    text: `🔓 SUCCESS: ALLE Bans (Spieler & IPs) wurden vollständig aus Firestore & Server gelöscht!`, 
+                    system: true 
+                }));
+                wss.clients.forEach(c => {
+                    if (c.readyState === 1) {
+                        c.send(JSON.stringify({ type: 'chat', text: `🕊️ ADMIN: Alle Spielersperren und IP-Bans wurden aufgehoben!`, system: true }));
+                    }
+                });
+                return true;
+            }
+
             if (!targetName) {
-                ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /pardon "Name"', system: true }));
+                ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /pardon "Name/IP" oder /unbanall', system: true }));
                 return true;
             }
             
-            if (bannedIPs) bannedIPs.delete(targetName);
+            if (bannedIPs) {
+                bannedIPs.delete(targetName);
+                bannedIPs.delete(targetName.toLowerCase());
+            }
             if (bannedPlayers) {
                 bannedPlayers.delete(targetName.toLowerCase());
                 bannedPlayers.delete(targetName);
@@ -218,7 +244,7 @@ async function handleAdminCommand(ws, text, context) {
 
             ws.send(JSON.stringify({ 
                 type: 'chat', 
-                text: `🔓 SUCCESS: Spieler/IP "${targetName}" wurde erfolgreich begnadigt und entsperrt!`, 
+                text: `🔓 SUCCESS: Spieler/IP "${targetName}" wurde erfolgreich begnadigt und der Ban gelöscht!`, 
                 system: true 
             }));
             
@@ -231,28 +257,39 @@ async function handleAdminCommand(ws, text, context) {
 
         // --- OFFBAN ---
         case 'offban':
+        case 'offbann':
             if (!targetName) {
-                ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /offban "Name"', system: true }));
+                ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /offban "Name" [Grund]', system: true }));
                 return true;
             }
+            const offReason = resolvedArgs.rest || 'Offline Ban';
             if (bannedPlayers) bannedPlayers.add(targetName.toLowerCase());
-            if (typeof banPlayer === 'function') await banPlayer(targetName, "Offline Ban");
+            
+            if (typeof banPlayer === 'function') {
+                await banPlayer(targetName, offReason, ws);
+            } else {
+                if (profiles && profiles[targetName]) {
+                    profiles[targetName].is_banned = true;
+                    profiles[targetName].ban_reason = offReason;
+                }
+            }
             
             if (db) {
                 try {
-                    await db.collection("players").doc(targetName).update({ is_banned: true, ip_ban: true });
+                    await db.collection("players").doc(targetName).set({ is_banned: true, ip_ban: true, ban_reason: offReason }, { merge: true });
                 } catch(e) {}
             }
 
             ws.send(JSON.stringify({ 
                 type: 'chat', 
-                text: `🔨 SUCCESS: Spieler "${targetName}" wurde offline gebannt!`, 
+                text: `🔨 SUCCESS: Spieler "${targetName}" wurde offline gebannt! (Grund: ${offReason})`, 
                 system: true 
             }));
             break;
 
         // --- TEMPBAN ---
         case 'tempban':
+        case 'tempbann':
             const tbMin = parseInt(resolvedArgs.rest) || 60;
             if (!targetName) {
                 ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /tempban "Name" [Minuten]', system: true }));
@@ -273,6 +310,9 @@ async function handleAdminCommand(ws, text, context) {
             });
 
             if (tbanTargetIsAdmin) {
+                if (typeof global.logAdminConflict === 'function') {
+                    global.logAdminConflict(ws, targetName, `Tempban-Versuch (${tbMin} Min)`);
+                }
                 wss.clients.forEach(c => {
                     if (c.playerName && c.playerName.toLowerCase() === lowerTBanTarget) {
                         c.send(JSON.stringify({ type: 'chat', text: `⚠️ Achtung: ${ws.playerName || 'Ein Admin/System'} hat versucht, dich temporär zu bannen (Schutz aktiv - Tempban abgewendet)`, system: true }));
@@ -285,23 +325,28 @@ async function handleAdminCommand(ws, text, context) {
             if (bannedPlayers) bannedPlayers.add(targetName.toLowerCase());
             
             wss.clients.forEach(c => {
-                if (c.playerName && c.playerName.toLowerCase() === targetName.toLowerCase()) {
+                if (c.playerName && (c.playerName.toLowerCase() === targetName.toLowerCase() || c.clientIP === targetName)) {
                     c.send(JSON.stringify({ type: 'login_error', text: `Du wurdest für ${tbMin} Minuten temporär gebannt!` }));
                     c.send(JSON.stringify({ type: 'chat', text: `⏳ Du wurdest für ${tbMin} Minuten temporär gebannt!`, system: true }));
-                    c.close();
+                    setTimeout(() => { c.close(); }, 300);
                 }
             });
             ws.send(JSON.stringify({ type: 'chat', text: `⏳ Spieler "${targetName}" wurde für ${tbMin} Minuten gebannt!`, system: true }));
             
             // Auto unban later
-            setTimeout(() => {
-                if (bannedPlayers) bannedPlayers.delete(targetName.toLowerCase());
+            setTimeout(async () => {
+                if (typeof unbanPlayer === 'function') {
+                    await unbanPlayer(targetName);
+                } else if (bannedPlayers) {
+                    bannedPlayers.delete(targetName.toLowerCase());
+                }
             }, tbMin * 60000);
             break;
 
         // --- KICK ---
         case 'k':
         case 'kick':
+        case 'kicken':
             if (!targetName) {
                 ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /kick "Name" [Grund]', system: true }));
                 return true;
@@ -317,13 +362,16 @@ async function handleAdminCommand(ws, text, context) {
 
             wss.clients.forEach(c => { 
                 if (c.playerName && c.playerName.toLowerCase() === lowerKTarget) { 
-                    if (ADMINS.some(a => a.toLowerCase() === (c.playerName || "").toLowerCase()) || (c.playerName || "").toLowerCase() === 'max' || c.email === 'max.schule13@gmail.com' || (profiles && profiles[c.playerName] && profiles[c.playerName].role === 'admin')) {
+                    if (ADMINS.some(a => a.toLowerCase() === (c.playerName || "").toLowerCase()) || (c.playerName || "").toLowerCase() === 'max' || c.userEmail === 'max.schule13@gmail.com' || (profiles && profiles[c.playerName] && profiles[c.playerName].role === 'admin')) {
                         kickTargetIsAdmin = true;
                     }
                 }
             });
 
             if (kickTargetIsAdmin) {
+                if (typeof global.logAdminConflict === 'function') {
+                    global.logAdminConflict(ws, targetName, `Kick-Versuch (${kReason})`);
+                }
                 wss.clients.forEach(c => {
                     if (c.playerName && c.playerName.toLowerCase() === lowerKTarget) {
                         c.send(JSON.stringify({ type: 'chat', text: `⚠️ Achtung: ${ws.playerName || 'Ein Admin/System'} hat versucht, dich zu kicken (Schutz aktiv - Kick abgewendet)`, system: true }));
@@ -334,13 +382,20 @@ async function handleAdminCommand(ws, text, context) {
             }
 
             wss.clients.forEach(c => { 
-                if (c.playerName && c.playerName.toLowerCase() === targetName.toLowerCase()) { 
+                const nameMatch = c.playerName && c.playerName.toLowerCase() === lowerKTarget;
+                const ipMatch = c.clientIP && c.clientIP === targetName;
+                if (nameMatch || ipMatch) { 
+                    c.send(JSON.stringify({ type: 'system_alert', message: `🚪 Du wurdest vom Server gekickt!\nGrund: ${kReason}` }));
                     c.send(JSON.stringify({ type: 'chat', text: `🚪 Du wurdest gekickt! Grund: ${kReason}`, system: true })); 
-                    c.close(); 
+                    setTimeout(() => { c.close(); }, 200);
                     kickedCount++;
                 }
             });
-            ws.send(JSON.stringify({ type: 'chat', text: `🚪 Kicked ${kickedCount} Spieler (${targetName}).`, system: true }));
+            if (kickedCount > 0) {
+                ws.send(JSON.stringify({ type: 'chat', text: `🚪 ${kickedCount} Verbindung(en) von "${targetName}" erfolgreich gekickt. (Grund: ${kReason})`, system: true }));
+            } else {
+                ws.send(JSON.stringify({ type: 'chat', text: `⚠️ Kein aktiver Spieler mit dem Namen/IP "${targetName}" online gefunden.`, system: true }));
+            }
             break;
 
         // --- DISCONNECT ---
@@ -349,18 +404,23 @@ async function handleAdminCommand(ws, text, context) {
                 ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /disconnect "Name"', system: true }));
                 return true;
             }
+            let dcCount = 0;
             wss.clients.forEach(c => { 
                 if (c.playerName && c.playerName.toLowerCase() === targetName.toLowerCase()) { 
                     c.close(); 
+                    dcCount++;
                 }
             });
-            ws.send(JSON.stringify({ type: 'chat', text: `🔌 Verbindung von "${targetName}" getrennt.`, system: true }));
+            ws.send(JSON.stringify({ type: 'chat', text: `🔌 ${dcCount} Verbindung(en) von "${targetName}" getrennt.`, system: true }));
             break;
 
-        // --- BAN / BANIP ---
+        // --- BAN / BANIP / SUPERBAN ---
         case 'b':
         case 'ban':
+        case 'bann':
         case 'banip':
+        case 'sperren':
+        case 'superban':
             if (!targetName) {
                 ws.send(JSON.stringify({ type: 'chat', text: '⚠️ Nutzung: /ban "Name/IP" [Grund]', system: true }));
                 return true;
@@ -371,6 +431,7 @@ async function handleAdminCommand(ws, text, context) {
                 await banPlayer(targetName, reason, ws);
             } else {
                 if (bannedPlayers) bannedPlayers.add(targetName.toLowerCase());
+                if (bannedIPs && targetName.includes('.')) bannedIPs.add(targetName);
             }
             
             ws.send(JSON.stringify({ type: 'chat', text: `🔨 Vorgang für "${targetName}" abgeschlossen! (Grund: ${reason})`, system: true }));

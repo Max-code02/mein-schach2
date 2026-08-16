@@ -74,10 +74,12 @@ function fromFirestoreValue(valObj) {
 }
 
 function fromFirestoreDoc(doc) {
-    if (!doc || !doc.fields) return null;
+    if (!doc) return null;
     const res = {};
-    for (const [k, v] of Object.entries(doc.fields)) {
-        res[k] = fromFirestoreValue(v);
+    if (doc.fields) {
+        for (const [k, v] of Object.entries(doc.fields)) {
+            res[k] = fromFirestoreValue(v);
+        }
     }
     if (doc.name) {
         const parts = doc.name.split('/');
@@ -91,6 +93,10 @@ class FirestoreDocRef {
         this.collectionPath = collectionPath;
         this.docId = docId;
         this.client = client;
+    }
+
+    async update(data) {
+        return this.set(data, { merge: true });
     }
 
     async get() {
