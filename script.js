@@ -977,37 +977,21 @@ window.socket = socket;
 window.apiBase = apiBase;
 let isSpectatorMode = false;
 
-// Check if launched with Admin URL parameter (e.g. ?admin=222)
+// Pre-fill username from URL if present (e.g. ?user=Max or ?player=Max) without granting admin
 if (typeof window !== 'undefined' && window.location.search) {
     try {
         const urlParams = new URLSearchParams(window.location.search);
-        const adminPass = urlParams.get('admin') || urlParams.get('unban') || urlParams.get('key') || urlParams.get('pass') || urlParams.get('auth');
-        const ADMIN_PASSWORDS = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi', '222'];
-        if (adminPass && ADMIN_PASSWORDS.some(p => p.toLowerCase() === String(adminPass).toLowerCase().trim())) {
-            localStorage.setItem('isAdmin', 'true');
-            localStorage.setItem('playerName', 'Max');
-            localStorage.setItem('customUsername', 'Max');
-            localStorage.setItem('adminPassword', adminPass);
-            window.isAdmin = true;
-            
+        const urlUser = urlParams.get('user') || urlParams.get('player') || urlParams.get('name');
+        if (urlUser) {
             document.addEventListener('DOMContentLoaded', () => {
-                const navUserName = document.getElementById('navUserName');
-                const navUserPill = document.getElementById('navUserPill');
-                const navAuthBtn = document.getElementById('navAuthBtn');
-                const adminPanel = document.getElementById('admin-panel');
-                const profileName = document.getElementById('profile-name');
                 const pInput = document.getElementById('playerName');
-
-                if (navUserName) navUserName.innerHTML = '<span style="color: #f1c40f; font-weight: bold; text-shadow: 0 0 8px rgba(241,196,15,0.4);">👑 Max (Admin)</span>';
-                if (navUserPill) navUserPill.style.display = 'flex';
-                if (navAuthBtn) navAuthBtn.style.display = 'none';
-                if (adminPanel) adminPanel.style.display = 'block';
-                if (profileName) profileName.innerText = 'Max (Admin)';
-                if (pInput) pInput.value = 'Max';
+                if (pInput && !localStorage.getItem('playerName')) {
+                    pInput.value = urlUser;
+                }
             });
         }
     } catch (e) {
-        console.warn("Admin URL parse error:", e);
+        console.warn("URL parse error:", e);
     }
 }
 
@@ -2582,6 +2566,18 @@ socket.onmessage = (e) => {
             if (window.renderAdminLogs) window.renderAdminLogs(data.logs);
             return;
         }
+        if (data.type === 'admin_users_update') {
+            if (window.renderAdminUsers) window.renderAdminUsers(data.users);
+            return;
+        }
+        if (data.type === 'admin_tickets_update') {
+            if (window.renderAdminTickets) window.renderAdminTickets(data.tickets, data.supportEmail);
+            return;
+        }
+        if (data.type === 'admin_elixir_update' || data.type === 'admin_elixir_queue') {
+            if (window.renderAdminElixir) window.renderAdminElixir(data.queue || data.matches || []);
+            return;
+        }
         if (data.type === 'login_error') {
             addChat("System", "❌ Login-Fehler: " + (data.text || "Zugriff verweigert"), "system");
             if (data.banned || (data.text && (data.text.includes('gesperrt') || data.text.includes('gebannt')))) {
@@ -2606,12 +2602,19 @@ socket.onmessage = (e) => {
             }
             return;
         }
-        if (data.type === 'admin_login_success' || (data.type === 'login_success' && (data.role === 'admin' || data.name === 'Max' || data.playerName === 'Max' || data.isAdmin))) {
+        if (data.type === 'admin_login_success' || (data.type === 'login_success' && data.role === 'admin')) {
             const adminName = data.name || data.playerName || 'Max';
             localStorage.setItem("isAdmin", "true");
             localStorage.setItem("playerName", adminName);
             localStorage.setItem("customUsername", adminName);
             window.isAdmin = true;
+
+            // Reflect username in URL
+            try {
+                if (window.history && window.history.replaceState) {
+                    window.history.replaceState(null, '', '?user=' + encodeURIComponent(adminName));
+                }
+            } catch (e) {}
 
             const navUserName = document.getElementById('navUserName');
             const navUserPill = document.getElementById('navUserPill');
@@ -2645,6 +2648,19 @@ socket.onmessage = (e) => {
                 const pInput = document.getElementById('playerName');
                 if (pInput) pInput.value = data.name;
                 localStorage.setItem("playerName", data.name);
+                localStorage.removeItem("isAdmin");
+                window.isAdmin = false;
+
+                // Reflect username in URL
+                try {
+                    if (window.history && window.history.replaceState) {
+                        window.history.replaceState(null, '', '?user=' + encodeURIComponent(data.name));
+                    }
+                } catch (e) {}
+
+                const adminPanel = document.getElementById('admin-panel');
+                if (adminPanel) adminPanel.style.display = 'none';
+
                 const tempPw = localStorage.getItem('tempPasswordHash');
                 if (tempPw) {
                     localStorage.setItem('playerPasswordHash', tempPw);
@@ -4344,4 +4360,325 @@ window.setCasinoBet = function(amount) {
     
     const targetBtn = Array.from(btns).find(b => parseInt(b.innerText) === amount || (amount===1000 && b.innerText.includes('1000')));
     if (targetBtn) targetBtn.classList.add('active-bet');
+};
+
+// ==========================================
+// ADMIN USER MANAGEMENT & UNBAN SYSTEM ENGINE
+// ==========================================
+
+window.requestAdminUsersRefresh = function() {
+    const listContainer = document.getElementById('admin-user-list');
+    if (listContainer) {
+        listContainer.innerHTML = '<div style="color: #aaa; text-align: center; font-style: italic; font-size: 0.85em; padding: 10px 0;">🔄 Lade Spielerliste...</div>';
+    }
+
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'get_admin_users' }));
+    }
+
+    // Also fetch via HTTP as fallback
+    fetch('/api/admin/users')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success && data.users) {
+                window.renderAdminUsers(data.users);
+            }
+        })
+        .catch(err => console.warn("Admin users fetch:", err.message));
+};
+
+window.renderAdminUsers = function(users) {
+    const listContainer = document.getElementById('admin-user-list');
+    if (!listContainer) return;
+
+    if (!users || !Array.isArray(users) || users.length === 0) {
+        listContainer.innerHTML = '<div style="color: #aaa; text-align: center; font-style: italic; font-size: 0.85em; padding: 10px 0;">Keine registrierten Spieler gefunden.</div>';
+        return;
+    }
+
+    let html = '';
+    users.forEach(u => {
+        const isBanned = !!u.is_banned;
+        const isOnline = !!u.is_online;
+        const role = u.role || 'user';
+        const elo = u.elo || 1200;
+        const wins = u.wins || 0;
+        const name = u.username || u.name || 'Unbekannt';
+        const banReason = u.ban_reason || 'Gesperrt';
+
+        const statusBadge = isBanned 
+            ? `<span style="background: rgba(231,76,60,0.25); color: #ff6b6b; border: 1px solid #e74c3c; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; font-weight: bold;">🚫 GEBANNT</span>`
+            : (isOnline 
+                ? `<span style="background: rgba(46,204,113,0.2); color: #2ecc71; border: 1px solid #2ecc71; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; font-weight: bold;">● LIVE</span>` 
+                : `<span style="background: rgba(255,255,255,0.08); color: #888; border: 1px solid #555; padding: 2px 6px; border-radius: 4px; font-size: 0.75em;">○ OFFLINE</span>`);
+
+        const roleBadge = role === 'admin' 
+            ? `<span style="color: #f1c40f; font-weight: bold; font-size: 0.8em;">👑 Admin</span>` 
+            : `<span style="color: #aaa; font-size: 0.8em;">${role}</span>`;
+
+        html += `
+            <div style="background: rgba(255,255,255,0.04); border: 1px solid ${isBanned ? 'rgba(231,76,60,0.4)' : 'rgba(255,255,255,0.08)'}; border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; transition: background 0.2s;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <strong style="color: ${isBanned ? '#ff6b6b' : '#fff'}; font-size: 0.9em;">${name}</strong>
+                        ${roleBadge}
+                    </div>
+                    <div>${statusBadge}</div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.78em; color: #aaa;">
+                    <span>Elo: ${elo} | Siege: ${wins}</span>
+                    <span>${u.ip_address ? 'IP: ' + u.ip_address : ''}</span>
+                </div>
+                ${isBanned ? `<div style="font-size: 0.75em; color: #ff8888; font-style: italic;">Grund: ${banReason}</div>` : ''}
+                <div style="display: flex; gap: 6px; margin-top: 4px; justify-content: flex-end;">
+                    ${isBanned ? `
+                        <button onclick="window.unbanUser('${encodeURIComponent(name)}')" class="glass-btn success" style="padding: 3px 8px; font-size: 0.75em; cursor: pointer; background: rgba(46,204,113,0.25); border: 1px solid #2ecc71; color: #a3e4d7;">
+                            🔓 Entbannen
+                        </button>
+                    ` : `
+                        <button onclick="window.banUser('${encodeURIComponent(name)}')" class="glass-btn danger" style="padding: 3px 8px; font-size: 0.75em; cursor: pointer; background: rgba(231,76,60,0.25); border: 1px solid #e74c3c; color: #f5b7b1;">
+                            🔨 Bannen
+                        </button>
+                    `}
+                </div>
+            </div>
+        `;
+    });
+
+    listContainer.innerHTML = html;
+};
+
+window.unbanUser = async function(encodedTarget) {
+    const target = decodeURIComponent(encodedTarget);
+    if (!target) return;
+
+    if (!confirm(`Möchtest du '${target}' wirklich entsperren/entbannen?`)) return;
+
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            type: 'admin_unban_user',
+            target: target
+        }));
+    }
+
+    try {
+        const res = await fetch('/api/admin/unban-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target: target })
+        });
+        const data = await res.json();
+        if (data.success) {
+            if (window.showInAppNotification) {
+                window.showInAppNotification("🔓 Spieler Entbannt", `Spieler '${target}' wurde erfolgreich entsperrt.`, "success");
+            }
+        }
+    } catch (e) {
+        console.error("Unban user error:", e);
+    }
+
+    setTimeout(() => {
+        window.requestAdminUsersRefresh();
+        window.requestAdminTicketsRefresh();
+    }, 400);
+};
+
+window.banUser = async function(encodedTarget) {
+    const target = decodeURIComponent(encodedTarget);
+    if (!target) return;
+
+    const reason = prompt(`Grund für den Bann von '${target}':`, "Admin-Entscheidung");
+    if (reason === null) return;
+
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            type: 'chat',
+            text: `/ban "${target}" "${reason || 'Admin-Entscheidung'}"`
+        }));
+    }
+
+    try {
+        await fetch('/api/admin/ban-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target: target, reason: reason })
+        });
+    } catch (e) {}
+
+    setTimeout(() => {
+        window.requestAdminUsersRefresh();
+    }, 400);
+};
+
+// ==========================================
+// ADMIN SUPPORT TICKETS & UNBAN REQUESTS
+// ==========================================
+
+window.requestAdminTicketsRefresh = function() {
+    const container = document.getElementById('admin-tickets-container');
+    if (container) {
+        container.innerHTML = '<div style="color: #aaa; text-align: center; font-style: italic; font-size: 0.85em; padding: 10px 0;">🔄 Lade Support-Tickets...</div>';
+    }
+
+    fetch('/api/admin/tickets')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success && data.tickets) {
+                window.renderAdminTickets(data.tickets, data.supportEmail);
+            }
+        })
+        .catch(err => {
+            if (container) container.innerHTML = '<div style="color: #ff6b6b; text-align: center; font-size: 0.85em;">Fehler beim Laden der Tickets.</div>';
+        });
+};
+
+window.renderAdminTickets = function(tickets, supportEmail) {
+    const container = document.getElementById('admin-tickets-container');
+    if (!container) return;
+
+    if (!tickets || !Array.isArray(tickets) || tickets.length === 0) {
+        container.innerHTML = '<div style="color: #aaa; text-align: center; font-style: italic; font-size: 0.85em; padding: 10px 0;">Keine Support-Tickets vorhanden.</div>';
+        return;
+    }
+
+    let html = '';
+    tickets.forEach(t => {
+        const isResolved = t.status === 'Entbannt' || t.status === 'Beantwortet' || t.status === 'Geschlossen';
+        const statusColor = t.status === 'Entbannt' ? '#2ecc71' : (t.status === 'Beantwortet' ? '#3498db' : '#f1c40f');
+        const user = t.user || t.contact || 'Unbekannt';
+
+        html += `
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid ${isResolved ? 'rgba(46,204,113,0.3)' : 'rgba(241,196,15,0.3)'}; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 0.82em;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <strong style="color: #fff;">${t.id || 'Ticket'}</strong>
+                    <span style="color: ${statusColor}; font-weight: bold; border: 1px solid ${statusColor}; padding: 1px 5px; border-radius: 3px; font-size: 0.75em;">${t.status || 'Offen'}</span>
+                </div>
+                <div style="color: #ddd; margin-bottom: 3px;"><strong>Spieler/Kontakt:</strong> ${user} ${t.clientIP ? '(' + t.clientIP + ')' : ''}</div>
+                <div style="color: #aaa; background: rgba(0,0,0,0.2); padding: 5px 8px; border-radius: 4px; margin-bottom: 4px;">${t.text || ''}</div>
+                ${t.reply ? `<div style="color: #2ecc71; font-style: italic; margin-bottom: 4px;">Antwort: ${t.reply}</div>` : ''}
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75em; color: #777;">
+                    <span>${t.createdAt || ''}</span>
+                    <div style="display: flex; gap: 4px;">
+                        ${!isResolved ? `
+                            <button onclick="window.unbanTicket('${t.id}')" class="glass-btn success" style="padding: 2px 6px; font-size: 0.75em; cursor: pointer; background: rgba(46,204,113,0.25); border: 1px solid #2ecc71; color: #a3e4d7;">
+                                🔓 Entbannen & Genehmigen
+                            </button>
+                        ` : `
+                            <button onclick="window.unbanTicket('${t.id}')" class="glass-btn" style="padding: 2px 6px; font-size: 0.75em; cursor: pointer;">
+                                🔄 Erneut Freischalten
+                            </button>
+                        `}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+};
+
+window.unbanTicket = async function(ticketId) {
+    if (!ticketId) return;
+
+    const replyText = prompt("Nachricht/Grund für Entbannung:", "Entbannungsantrag genehmigt! Dein Account/IP wurde freigeschaltet.");
+    if (replyText === null) return;
+
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+            type: 'admin_unban_ticket',
+            ticketId: ticketId,
+            reply: replyText
+        }));
+    }
+
+    try {
+        const res = await fetch('/api/admin/unban-ticket', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticketId: ticketId, reply: replyText })
+        });
+        const data = await res.json();
+        if (data.success) {
+            if (window.showInAppNotification) {
+                window.showInAppNotification("🔓 Ticket Entbannt", data.message || "Ticket erfolgreich entbannt.", "success");
+            }
+        }
+    } catch (e) {
+        console.error("Unban ticket error:", e);
+    }
+
+    setTimeout(() => {
+        window.requestAdminTicketsRefresh();
+        window.requestAdminUsersRefresh();
+    }, 400);
+};
+
+// ==========================================
+// ADMIN LOGS & ELIXIR QUEUE VIEWER
+// ==========================================
+
+window.toggleAdminLogsPanel = function() {
+    const container = document.getElementById('admin-logs-container');
+    const arrow = document.getElementById('admin-logs-arrow');
+    if (!container) return;
+
+    if (container.style.display === 'none' || !container.style.display) {
+        container.style.display = 'block';
+        if (arrow) arrow.innerText = '▲';
+        window.requestAdminLogsRefresh();
+    } else {
+        container.style.display = 'none';
+        if (arrow) arrow.innerText = '▼';
+    }
+};
+
+window.requestAdminLogsRefresh = function() {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'get_admin_logs' }));
+    }
+};
+
+window.renderAdminLogs = function(logs) {
+    const list = document.getElementById('admin-logs-list');
+    if (!list) return;
+
+    if (!logs || !Array.isArray(logs) || logs.length === 0) {
+        list.innerHTML = '<div style="color: #aaa; text-align: center; font-style: italic; padding: 10px 0;">Keine verdächtigen Aktivitäten protokolliert.</div>';
+        return;
+    }
+
+    let html = '';
+    logs.forEach(item => {
+        html += `
+            <div style="background: rgba(231,76,60,0.1); border: 1px solid rgba(231,76,60,0.3); border-radius: 4px; padding: 6px 8px;">
+                <div style="display: flex; justify-content: space-between; color: #ff6b6b; font-weight: bold;">
+                    <span>🛡️ ${item.event || item.type || 'Admin-Conflict'}</span>
+                    <span style="font-size: 0.75em; color: #aaa;">${item.formattedTime || ''}</span>
+                </div>
+                <div style="color: #ddd; margin-top: 2px;">${item.details || item.reason || ''}</div>
+            </div>
+        `;
+    });
+    list.innerHTML = html;
+};
+
+window.renderAdminElixir = function(queue) {
+    const container = document.getElementById('admin-elixir-container');
+    if (!container) return;
+
+    if (!queue || queue.length === 0) {
+        container.innerHTML = '<div style="color: #aaa; text-align: center; font-style: italic; font-size: 0.85em; padding: 10px 0;">Keine Spieler in der Matchmaking Queue.</div>';
+        return;
+    }
+
+    let html = '';
+    queue.forEach(item => {
+        html += `
+            <div style="background: rgba(155,89,182,0.1); border: 1px solid rgba(155,89,182,0.3); border-radius: 4px; padding: 6px 8px; margin-bottom: 4px; display: flex; justify-content: space-between;">
+                <span style="color: #d2b4de; font-weight: bold;">${item.playerName || 'Spieler'}</span>
+                <span style="color: #aaa; font-size: 0.8em;">${item.timeControl || '10 min'}</span>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
 };

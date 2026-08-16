@@ -232,15 +232,15 @@ app.use((req, res, next) => {
     const rawIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
     const clientIP = String(rawIP).split(',')[0].replace(/^::ffff:/, '').trim();
 
-    // Check emergency unban triggers (Query param ?unban=..., ?admin=..., or URL /unban-self)
-    const reqPass = req.query.unban || req.query.admin || req.query.pass || req.headers['x-admin-key'];
+    // Check emergency unban triggers via secure unban endpoint
+    const reqPass = req.query.unban || req.query.pass || req.headers['x-admin-key'];
     const isAdminPass = reqPass && ADMIN_PASSWORDS_LIST.some(p => p.toLowerCase() === String(reqPass).toLowerCase().trim());
     const isLocalOrDev = isLoopbackOrLocalIP(clientIP) || isLoopbackOrLocalIP(rawIP);
 
     if (isAdminPass || (isLocalOrDev && (req.path === '/unban-self' || req.path === '/api/unban-self'))) {
         bannedIPs.delete(clientIP);
         bannedIPs.delete(rawIP);
-        bannedIPs.clear(); // Emergency unban for admin
+        bannedIPs.clear();
         bannedPlayers.clear();
         console.log(`🔓 Notfall-Entsperrung ausgeführt für IP: ${clientIP}`);
 
@@ -270,36 +270,6 @@ app.use((req, res, next) => {
                 </html>
             `);
         }
-    }
-
-    // Never block loopback, localhost, or internal container/proxy IPs
-    if (isLoopbackOrLocalIP(clientIP) || isLoopbackOrLocalIP(rawIP)) {
-        return next();
-    }
-
-    if (bannedIPs.has(clientIP) || bannedIPs.has(rawIP)) {
-        return res.status(403).send(`
-            <!DOCTYPE html>
-            <html lang="de">
-            <head>
-                <meta charset="UTF-8">
-                <title>403 Zugriff verweigert</title>
-                <style>
-                    body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; text-align: center; padding: 60px 20px; }
-                    .card { background: #1e293b; max-width: 520px; margin: 0 auto; padding: 40px; border-radius: 20px; border: 1px solid #ef4444; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
-                    h1 { color: #f87171; margin-top: 0; font-size: 28px; }
-                    p { font-size: 16px; color: #cbd5e1; line-height: 1.6; }
-                </style>
-            </head>
-            <body>
-                <div class="card">
-                    <h1>⛔ IP-Adresse gesperrt</h1>
-                    <p>Deine IP-Adresse (<strong>${clientIP}</strong>) wurde vom Anti-Hack-System gesperrt.</p>
-                    <p style="font-size: 13px; color: #94a3b8; margin-top: 20px;">Support: Wende dich an den Administrator oder nutze den Admin-Bypass-Schlüssel.</p>
-                </div>
-            </body>
-            </html>
-        `);
     }
 
     if (req.headers['x-forwarded-proto'] !== 'https' && process.env.NODE_ENV === 'production') {
@@ -565,12 +535,190 @@ function broadcastTicketsUpdate() {
     });
     if (wss && wss.clients) {
         wss.clients.forEach(c => {
-            if (c.readyState === 1 && (isUserAdmin(c.playerName) || c.role === 'admin' || c.role === 'moderator')) {
+            if (c.readyState === 1 && (isUserAdmin(c.playerName) || c.role === 'admin' || c.role === 'moderator' || c.isAdmin)) {
                 c.send(msgStr);
             }
         });
     }
 }
+
+function broadcastAdminUsersUpdate() {
+    const allUsers = [];
+    const seenNames = new Set();
+
+    // 1. Online WebSocket Users
+    if (wss && wss.clients) {
+        wss.clients.forEach(c => {
+            if (c.playerName) {
+                seenNames.add(c.playerName.toLowerCase());
+                const uData = (userDB && userDB[c.playerName]) || {};
+                allUsers.push({
+                    id: c.playerName,
+                    username: c.playerName,
+                    role: uData.role || (isUserAdmin(c.playerName) ? 'admin' : 'user'),
+                    elo: uData.elo || 1200,
+                    wins: uData.wins || 0,
+                    losses: uData.losses || 0,
+                    is_banned: !!(bannedPlayers.has(c.playerName.toLowerCase()) || (uData && (uData.is_banned || uData.ip_ban))),
+                    ban_reason: (uData && uData.ban_reason) || (bannedPlayers.has(c.playerName.toLowerCase()) ? 'Admin-Sperre' : null),
+                    is_online: true,
+                    ip_address: c.clientIP || uData.ip_address || '127.0.0.1'
+                });
+            }
+        });
+    }
+
+    // 2. Offline Registered Users in userDB
+    if (userDB) {
+        for (const uname in userDB) {
+            if (!seenNames.has(uname.toLowerCase())) {
+                const uData = userDB[uname] || {};
+                allUsers.push({
+                    id: uname,
+                    username: uname,
+                    role: uData.role || (isUserAdmin(uname) ? 'admin' : 'user'),
+                    elo: uData.elo || 1200,
+                    wins: uData.wins || 0,
+                    losses: uData.losses || 0,
+                    is_banned: !!(bannedPlayers.has(uname.toLowerCase()) || (uData && (uData.is_banned || uData.ip_ban))),
+                    ban_reason: (uData && uData.ban_reason) || (bannedPlayers.has(uname.toLowerCase()) ? 'Admin-Sperre' : null),
+                    is_online: false,
+                    ip_address: uData.ip_address || 'Unbekannt'
+                });
+            }
+        }
+    }
+
+    // 3. Add any banned players that might not be in userDB
+    bannedPlayers.forEach(bannedName => {
+        if (!seenNames.has(bannedName.toLowerCase()) && !allUsers.some(u => u.username.toLowerCase() === bannedName.toLowerCase())) {
+            allUsers.push({
+                id: bannedName,
+                username: bannedName,
+                role: 'user',
+                elo: 1200,
+                wins: 0,
+                losses: 0,
+                is_banned: true,
+                ban_reason: 'Permanent gesperrt',
+                is_online: false,
+                ip_address: 'Unbekannt'
+            });
+        }
+    });
+
+    const msgStr = JSON.stringify({
+        type: 'admin_users_update',
+        users: allUsers
+    });
+
+    if (wss && wss.clients) {
+        wss.clients.forEach(c => {
+            if (c.readyState === 1 && (isUserAdmin(c.playerName) || c.role === 'admin' || c.role === 'moderator' || c.isAdmin)) {
+                c.send(msgStr);
+            }
+        });
+    }
+}
+
+app.get('/api/admin/users', (req, res) => {
+    const allUsers = [];
+    const seenNames = new Set();
+
+    if (wss && wss.clients) {
+        wss.clients.forEach(c => {
+            if (c.playerName) {
+                seenNames.add(c.playerName.toLowerCase());
+                const uData = (userDB && userDB[c.playerName]) || {};
+                allUsers.push({
+                    id: c.playerName,
+                    username: c.playerName,
+                    role: uData.role || (isUserAdmin(c.playerName) ? 'admin' : 'user'),
+                    elo: uData.elo || 1200,
+                    wins: uData.wins || 0,
+                    losses: uData.losses || 0,
+                    is_banned: !!(bannedPlayers.has(c.playerName.toLowerCase()) || (uData && (uData.is_banned || uData.ip_ban))),
+                    ban_reason: (uData && uData.ban_reason) || (bannedPlayers.has(c.playerName.toLowerCase()) ? 'Admin-Sperre' : null),
+                    is_online: true,
+                    ip_address: c.clientIP || uData.ip_address || '127.0.0.1'
+                });
+            }
+        });
+    }
+
+    if (userDB) {
+        for (const uname in userDB) {
+            if (!seenNames.has(uname.toLowerCase())) {
+                const uData = userDB[uname] || {};
+                allUsers.push({
+                    id: uname,
+                    username: uname,
+                    role: uData.role || (isUserAdmin(uname) ? 'admin' : 'user'),
+                    elo: uData.elo || 1200,
+                    wins: uData.wins || 0,
+                    losses: uData.losses || 0,
+                    is_banned: !!(bannedPlayers.has(uname.toLowerCase()) || (uData && (uData.is_banned || uData.ip_ban))),
+                    ban_reason: (uData && uData.ban_reason) || (bannedPlayers.has(uname.toLowerCase()) ? 'Admin-Sperre' : null),
+                    is_online: false,
+                    ip_address: uData.ip_address || 'Unbekannt'
+                });
+            }
+        }
+    }
+
+    bannedPlayers.forEach(bannedName => {
+        if (!seenNames.has(bannedName.toLowerCase()) && !allUsers.some(u => u.username.toLowerCase() === bannedName.toLowerCase())) {
+            allUsers.push({
+                id: bannedName,
+                username: bannedName,
+                role: 'user',
+                elo: 1200,
+                wins: 0,
+                losses: 0,
+                is_banned: true,
+                ban_reason: 'Permanent gesperrt',
+                is_online: false,
+                ip_address: 'Unbekannt'
+            });
+        }
+    });
+
+    res.json({ success: true, users: allUsers });
+});
+
+app.post('/api/admin/unban-user', async (req, res) => {
+    const { target, username } = req.body || {};
+    const targetName = target || username;
+    if (!targetName) {
+        return res.status(400).json({ success: false, message: 'Spielername oder IP erforderlich' });
+    }
+
+    await unbanPlayerHelper(targetName);
+    broadcastAdminUsersUpdate();
+    broadcastTicketsUpdate();
+
+    return res.json({
+        success: true,
+        message: `✅ Spieler/IP '${targetName}' erfolgreich entsperrt!`
+    });
+});
+
+app.post('/api/admin/ban-user', async (req, res) => {
+    const { target, username, reason } = req.body || {};
+    const targetName = target || username;
+    if (!targetName) {
+        return res.status(400).json({ success: false, message: 'Spielername oder IP erforderlich' });
+    }
+
+    await triggerUltraBan(targetName, reason || "Admin-Sperre");
+    broadcastAdminUsersUpdate();
+    broadcastTicketsUpdate();
+
+    return res.json({
+        success: true,
+        message: `🔨 Spieler/IP '${targetName}' erfolgreich gesperrt!`
+    });
+});
 
 app.post('/api/support-ticket', (req, res) => {
     const { user, contact, text, banReason } = req.body || {};
@@ -1696,14 +1844,16 @@ async function unbanPlayerHelper(targetName) {
     const cleanTarget = targetName.trim();
     const cleanTargetLower = cleanTarget.toLowerCase();
 
-    // 1. Delete target directly from Sets
+    // 1. Delete target directly from Sets (both cases & target string)
     bannedPlayers.delete(cleanTargetLower);
+    bannedPlayers.delete(cleanTarget);
     bannedIPs.delete(cleanTarget);
 
     // 2. Check and unban target in userDB
     if (userDB[cleanTarget]) {
         userDB[cleanTarget].is_banned = false;
         userDB[cleanTarget].ip_ban = false;
+        userDB[cleanTarget].ban_reason = null;
         if (userDB[cleanTarget].ip_address) {
             bannedIPs.delete(userDB[cleanTarget].ip_address);
         }
@@ -1718,28 +1868,72 @@ async function unbanPlayerHelper(targetName) {
             u.ip_address === cleanTarget) {
             u.is_banned = false;
             u.ip_ban = false;
+            u.ban_reason = null;
             bannedPlayers.delete(uname.toLowerCase());
+            bannedPlayers.delete(uname);
             if (u.ip_address) bannedIPs.delete(u.ip_address);
         }
     }
 
     // 4. Update status in support tickets for this user
-    globalSupportTickets.forEach(t => {
-        if (t.user?.toLowerCase() === cleanTargetLower || t.contact?.toLowerCase() === cleanTargetLower || t.clientIP === cleanTarget) {
-            t.status = 'Entbannt';
-            t.reply = t.reply || 'Entbannungsantrag genehmigt!';
-        }
-    });
-    saveTicketsToFile();
+    if (globalSupportTickets && Array.isArray(globalSupportTickets)) {
+        globalSupportTickets.forEach(t => {
+            if (t.user?.toLowerCase() === cleanTargetLower || t.contact?.toLowerCase() === cleanTargetLower || t.clientIP === cleanTarget) {
+                t.status = 'Entbannt';
+                t.reply = t.reply || 'Entbannungsantrag genehmigt! Dein Account/IP wurde freigeschaltet.';
+            }
+        });
+        saveTicketsToFile();
+    }
 
-    // 5. Delete ban documents in Firestore
+    // 5. Delete ban documents in Firestore AND update players collection
     if (firestoreDb) {
         try {
+            // Delete standard ban document IDs
             const banIdUser = `username_${cleanTargetLower}`;
-            await firestoreDb.collection('bans').doc(banIdUser).delete();
+            await firestoreDb.collection('bans').doc(banIdUser).delete().catch(() => {});
             
             const banIdIP = `ip_${cleanTarget.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
-            await firestoreDb.collection('bans').doc(banIdIP).delete();
+            await firestoreDb.collection('bans').doc(banIdIP).delete().catch(() => {});
+
+            // Query Firestore bans collection for ANY documents matching the target (username or IP)
+            const bansSnap = await firestoreDb.collection('bans').get().catch(() => null);
+            if (bansSnap && !bansSnap.empty) {
+                const toDelete = [];
+                bansSnap.forEach(doc => {
+                    const data = doc.data() || {};
+                    const t = (data.target || '').toLowerCase().trim();
+                    if (t === cleanTargetLower || t === cleanTarget.toLowerCase() || (userDB[cleanTarget] && userDB[cleanTarget].ip_address && t === userDB[cleanTarget].ip_address.toLowerCase())) {
+                        toDelete.push(firestoreDb.collection('bans').doc(doc.id).delete().catch(() => {}));
+                    }
+                });
+                await Promise.all(toDelete);
+            }
+
+            // Update player document in Firestore 'players' collection
+            await firestoreDb.collection('players').doc(cleanTarget).set({
+                is_banned: false,
+                ip_ban: false,
+                ban_reason: null
+            }, { merge: true }).catch(() => {});
+
+            // In case the player doc is keyed with different casing or UID
+            for (const uname in userDB) {
+                if (uname.toLowerCase() === cleanTargetLower) {
+                    await firestoreDb.collection('players').doc(uname).set({
+                        is_banned: false,
+                        ip_ban: false,
+                        ban_reason: null
+                    }, { merge: true }).catch(() => {});
+                    if (userDB[uname].uid) {
+                        await firestoreDb.collection('players').doc(userDB[uname].uid).set({
+                            is_banned: false,
+                            ip_ban: false,
+                            ban_reason: null
+                        }, { merge: true }).catch(() => {});
+                    }
+                }
+            }
         } catch (e) {
             console.error("Fehler beim Löschen des Bans aus Firestore:", e.message);
         }
@@ -1750,7 +1944,7 @@ async function unbanPlayerHelper(targetName) {
         fs.writeFileSync(USER_FILE, JSON.stringify(userDB, null, 2));
     } catch (e) {}
 
-    console.log(`🔓 Entbannung ausgeführt für: ${cleanTarget}`);
+    console.log(`🔓 Entbannung erfolgreich ausgeführt für: ${cleanTarget}`);
 }
 
 async function syncAllToFirestore() {
@@ -2009,74 +2203,6 @@ function broadcast(msgObj) {
 wss.on('connection', function(ws, req) {
     const detectedIP = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
     ws.clientIP = detectedIP;
-    
-    // Check URL parameters for Admin Authentication (e.g. ?admin=222, ?unban=222, ?key=222)
-    let isAdminUrlAuth = false;
-    let urlAdminPass = null;
-    if (req && req.url) {
-        try {
-            const parsedUrl = url.parse(req.url, true);
-            const query = parsedUrl.query || {};
-            urlAdminPass = query.admin || query.unban || query.key || query.auth || query.pass || query.password;
-            if (urlAdminPass && ADMIN_PASSWORDS_LIST.some(p => p.toLowerCase() === String(urlAdminPass).toLowerCase().trim())) {
-                isAdminUrlAuth = true;
-            }
-        } catch (e) {
-            console.warn("WS URL Parse Warning:", e.message);
-        }
-    }
-
-    if (isAdminUrlAuth) {
-        ws.isAdmin = true;
-        ws.is_owner = true;
-        ws.role = 'admin';
-        ws.playerName = 'Max';
-        ws.userEmail = 'max.schule13@gmail.com';
-
-        // Clear bans for admin Max & current IP immediately
-        bannedIPs.delete(ws.clientIP);
-        blockedIPs.delete(ws.clientIP);
-        loginAttempts.delete(ws.clientIP);
-        bannedPlayers.delete('Max');
-        bannedPlayers.delete('max');
-        bannedPlayers.delete('222');
-
-        if (typeof userDB !== 'undefined' && userDB['Max']) {
-            userDB['Max'].is_banned = false;
-            userDB['Max'].ip_ban = false;
-            userDB['Max'].role = 'admin';
-        }
-
-        console.log(`👑 [ADMIN-URL] Admin Max erfolgreich authentifiziert über URL (IP: ${ws.clientIP})`);
-
-        // Send instant admin confirmation to client
-        setTimeout(() => {
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    type: 'admin_login_success',
-                    role: 'admin',
-                    playerName: 'Max',
-                    isAdmin: true,
-                    message: '👑 Administrator-Status (Max) erfolgreich aktiviert!'
-                }));
-                ws.send(JSON.stringify({
-                    type: 'login_success',
-                    name: 'Max',
-                    role: 'admin',
-                    isAdmin: true,
-                    elo: (typeof userDB !== 'undefined' && userDB['Max'] && userDB['Max'].elo) || 1200,
-                    wins: (typeof userDB !== 'undefined' && userDB['Max'] && userDB['Max'].wins) || 0,
-                    losses: (typeof userDB !== 'undefined' && userDB['Max'] && userDB['Max'].losses) || 0,
-                    coins: 999999
-                }));
-                ws.send(JSON.stringify({
-                    type: 'chat',
-                    text: '👑 [System] Willkommen Max! Du bist als Administrator eingeloggt.',
-                    system: true
-                }));
-            }
-        }, 150);
-    }
     
     getLocationFromIP(detectedIP).then(locationData => {
         ws.location = locationData; 

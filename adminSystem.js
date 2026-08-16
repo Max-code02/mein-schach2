@@ -201,7 +201,10 @@ async function handleAdminCommand(ws, text, context) {
             }
             
             if (bannedIPs) bannedIPs.delete(targetName);
-            if (bannedPlayers) bannedPlayers.delete(targetName.toLowerCase());
+            if (bannedPlayers) {
+                bannedPlayers.delete(targetName.toLowerCase());
+                bannedPlayers.delete(targetName);
+            }
 
             if (typeof unbanPlayer === 'function') {
                 await unbanPlayer(targetName);
@@ -209,7 +212,7 @@ async function handleAdminCommand(ws, text, context) {
 
             if (db) {
                 try {
-                    await db.collection("players").doc(targetName).update({ is_banned: false, ip_ban: false });
+                    await db.collection("players").doc(targetName).set({ is_banned: false, ip_ban: false, ban_reason: null }, { merge: true });
                 } catch(e) {}
             }
 

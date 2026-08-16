@@ -338,8 +338,19 @@ async function initFirebase() {
                         }
                     });
                     
+                    if (user.email === 'max.schule13@gmail.com' || pName.toLowerCase() === 'max') {
+                        localStorage.setItem('isAdmin', 'true');
+                    }
+                    
                     localStorage.setItem('playerName', pName);
                     localStorage.setItem('firebaseUid', user.uid);
+
+                    // Reflect username in URL
+                    try {
+                        if (window.history && window.history.replaceState) {
+                            window.history.replaceState(null, '', '?user=' + encodeURIComponent(pName));
+                        }
+                    } catch (e) {}
                     
                     const openAuthBtn = document.getElementById('openAuthBtn');
                     const logoutBtn = document.getElementById('logoutBtn');
@@ -352,21 +363,15 @@ async function initFirebase() {
                             type: 'login_attempt',
                             playerName: pName,
                             uid: user.uid,
+                            email: user.email || '',
                             password: 'firebase-auth-token',
                             isRegister: false
                         }));
                     }
                 } else {
-                    const urlParams = new URLSearchParams(window.location.search);
-                    const adminPass = urlParams.get('admin') || urlParams.get('unban') || urlParams.get('key') || urlParams.get('pass') || urlParams.get('auth');
-                    const ADMIN_PASSWORDS = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi', '222'];
-                    const isUrlAdmin = adminPass && ADMIN_PASSWORDS.some(p => p.toLowerCase() === String(adminPass).toLowerCase().trim());
                     const isLocalAdmin = localStorage.getItem('isAdmin') === 'true' && (localStorage.getItem('playerName') === 'Max' || localStorage.getItem('customUsername') === 'Max');
 
-                    if (isUrlAdmin || isLocalAdmin) {
-                        localStorage.setItem('playerName', 'Max');
-                        localStorage.setItem('customUsername', 'Max');
-                        localStorage.setItem('isAdmin', 'true');
+                    if (isLocalAdmin) {
                         updateProfileDisplay("Max", 1200, 0, 0, 1, 0, []);
                         
                         const openAuthBtn = document.getElementById('openAuthBtn');
@@ -377,8 +382,8 @@ async function initFirebase() {
                         const adminPanel = document.getElementById('admin-panel');
                         if (adminPanel) adminPanel.style.display = 'block';
                     } else {
-                        const savedGuest = localStorage.getItem('guestName');
-                        if (savedGuest) {
+                        const savedGuest = localStorage.getItem('guestName') || localStorage.getItem('playerName');
+                        if (savedGuest && savedGuest !== 'Gastspieler' && localStorage.getItem('isAdmin') !== 'true') {
                             localStorage.setItem('playerName', savedGuest);
                             updateProfileDisplay(savedGuest, 1200, 0, 0, 1, 0, []);
                             const openAuthBtn = document.getElementById('openAuthBtn');
@@ -389,6 +394,7 @@ async function initFirebase() {
                             updateProfileDisplay("Gastspieler", 1200, 0, 0, 1, 0, []);
                             localStorage.removeItem('playerName');
                             localStorage.removeItem('firebaseUid');
+                            localStorage.removeItem('isAdmin');
                             
                             const openAuthBtn = document.getElementById('openAuthBtn');
                             const logoutBtn = document.getElementById('logoutBtn');
@@ -431,7 +437,14 @@ async function initFirebase() {
             window.logout = async function() {
                 localStorage.removeItem('guestName');
                 localStorage.removeItem('playerName');
+                localStorage.removeItem('customUsername');
                 localStorage.removeItem('firebaseUid');
+                localStorage.removeItem('isAdmin');
+                try {
+                    if (window.history && window.history.replaceState) {
+                        window.history.replaceState(null, '', window.location.pathname);
+                    }
+                } catch(e) {}
                 if (fbAuth && fbAuth.currentUser) {
                     try {
                         await signOut(fbAuth);
@@ -804,7 +817,7 @@ function updateProfileDisplay(name, elo, wins, losses = 0, level = 1, xp = 0, ac
     const logoutBtn = document.getElementById('logoutBtn');
     const adminPanel = document.getElementById('admin-panel');
 
-    const isAdmin = (name && name.toLowerCase() === 'max') || localStorage.getItem('isAdmin') === 'true';
+    const isAdmin = localStorage.getItem('isAdmin') === 'true' && (name && name.toLowerCase() === 'max');
 
     if (profileName) {
         profileName.innerText = isAdmin ? 'Max (Admin)' : name;
@@ -824,11 +837,13 @@ function updateProfileDisplay(name, elo, wins, losses = 0, level = 1, xp = 0, ac
         if (navAuthBtn) navAuthBtn.style.display = 'none';
         if (navUserPill) navUserPill.style.display = 'flex';
         if (navUserName) navUserName.innerText = `${name} (${elo || 1200} Elo)`;
+        if (adminPanel) adminPanel.style.display = 'none';
     } else {
         if (authBtn) authBtn.style.display = 'block';
         if (logoutBtn) logoutBtn.style.display = 'none';
         if (navAuthBtn) navAuthBtn.style.display = 'block';
         if (navUserPill) navUserPill.style.display = 'none';
+        if (adminPanel) adminPanel.style.display = 'none';
     }
 
     // Achievements badges freischalten
