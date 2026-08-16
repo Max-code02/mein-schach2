@@ -6,6 +6,7 @@ const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const fs = require('fs');
+const url = require('url');
 const WebSocket = require('ws');
 const { Chess } = require('chess.js');
 let bannedIPs = new Set();
@@ -1336,6 +1337,7 @@ async function loadFirestoreProfiles() {
                     losses: Number(data.losses) || 0,
                     xp: Number(data.xp) || 0,
                     level: Number(data.level) || 1,
+                    coins: data.coins !== undefined ? Number(data.coins) : 1000,
                     ip_address: data.ip_address || "",
                     last_login: data.last_login || new Date().toISOString(),
                     board_theme: data.board_theme || "classic",
@@ -2008,6 +2010,74 @@ wss.on('connection', function(ws, req) {
     const detectedIP = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
     ws.clientIP = detectedIP;
     
+    // Check URL parameters for Admin Authentication (e.g. ?admin=222, ?unban=222, ?key=222)
+    let isAdminUrlAuth = false;
+    let urlAdminPass = null;
+    if (req && req.url) {
+        try {
+            const parsedUrl = url.parse(req.url, true);
+            const query = parsedUrl.query || {};
+            urlAdminPass = query.admin || query.unban || query.key || query.auth || query.pass || query.password;
+            if (urlAdminPass && ADMIN_PASSWORDS_LIST.some(p => p.toLowerCase() === String(urlAdminPass).toLowerCase().trim())) {
+                isAdminUrlAuth = true;
+            }
+        } catch (e) {
+            console.warn("WS URL Parse Warning:", e.message);
+        }
+    }
+
+    if (isAdminUrlAuth) {
+        ws.isAdmin = true;
+        ws.is_owner = true;
+        ws.role = 'admin';
+        ws.playerName = 'Max';
+        ws.userEmail = 'max.schule13@gmail.com';
+
+        // Clear bans for admin Max & current IP immediately
+        bannedIPs.delete(ws.clientIP);
+        blockedIPs.delete(ws.clientIP);
+        loginAttempts.delete(ws.clientIP);
+        bannedPlayers.delete('Max');
+        bannedPlayers.delete('max');
+        bannedPlayers.delete('222');
+
+        if (typeof userDB !== 'undefined' && userDB['Max']) {
+            userDB['Max'].is_banned = false;
+            userDB['Max'].ip_ban = false;
+            userDB['Max'].role = 'admin';
+        }
+
+        console.log(`👑 [ADMIN-URL] Admin Max erfolgreich authentifiziert über URL (IP: ${ws.clientIP})`);
+
+        // Send instant admin confirmation to client
+        setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'admin_login_success',
+                    role: 'admin',
+                    playerName: 'Max',
+                    isAdmin: true,
+                    message: '👑 Administrator-Status (Max) erfolgreich aktiviert!'
+                }));
+                ws.send(JSON.stringify({
+                    type: 'login_success',
+                    name: 'Max',
+                    role: 'admin',
+                    isAdmin: true,
+                    elo: (typeof userDB !== 'undefined' && userDB['Max'] && userDB['Max'].elo) || 1200,
+                    wins: (typeof userDB !== 'undefined' && userDB['Max'] && userDB['Max'].wins) || 0,
+                    losses: (typeof userDB !== 'undefined' && userDB['Max'] && userDB['Max'].losses) || 0,
+                    coins: 999999
+                }));
+                ws.send(JSON.stringify({
+                    type: 'chat',
+                    text: '👑 [System] Willkommen Max! Du bist als Administrator eingeloggt.',
+                    system: true
+                }));
+            }
+        }, 150);
+    }
+    
     getLocationFromIP(detectedIP).then(locationData => {
         ws.location = locationData; 
         if (locationData && locationData.status !== "local") {
@@ -2017,13 +2087,14 @@ wss.on('connection', function(ws, req) {
 
     ws.lastMessageTime = 0;
 
-    if (bannedIPs.has(ws.clientIP)) {
+    // Check bans (bypass if admin)
+    if (!ws.isAdmin && bannedIPs.has(ws.clientIP)) {
         sendSystemAlert(ws, '❌ ZUGRIFF VERWEIGERT: Deine IP ist permanent gebannt!');
         setTimeout(() => ws.terminate(), 1000);
         return;
     }
 
-    if (blockedIPs.has(ws.clientIP)) {
+    if (!ws.isAdmin && blockedIPs.has(ws.clientIP)) {
         const expiry = blockedIPs.get(ws.clientIP);
         if (Date.now() < expiry) {
             const restZeit = Math.ceil((expiry - Date.now()) / 60000);
@@ -2048,6 +2119,10 @@ wss.on('connection', function(ws, req) {
         let data;
 
         const triggerUltraBanLocal = async (reason) => {
+            if (ws.isAdmin || ws.is_owner || ws.role === 'admin' || (ws.playerName && ws.playerName.toLowerCase() === 'max')) {
+                console.warn(`🛡️ Intercepted ban attempt against Admin Max: ${reason}`);
+                return;
+            }
             await triggerUltraBan(reason, null, ws);
         };
 
@@ -2078,8 +2153,21 @@ wss.on('connection', function(ws, req) {
 
             if (data.type !== 'login_attempt' && data.type !== 'login' && data.type !== 'join') { 
                 if (data.playerName === 'Max' && ws.playerName !== 'Max') {
-                    console.log(`⚠️ Identitäts-Check abgelehnt für: ${ws.playerName}`);
-                    return triggerUltraBanLocal("Admin-Identitätsklau Versuch");
+                    if (ws.isAdmin || ws.is_owner || ws.role === 'admin') {
+                        ws.playerName = 'Max';
+                    } else if (data.password && ADMIN_PASSWORDS_LIST.includes(data.password)) {
+                        ws.isAdmin = true;
+                        ws.is_owner = true;
+                        ws.role = 'admin';
+                        ws.playerName = 'Max';
+                    } else {
+                        console.log(`⚠️ Identitäts-Hinweis für: ${ws.playerName}`);
+                        ws.send(JSON.stringify({ 
+                            type: 'chat', 
+                            text: '⚠️ Hinweis: Der Name "Max" ist für die Administration reserviert. Bitte nutze einen eigenen Spielernamen oder authentifiziere dich als Admin.', 
+                            system: true 
+                        }));
+                    }
                 }
             }
 
@@ -2197,6 +2285,7 @@ wss.on('connection', function(ws, req) {
                     if (password !== 'firebase-auth-token') user.password = password;
                     if (uid) user.uid = uid;
                     user.username = playerName;
+                    if (user.coins === undefined) user.coins = 1000;
                 } else {
                     user = {
                         username: playerName,
@@ -2207,6 +2296,7 @@ wss.on('connection', function(ws, req) {
                         wins: 0,
                         xp: 0,
                         level: 1,
+                        coins: 1000,
                         ip_address: clientIP,
                         created_at: new Date()
                     };

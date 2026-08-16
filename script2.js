@@ -357,27 +357,48 @@ async function initFirebase() {
                         }));
                     }
                 } else {
-                    const savedGuest = localStorage.getItem('guestName');
-                    if (savedGuest) {
-                        localStorage.setItem('playerName', savedGuest);
-                        updateProfileDisplay(savedGuest, 1200, 0, 0, 1, 0, []);
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const adminPass = urlParams.get('admin') || urlParams.get('unban') || urlParams.get('key') || urlParams.get('pass') || urlParams.get('auth');
+                    const ADMIN_PASSWORDS = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi', '222'];
+                    const isUrlAdmin = adminPass && ADMIN_PASSWORDS.some(p => p.toLowerCase() === String(adminPass).toLowerCase().trim());
+                    const isLocalAdmin = localStorage.getItem('isAdmin') === 'true' && (localStorage.getItem('playerName') === 'Max' || localStorage.getItem('customUsername') === 'Max');
+
+                    if (isUrlAdmin || isLocalAdmin) {
+                        localStorage.setItem('playerName', 'Max');
+                        localStorage.setItem('customUsername', 'Max');
+                        localStorage.setItem('isAdmin', 'true');
+                        updateProfileDisplay("Max", 1200, 0, 0, 1, 0, []);
+                        
                         const openAuthBtn = document.getElementById('openAuthBtn');
                         const logoutBtn = document.getElementById('logoutBtn');
                         if (openAuthBtn) openAuthBtn.style.display = 'none';
                         if (logoutBtn) logoutBtn.style.display = 'block';
+
+                        const adminPanel = document.getElementById('admin-panel');
+                        if (adminPanel) adminPanel.style.display = 'block';
                     } else {
-                        updateProfileDisplay("Gastspieler", 1200, 0, 0, 1, 0, []);
-                        localStorage.removeItem('playerName');
-                        localStorage.removeItem('firebaseUid');
+                        const savedGuest = localStorage.getItem('guestName');
+                        if (savedGuest) {
+                            localStorage.setItem('playerName', savedGuest);
+                            updateProfileDisplay(savedGuest, 1200, 0, 0, 1, 0, []);
+                            const openAuthBtn = document.getElementById('openAuthBtn');
+                            const logoutBtn = document.getElementById('logoutBtn');
+                            if (openAuthBtn) openAuthBtn.style.display = 'none';
+                            if (logoutBtn) logoutBtn.style.display = 'block';
+                        } else {
+                            updateProfileDisplay("Gastspieler", 1200, 0, 0, 1, 0, []);
+                            localStorage.removeItem('playerName');
+                            localStorage.removeItem('firebaseUid');
+                            
+                            const openAuthBtn = document.getElementById('openAuthBtn');
+                            const logoutBtn = document.getElementById('logoutBtn');
+                            if (openAuthBtn) openAuthBtn.style.display = 'block';
+                            if (logoutBtn) logoutBtn.style.display = 'none';
+                        }
                         
-                        const openAuthBtn = document.getElementById('openAuthBtn');
-                        const logoutBtn = document.getElementById('logoutBtn');
-                        if (openAuthBtn) openAuthBtn.style.display = 'block';
-                        if (logoutBtn) logoutBtn.style.display = 'none';
+                        const adminPanel = document.getElementById('admin-panel');
+                        if (adminPanel) adminPanel.style.display = 'none';
                     }
-                    
-                    const adminPanel = document.getElementById('admin-panel');
-                    if (adminPanel) adminPanel.style.display = 'none';
                 }
             });
             
@@ -776,27 +797,36 @@ window.switchSidebarTab = function(tabId, btn) {
 function updateProfileDisplay(name, elo, wins, losses = 0, level = 1, xp = 0, achievements = []) {
     const profileName = document.getElementById('profile-name');
     const profileStats = document.getElementById('profile-stats');
-    if (profileName) profileName.innerText = name;
-    if (profileStats) profileStats.innerText = `Elo: ${elo || 1200} | S: ${wins || 0} N: ${losses || 0}`;
-    
     const navAuthBtn = document.getElementById('navAuthBtn');
     const navUserPill = document.getElementById('navUserPill');
     const navUserName = document.getElementById('navUserName');
-    
     const authBtn = document.getElementById('openAuthBtn');
     const logoutBtn = document.getElementById('logoutBtn');
+    const adminPanel = document.getElementById('admin-panel');
 
-    if (name && name !== 'Gastspieler') {
+    const isAdmin = (name && name.toLowerCase() === 'max') || localStorage.getItem('isAdmin') === 'true';
+
+    if (profileName) {
+        profileName.innerText = isAdmin ? 'Max (Admin)' : name;
+    }
+    if (profileStats) profileStats.innerText = `Elo: ${elo || 1200} | S: ${wins || 0} N: ${losses || 0}`;
+
+    if (isAdmin) {
         if (authBtn) authBtn.style.display = 'none';
         if (logoutBtn) logoutBtn.style.display = 'block';
-        
+        if (navAuthBtn) navAuthBtn.style.display = 'none';
+        if (navUserPill) navUserPill.style.display = 'flex';
+        if (navUserName) navUserName.innerHTML = `<span style="color: #f1c40f; font-weight: bold; text-shadow: 0 0 8px rgba(241,196,15,0.4);">👑 Max (Admin)</span>`;
+        if (adminPanel) adminPanel.style.display = 'block';
+    } else if (name && name !== 'Gastspieler') {
+        if (authBtn) authBtn.style.display = 'none';
+        if (logoutBtn) logoutBtn.style.display = 'block';
         if (navAuthBtn) navAuthBtn.style.display = 'none';
         if (navUserPill) navUserPill.style.display = 'flex';
         if (navUserName) navUserName.innerText = `${name} (${elo || 1200} Elo)`;
     } else {
         if (authBtn) authBtn.style.display = 'block';
         if (logoutBtn) logoutBtn.style.display = 'none';
-        
         if (navAuthBtn) navAuthBtn.style.display = 'block';
         if (navUserPill) navUserPill.style.display = 'none';
     }

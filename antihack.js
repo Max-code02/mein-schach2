@@ -162,8 +162,8 @@ function validateSecurity(data, ws, bannedIPs, triggerUltraBan, roomStates = nul
         return executeBan("Unberechtigter Zug außerhalb der eigenen Reihe (Turn Spoofing)");
     }
 
-    // 5. SQL-Injection Check in Auth-Feldern
-    const sqlRegex = /\b(UNION|SELECT|DROP|DELETE|UPDATE|INSERT|INTO|VALUES|OR|AND)\b|' OR '|" OR "|--|--\s*$/i;
+    // 5. SQL-Injection Check in Auth-Feldern (Spezifisch gegen echte Exploits, keine False-Positives bei normalen Begriffen)
+    const sqlRegex = /\b(UNION\s+ALL\s+SELECT|UNION\s+SELECT|DROP\s+TABLE|DELETE\s+FROM|INSERT\s+INTO)\b|'\s*OR\s*['"0-9\=]|"\s*OR\s*['"0-9\=]|\bOR\s+['"0-9a-z_]+=['"0-9a-z_]+|--\s*$/i;
     const authFieldsToCheck = [data.playerName, data.name, data.password, data.room, data.roomID];
 
     for (const val of authFieldsToCheck) {

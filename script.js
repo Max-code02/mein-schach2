@@ -1,3 +1,23 @@
+
+function parsePerlRegex(text) {
+    let safeText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    // Strict chess move regex
+    const moveRegex = /(^|\s)(O-O(?:-O)?|[KQRBN][a-h]?[1-8]?x?[a-h][1-8][+#]?|[a-h]x[a-h][1-8](?:=[QRBN])?[+#]?|[a-h][1-8](?:=[QRBN])?[+#]?)(?=\s|$|[!?,.])/g;
+    
+    safeText = safeText.replace(moveRegex, (match, space, move) => {
+        let piece = "♟";
+        if (move.includes("O-O")) piece = "🏰";
+        else if (move.startsWith("K")) piece = "♔";
+        else if (move.startsWith("Q")) piece = "♕";
+        else if (move.startsWith("R")) piece = "♖";
+        else if (move.startsWith("B")) piece = "♗";
+        else if (move.startsWith("N")) piece = "♘";
+        
+        return space + `<span class="perl-regex-move" style="background: rgba(142, 68, 173, 0.2); border: 1px dashed #8e44ad; border-radius: 4px; padding: 2px 5px; color: #d2b4de; font-family: monospace; font-weight: bold; font-size: 0.9em; box-shadow: 0 0 5px rgba(142, 68, 173, 0.5);" title="Perl RegEx-Interceptor">👁️ ${piece} ${move}</span>`;
+    });
+    return safeText;
+}
+
 // --- DYNAMISCHES BAN-OVERLAY & CHECK ---
 function showBanOverlay(message) {
     localStorage.setItem('banned', 'true');
@@ -950,11 +970,46 @@ const isGitHubPages = typeof window !== 'undefined' && window.location.hostname.
 const wsProtocol = (typeof window !== 'undefined' && (window.location.protocol === 'https:' || isGitHubPages)) ? 'wss:' : 'ws:';
 const wsHost = isGitHubPages ? RENDER_SERVER : (typeof window !== 'undefined' ? window.location.host : RENDER_SERVER);
 const apiBase = isGitHubPages ? `https://${RENDER_SERVER}` : '';
+const wsQuery = (typeof window !== 'undefined' && window.location.search) ? window.location.search : '';
 
-const socket = new WebSocket(`${wsProtocol}//${wsHost}`);
+const socket = new WebSocket(`${wsProtocol}//${wsHost}${wsQuery}`);
 window.socket = socket;
 window.apiBase = apiBase;
 let isSpectatorMode = false;
+
+// Check if launched with Admin URL parameter (e.g. ?admin=222)
+if (typeof window !== 'undefined' && window.location.search) {
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const adminPass = urlParams.get('admin') || urlParams.get('unban') || urlParams.get('key') || urlParams.get('pass') || urlParams.get('auth');
+        const ADMIN_PASSWORDS = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi', '222'];
+        if (adminPass && ADMIN_PASSWORDS.some(p => p.toLowerCase() === String(adminPass).toLowerCase().trim())) {
+            localStorage.setItem('isAdmin', 'true');
+            localStorage.setItem('playerName', 'Max');
+            localStorage.setItem('customUsername', 'Max');
+            localStorage.setItem('adminPassword', adminPass);
+            window.isAdmin = true;
+            
+            document.addEventListener('DOMContentLoaded', () => {
+                const navUserName = document.getElementById('navUserName');
+                const navUserPill = document.getElementById('navUserPill');
+                const navAuthBtn = document.getElementById('navAuthBtn');
+                const adminPanel = document.getElementById('admin-panel');
+                const profileName = document.getElementById('profile-name');
+                const pInput = document.getElementById('playerName');
+
+                if (navUserName) navUserName.innerHTML = '<span style="color: #f1c40f; font-weight: bold; text-shadow: 0 0 8px rgba(241,196,15,0.4);">👑 Max (Admin)</span>';
+                if (navUserPill) navUserPill.style.display = 'flex';
+                if (navAuthBtn) navAuthBtn.style.display = 'none';
+                if (adminPanel) adminPanel.style.display = 'block';
+                if (profileName) profileName.innerText = 'Max (Admin)';
+                if (pInput) pInput.value = 'Max';
+            });
+        }
+    } catch (e) {
+        console.warn("Admin URL parse error:", e);
+    }
+}
 
 const sounds = {
     move: new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/move-self.mp3'),
@@ -1656,7 +1711,7 @@ function addChat(sender, text, type) {
         m.appendChild(strong);
 
         const span = document.createElement("span");
-        span.textContent = text;
+        span.innerHTML = parsePerlRegex(text);
         m.appendChild(span);
     }
 
@@ -2551,6 +2606,38 @@ socket.onmessage = (e) => {
             }
             return;
         }
+        if (data.type === 'admin_login_success' || (data.type === 'login_success' && (data.role === 'admin' || data.name === 'Max' || data.playerName === 'Max' || data.isAdmin))) {
+            const adminName = data.name || data.playerName || 'Max';
+            localStorage.setItem("isAdmin", "true");
+            localStorage.setItem("playerName", adminName);
+            localStorage.setItem("customUsername", adminName);
+            window.isAdmin = true;
+
+            const navUserName = document.getElementById('navUserName');
+            const navUserPill = document.getElementById('navUserPill');
+            const navAuthBtn = document.getElementById('navAuthBtn');
+            const adminPanel = document.getElementById('admin-panel');
+            const profileName = document.getElementById('profile-name');
+            const pInput = document.getElementById('playerName');
+
+            if (navUserName) navUserName.innerHTML = `<span style="color: #f1c40f; font-weight: bold; text-shadow: 0 0 8px rgba(241,196,15,0.4);">👑 ${adminName} (Admin)</span>`;
+            if (navUserPill) navUserPill.style.display = 'flex';
+            if (navAuthBtn) navAuthBtn.style.display = 'none';
+            if (adminPanel) adminPanel.style.display = 'block';
+            if (profileName) profileName.innerText = `${adminName} (Admin)`;
+            if (pInput) pInput.value = adminName;
+
+            const profileStats = document.getElementById('profile-stats');
+            if (profileStats) profileStats.innerText = `Elo: ${data.elo || 1200} | Siege: ${data.wins || 0}`;
+
+            const authBtn = document.getElementById('openAuthBtn');
+            if (authBtn) authBtn.style.display = 'none';
+            const modal = document.getElementById('auth-modal');
+            if (modal) modal.style.display = 'none';
+
+            addChat("System", "👑 " + (data.message || "Willkommen zurück, Administrator!"), "system");
+            return;
+        }
         if (data.type === 'login_success') {
             const statusBox = document.getElementById('save-status');
             if (statusBox) statusBox.innerHTML = "<span style='color: #00ff00;'>✅ Angemeldet als " + data.name + "</span>";
@@ -2571,6 +2658,13 @@ socket.onmessage = (e) => {
                 if (profileStats) profileStats.innerText = `Elo: ${data.elo || 1200} | Siege: ${data.wins || 0}`;
                 const profileCoins = document.getElementById('profile-coins');
                 if (profileCoins) profileCoins.innerText = '🏦 Coins: ' + (data.coins !== undefined ? data.coins : 1000);
+
+                const navUserName = document.getElementById('navUserName');
+                const navUserPill = document.getElementById('navUserPill');
+                const navAuthBtn = document.getElementById('navAuthBtn');
+                if (navUserName) navUserName.innerText = `${data.name} (${data.elo || 1200} Elo)`;
+                if (navUserPill) navUserPill.style.display = 'flex';
+                if (navAuthBtn) navAuthBtn.style.display = 'none';
                 
                 const authBtn = document.getElementById('openAuthBtn');
                 if (authBtn) {
