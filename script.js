@@ -1683,12 +1683,67 @@ function addMoveToSidebar(fr, fc, tr, tc, piece, isCapture) {
     }
 }
 // --- 2. CHAT & SYSTEM ---
+function formatSystemMessage(text) {
+    if (!text) return "";
+    let clean = String(text);
+    
+    // Strip redundant leading ⚙️ if followed by an emoji or header
+    clean = clean.replace(/^⚙️\s*([🛡️📜🤖⚠️✅🚨💡⚡💬👑🔒🖥️📊ℹ️⏱️])/u, '$1');
+
+    // Escape basic HTML
+    let escaped = clean
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    // Format Custom Admin Tags
+    escaped = escaped.replace(/\[CARD\]/g, '<div class="admin-card">')
+                     .replace(/\[\/CARD\]/g, '</div>')
+                     .replace(/\[HEADER\]/g, '<div class="admin-card-header">')
+                     .replace(/\[\/HEADER\]/g, '</div>')
+                     .replace(/\[FLEX\]/g, '<div style="display: flex; flex-direction: column; gap: 8px;">')
+                     .replace(/\[\/FLEX\]/g, '</div>');
+
+    // Format Dividers
+    escaped = escaped.replace(/[═=]{6,}/g, '<div class="admin-divider"></div>');
+
+    // Format Markdown Bold: **text**
+    escaped = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+    // Format Markdown Italic: *text*
+    escaped = escaped.replace(/(^|[^\*])\*([^\*\n]+?)\*([^\*]|$)/g, '$1<em>$2</em>$3');
+
+    // Format Code pills: `code`
+    escaped = escaped.replace(/`([^`\n]+?)`/g, function(match, cmdContent) {
+        const safeAttr = cmdContent.replace(/"/g, '&quot;').replace(/'/g, "\\'");
+        return `<code class="admin-cmd-pill" title="Klicken zum Einfügen in den Chat" onclick="insertAdminCommand('${safeAttr}')">${cmdContent}</code>`;
+    });
+
+    // Replace newlines with <br>
+    escaped = escaped.replace(/\n/g, '<br>');
+
+    return escaped;
+}
+window.formatSystemMessage = formatSystemMessage;
+
+window.insertAdminCommand = function(cmd) {
+    const inp = document.getElementById("chat-input") || (typeof chatInput !== 'undefined' ? chatInput : null);
+    if (!inp) return;
+    const baseCmd = String(cmd).trim();
+    inp.value = baseCmd + " ";
+    inp.focus();
+    if (inp.setSelectionRange) {
+        const len = inp.value.length;
+        inp.setSelectionRange(len, len);
+    }
+};
+
 function addChat(sender, text, type) {
     const m = document.createElement("div");
     m.className = type === "system" ? "msg system-msg" : `msg ${type === 'me' ? 'my-msg' : 'other-msg'}`;
 
     if (type === "system") {
-        m.textContent = "⚙️ " + text;
+        m.innerHTML = formatSystemMessage(text);
     } else {
         const strong = document.createElement("strong");
         strong.textContent = sender + ": ";
@@ -1699,7 +1754,7 @@ function addChat(sender, text, type) {
         m.appendChild(span);
     }
 
-    const container = document.getElementById("chat-messages") || chatMessages;
+    const container = document.getElementById("chat-messages") || (typeof chatMessages !== 'undefined' ? chatMessages : null);
     if (container) {
         container.appendChild(m);
         container.scrollTop = container.scrollHeight;

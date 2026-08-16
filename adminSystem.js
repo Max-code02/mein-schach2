@@ -179,11 +179,12 @@ async function handleAdminCommand(ws, text, context) {
                 ws.send(JSON.stringify({ type: 'chat', text: '🤖 Starte automatischen System-Diagnosetest...', system: true }));
                 const diagResults = await runSystemDiagnostics(context);
                 
-                let report = `🤖 **DIAGNOSE-BERICHT (${diagResults.timestamp}):**\n` +
-                             `✅ Bestanden: ${diagResults.passed} | ❌ Fehlgeschlagen: ${diagResults.failed}\n\n`;
+                let report = `[CARD]\n[HEADER]🤖 DIAGNOSE-BERICHT (${diagResults.timestamp})[/HEADER]\n` +
+                             `✅ Bestanden: ${diagResults.passed} | ❌ Fehlgeschlagen: ${diagResults.failed}\n[FLEX]\n`;
                 diagResults.tests.forEach(t => {
                     report += `• **${t.name}**: ${t.status} (${t.details})\n`;
                 });
+                report += `[/FLEX]\n[/CARD]`;
                 ws.send(JSON.stringify({ type: 'chat', text: report, system: true }));
             } catch(err) {
                 ws.send(JSON.stringify({ type: 'chat', text: `⚠️ Fehler beim Ausführen des Testbots: ${err.message}`, system: true }));
@@ -439,13 +440,160 @@ async function handleAdminCommand(ws, text, context) {
 
         // --- BANLIST ---
         case 'banlist':
-            const pBans = Array.from(bannedPlayers || []).join(', ');
-            const iBans = Array.from(bannedIPs || []).join(', ');
-            ws.send(JSON.stringify({ 
-                type: 'chat', 
-                text: `📜 **BAN-LISTE:**\n• Spieler: ${pBans || 'Keine'}\n• IPs: ${iBans || 'Keine'}`, 
-                system: true 
-            }));
+        case 'bans':
+        case 'banned':
+        case 'banliste':
+        case 'sperrliste':
+        case 'bannedlist':
+        case 'banlog':
+        case 'bannedplayers':
+        case 'bannedips':
+            try {
+                const playerBansMap = new Map();
+                const ipBansMap = new Map();
+
+                // 1. In-Memory Set Bans
+                if (bannedPlayers) {
+                    bannedPlayers.forEach(p => {
+                        if (p && p.toLowerCase() !== 'undefined' && p.toLowerCase() !== 'null') {
+                            playerBansMap.set(p.toLowerCase(), {
+                                name: p,
+                                reason: 'Admin-Sperre',
+                                type: 'Permanent',
+                                source: 'RAM'
+                            });
+                        }
+                    });
+                }
+
+                if (bannedIPs) {
+                    bannedIPs.forEach(ip => {
+                        if (ip && ip !== '0.0.0.0' && ip !== '127.0.0.1' && ip !== '::1') {
+                            ipBansMap.set(ip, {
+                                ip: ip,
+                                reason: 'IP-Sperre',
+                                source: 'RAM'
+                            });
+                        }
+                    });
+                }
+
+                // 2. Scan UserDB / Profiles
+                if (profiles) {
+                    const profileEntries = typeof profiles.entries === 'function' ? Array.from(profiles.entries()) : Object.entries(profiles);
+                    for (const [key, val] of profileEntries) {
+                        if (val && (val.is_banned || val.ip_ban)) {
+                            const uName = val.username || key;
+                            playerBansMap.set(uName.toLowerCase(), {
+                                name: uName,
+                                reason: val.ban_reason || 'Admin-Sperre',
+                                type: val.ip_ban ? 'Account & IP' : 'Account',
+                                source: 'UserDB'
+                            });
+                            if (val.ip_address && val.ip_address !== '0.0.0.0' && val.ip_address !== '127.0.0.1' && val.ip_address !== '::1') {
+                                ipBansMap.set(val.ip_address, {
+                                    ip: val.ip_address,
+                                    reason: val.ban_reason || `IP von ${uName}`,
+                                    source: 'UserDB'
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // 3. Scan Firestore 'bans' Collection
+                if (db) {
+                    try {
+                        const bansSnap = await db.collection('bans').get();
+                        if (bansSnap && !bansSnap.empty) {
+                            bansSnap.forEach(docSnap => {
+                                const bData = docSnap.data();
+                                const docId = docSnap.id;
+                                if (!bData) return;
+                                
+                                const target = bData.target || docId.replace(/^(username_|ip_|ban_)/i, '');
+                                if (!target || target === '0.0.0.0' || target === 'system_ban_security') return;
+
+                                const reason = bData.reason || 'Firestore Sperre';
+                                const dateStr = bData.createdAt ? new Date(bData.createdAt).toLocaleDateString('de-DE') : '';
+
+                                if (bData.type === 'ip' || target.includes('.') || target.includes(':')) {
+                                    ipBansMap.set(target, {
+                                        ip: target,
+                                        reason: reason,
+                                        date: dateStr,
+                                        source: 'Firestore'
+                                    });
+                                } else {
+                                    playerBansMap.set(target.toLowerCase(), {
+                                        name: target,
+                                        reason: reason,
+                                        type: bData.type || 'Permanent',
+                                        date: dateStr,
+                                        source: 'Firestore'
+                                    });
+                                }
+                            });
+                        }
+                    } catch (fsErr) {
+                        console.warn("Notice: Firestore bans fetch in /banlist:", fsErr.message);
+                    }
+                }
+
+                const totalBansCount = playerBansMap.size + ipBansMap.size;
+
+                if (totalBansCount === 0) {
+                    ws.send(JSON.stringify({ 
+                        type: 'chat', 
+                        text: `[CARD]\n[HEADER]📜 BAN-LISTE (0 Aktive Sperren)[/HEADER]\n✅ **Aktuell sind keine Spieler oder IP-Adressen gesperrt.**\nAlle Accounts und Netzwerke haben freien Zugriff.\n[/CARD]`, 
+                        system: true 
+                    }));
+                    return true;
+                }
+
+                let banListReport = `[CARD]\n[HEADER]📜 BAN-LISTE (${totalBansCount} Aktive Sperren)[/HEADER]\n[FLEX]\n`;
+
+                if (playerBansMap.size > 0) {
+                    banListReport += `👥 **Gesperrte Spieler-Accounts (${playerBansMap.size}):**\n`;
+                    let pIdx = 1;
+                    playerBansMap.forEach((info) => {
+                        const dateInfo = info.date ? ` [${info.date}]` : '';
+                        banListReport += `${pIdx}. \`${info.name}\` — Grund: *${info.reason}* (${info.type}${dateInfo})\n`;
+                        pIdx++;
+                    });
+                } else {
+                    banListReport += `👥 **Gesperrte Spieler-Accounts:** Keine\n`;
+                }
+
+                banListReport += `\n`;
+
+                if (ipBansMap.size > 0) {
+                    banListReport += `🌐 **Gesperrte IP-Adressen (${ipBansMap.size}):**\n`;
+                    let ipIdx = 1;
+                    ipBansMap.forEach((info) => {
+                        const dateInfo = info.date ? ` [${info.date}]` : '';
+                        banListReport += `${ipIdx}. \`${info.ip}\` — Grund: *${info.reason}*${dateInfo}\n`;
+                        ipIdx++;
+                    });
+                } else {
+                    banListReport += `🌐 **Gesperrte IP-Adressen:** Keine\n`;
+                }
+
+                banListReport += `\n💡 *Befehl zum Entbannen: \`/pardon "Name/IP"\` oder \`/clearbans\`*\n[/FLEX]\n[/CARD]`;
+
+                ws.send(JSON.stringify({ 
+                    type: 'chat', 
+                    text: banListReport, 
+                    system: true 
+                }));
+            } catch (blErr) {
+                console.error("Fehler bei /banlist:", blErr);
+                ws.send(JSON.stringify({ 
+                    type: 'chat', 
+                    text: `⚠️ Fehler beim Laden der Ban-Liste: ${blErr.message}`, 
+                    system: true 
+                }));
+            }
             break;
             
         // --- MUTELIST ---
@@ -454,7 +602,7 @@ async function handleAdminCommand(ws, text, context) {
             wss.clients.forEach(c => {
                 if (c.isMuted) muted.push(c.playerName || 'Unbekannt');
             });
-            ws.send(JSON.stringify({ type: 'chat', text: `🤫 **MUTE-LISTE:** ${muted.join(', ') || 'Niemand'}`, system: true }));
+            ws.send(JSON.stringify({ type: 'chat', text: `[CARD]\n[HEADER]🤫 MUTE-LISTE[/HEADER]\n${muted.length > 0 ? muted.map(m => `• \`${m}\``).join('\n') : '✅ **Aktuell ist niemand stummgeschaltet.**'}\n[/CARD]`, system: true }));
             break;
 
         // --- WARN ---
@@ -636,7 +784,7 @@ async function handleAdminCommand(ws, text, context) {
                 if (c.playerName && c.playerName.toLowerCase() === targetName.toLowerCase()) {
                     ws.send(JSON.stringify({ 
                         type: 'chat', 
-                        text: `ℹ️ **WHOIS ${c.playerName}:**\n• IP: ${c.clientIP || 'Unbekannt'}\n• E-Mail: ${c.userEmail || 'Keine'}\n• Level: ${pInfo?.level||1} | ELO: ${pInfo?.elo||1200}\n• Siege/Niederlagen: ${pInfo?.wins||0}/${pInfo?.losses||0}`, 
+                        text: `[CARD]\n[HEADER]ℹ️ WHOIS: ${c.playerName}[/HEADER]\n[FLEX]\n• **IP:** ${c.clientIP || 'Unbekannt'}\n• **E-Mail:** ${c.userEmail || 'Keine'}\n• **Level:** ${pInfo?.level||1} | **ELO:** ${pInfo?.elo||1200}\n• **Siege/Niederlagen:** ${pInfo?.wins||0}/${pInfo?.losses||0}\n[/FLEX]\n[/CARD]`, 
                         system: true 
                     }));
                     foundInfo = true;
@@ -650,8 +798,8 @@ async function handleAdminCommand(ws, text, context) {
         case 'l':
         case 'list':
         case 'online':
-            const online = Array.from(wss.clients).map(c => `${c.playerName || 'Gast'} [${c.clientIP || 'IP?'}]`).join('\n• ');
-            ws.send(JSON.stringify({ type: 'chat', text: `👥 **Radar (${wss.clients.size} Online):**\n• ${online || 'Niemand'}`, system: true }));
+            const online = Array.from(wss.clients).map(c => `• ${c.playerName || 'Gast'} \`[${c.clientIP || 'IP?'}]\``).join('\n');
+            ws.send(JSON.stringify({ type: 'chat', text: `[CARD]\n[HEADER]👥 RADAR (${wss.clients.size} Online)[/HEADER]\n[FLEX]\n${online || 'Niemand'}\n[/FLEX]\n[/CARD]`, system: true }));
             break;
 
         case 'mypi':
@@ -764,7 +912,7 @@ async function handleAdminCommand(ws, text, context) {
         case 'stats':
             ws.send(JSON.stringify({ 
                 type: 'chat', 
-                text: `📊 **Server-Stats:**\n• Online: ${wss ? wss.clients.size : 0}\n• Gebannte Spieler: ${bannedPlayers ? bannedPlayers.size : 0}\n• Slowmode: ${global.slowMode || 'Aus'}`, 
+                text: `[CARD]\n[HEADER]📊 Server-Stats[/HEADER]\n[FLEX]\n• Online: ${wss ? wss.clients.size : 0}\n• Gebannte Spieler: ${bannedPlayers ? bannedPlayers.size : 0}\n• Slowmode: ${global.slowMode || 'Aus'}\n[/FLEX]\n[/CARD]`, 
                 system: true 
             }));
             break;
@@ -778,9 +926,9 @@ async function handleAdminCommand(ws, text, context) {
             const top5 = profList
                 .sort((a, b) => (b.wins || 0) - (a.wins || 0))
                 .slice(0, 5)
-                .map((p, i) => `${i+1}. ${p.username || p.name} (${p.wins || 0}🏆 - ELO ${p.elo || 1200})`)
+                .map((p, i) => `• **${i+1}.** ${p.username || p.name} (${p.wins || 0}🏆 - ELO ${p.elo || 1200})`)
                 .join('\n');
-            ws.send(JSON.stringify({ type: 'chat', text: `🏆 **Bestenliste:**\n${top5 || 'Keine Daten'}`, system: true }));
+            ws.send(JSON.stringify({ type: 'chat', text: `[CARD]\n[HEADER]🏆 Bestenliste[/HEADER]\n[FLEX]\n${top5 || 'Keine Daten'}\n[/FLEX]\n[/CARD]`, system: true }));
             break;
             
         case 'cleardb':
@@ -965,101 +1113,109 @@ async function handleAdminCommand(ws, text, context) {
         case 'befehle':
         case 'befhel':
         case '?':
+            // Check if user requested help for a specific command (e.g. /help ban)
+            const helpTarget = (targetName || '').toLowerCase().replace(/^[\/!\?]/, '');
+
+            if (helpTarget && isAdminUser) {
+                const COMMAND_DOCS = {
+                    'ban': `[CARD]\n[HEADER]🔨 BEFEHLS-HILFE: /ban[/HEADER]\n• **Syntax:** \`/ban "Name/IP" [Grund]\`\n• **Wirkung:** Vollständiger Permanent-Bann. Sperrt den Account in Firestore/RAM, sperrt die IP-Adresse und trennt alle aktiven Sessions sofort mit rotem Overlay.\n• **Beispiel:** \`/ban "Cheater99" Anti-Cheat Verdacht\`\n• **Entbannen:** \`/pardon "Cheater99"\`\n[/CARD]`,
+                    'offban': `[CARD]\n[HEADER]🔨 BEFEHLS-HILFE: /offban[/HEADER]\n• **Syntax:** \`/offban "Name" [Grund]\`\n• **Wirkung:** Sperrt einen Spieler, der aktuell offline ist, in der Datenbank & Firestore, sodass er sich nicht mehr einloggen kann.\n• **Beispiel:** \`/offban "OfflineTroll" Beleidigungen\`\n[/CARD]`,
+                    'tempban': `[CARD]\n[HEADER]⏳ BEFEHLS-HILFE: /tempban[/HEADER]\n• **Syntax:** \`/tempban "Name" [Minuten]\`\n• **Wirkung:** Bannt den Spieler temporär für X Minuten. Nach Ablauf der Zeit wird der Ban automatisch wieder aufgehoben.\n• **Beispiel:** \`/tempban "Störenfried" 30\`\n[/CARD]`,
+                    'kick': `[CARD]\n[HEADER]🚪 BEFEHLS-HILFE: /kick[/HEADER]\n• **Syntax:** \`/kick "Name/IP" [Grund]\`\n• **Wirkung:** Schließt sofort alle WebSocket-Verbindungen des Spielers oder der IP mit einer Benachrichtigung. Spieler kann danach neu verbinden.\n• **Beispiel:** \`/kick "Spammer" Chat-Spam\`\n[/CARD]`,
+                    'pardon': `[CARD]\n[HEADER]🔓 BEFEHLS-HILFE: /pardon[/HEADER]\n• **Syntax:** \`/pardon "Name/IP"\` oder \`/clearbans\`\n• **Wirkung:** Hebt alle Sperren (RAM, UserDB, Firestore, .htaccess, Support-Tickets) für den angegebenen Spieler oder die IP vollständig auf.\n• **Beispiel:** \`/pardon "Spieler123"\`\n[/CARD]`,
+                    'unban': `[CARD]\n[HEADER]🔓 BEFEHLS-HILFE: /unban[/HEADER]\n• **Syntax:** \`/unban "Name/IP"\` oder \`/unbanall\`\n• **Wirkung:** Gleiche Funktion wie \`/pardon\`. Entbannt den Spieler oder die IP komplett.\n• **Beispiel:** \`/unban "192.168.1.1"\`\n[/CARD]`,
+                    'banlist': `[CARD]\n[HEADER]📜 BEFEHLS-HILFE: /banlist[/HEADER]\n• **Syntax:** \`/banlist\` (Aliase: \`/bans\`, \`/banned\`, \`/sperrliste\`)\n• **Wirkung:** Durchsucht RAM, lokale Datenbank und Firestore nach allen aktiven Bans und gibt eine saubere, formatierte Liste aus.\n[/CARD]`,
+                    'whois': `[CARD]\n[HEADER]ℹ️ BEFEHLS-HILFE: /whois[/HEADER]\n• **Syntax:** \`/whois "Name"\`\n• **Wirkung:** Zeigt detaillierte Spieler-Auskunft: IP-Adresse, E-Mail, ELO-Rating, Level, Siege/Niederlagen und Berechtigungsrolle.\n[/CARD]`,
+                    'setwins': `[CARD]\n[HEADER]⭐ BEFEHLS-HILFE: /setwins[/HEADER]\n• **Syntax:** \`/setwins "Name" [Anzahl]\`\n• **Wirkung:** Überschreibt die Siege eines Spielers im RAM, in der UserDB und in Firestore.\n• **Beispiel:** \`/setwins "Max" 100\`\n[/CARD]`,
+                    'setelo': `[CARD]\n[HEADER]🏅 BEFEHLS-HILFE: /setelo[/HEADER]\n• **Syntax:** \`/setelo "Name" [Rating]\`\n• **Wirkung:** Setzt das ELO-Rating des Spielers (Standard: 1200).\n• **Beispiel:** \`/setelo "Max" 1850\`\n[/CARD]`,
+                    'setrole': `[CARD]\n[HEADER]👑 BEFEHLS-HILFE: /setrole[/HEADER]\n• **Syntax:** \`/setrole "Name" [admin/user/moderator]\`\n• **Wirkung:** Weist dem Spieler eine Berechtigungsrolle zu.\n• **Beispiel:** \`/setrole "Max" admin\`\n[/CARD]`,
+                    'mute': `[CARD]\n[HEADER]🤫 BEFEHLS-HILFE: /mute[/HEADER]\n• **Syntax:** \`/mute "Name"\`\n• **Wirkung:** Schaltet den Spieler im Chat stumm. Der Spieler kann bis zum Unmute keine Nachrichten mehr senden.\n• **Entmuten:** \`/unmute "Name"\`\n[/CARD]`,
+                    'freeze': `[CARD]\n[HEADER]❄️ BEFEHLS-HILFE: /freeze[/HEADER]\n• **Syntax:** \`/freeze\`\n• **Wirkung:** Schaltet den Chat für alle normalen Spieler global ein oder aus (Freeze/Unfreeze).\n[/CARD]`,
+                    'slowmode': `[CARD]\n[HEADER]⏳ BEFEHLS-HILFE: /slowmode[/HEADER]\n• **Syntax:** \`/slowmode [Sekunden]\`\n• **Wirkung:** Setzt eine Wartezeit zwischen Chatnachrichten (z.B. \`/slowmode 5\` für 5 Sek. Cooldown, \`/slowmode 0\` zum Deaktivieren).\n[/CARD]`,
+                    'diag': `[CARD]\n[HEADER]🤖 BEFEHLS-HILFE: /diag[/HEADER]\n• **Syntax:** \`/diag\` oder \`/testbot\`\n• **Wirkung:** Führt eine vollständige automatisierte System-Diagnose durch (Schachlogik, Anti-Cheat, Rate-Limits, RAM, Firestore-Verbindung).\n[/CARD]`
+                };
+
+                if (COMMAND_DOCS[helpTarget]) {
+                    ws.send(JSON.stringify({ type: 'chat', text: COMMAND_DOCS[helpTarget], system: true }));
+                    return true;
+                }
+            }
+
             if (isAdminUser) {
+                const adminHelpMenu = `[CARD]
+[HEADER]🛡️ ADMIN COMMAND CENTER[/HEADER]
+[FLEX]
+⚡ **1. Account- & Bann-Verwaltung:**
+• \`/ban "Name/IP" [Grund]\` — Permanent-Bann
+• \`/offban "Name" [Grund]\` — Bannt Offline-Spieler
+• \`/tempban "Name" [Min]\` — Temporärer Bann
+• \`/kick "Name/IP" [Grund]\` — Kickt vom Server
+• \`/pardon "Name/IP"\` — Hebt Bann auf
+• \`/clearbans\` — Löscht alle Bans
+• \`/banlist\` — Übersicht aktiver Sperren
+• \`/rename "Alt" "Neu"\` — Name ändern
+• \`/whois "Name"\` — Spieler-Auskunft
+
+💬 **2. Moderation & Chat:**
+• \`/warn "Name" [Grund]\` — Verwarnung
+• \`/warnip "IP" [Grund]\` — Verwarnung an IP
+• \`/mute "Name"\` — Stummschalten
+• \`/unmute "Name"\` — Stummschaltung aufheben
+• \`/muteall\` / \`/unmuteall\` — Globaler Mute
+• \`/mutelist\` — Übersicht stummgeschalteter
+• \`/freeze\` — Chat einfrieren / auftauen
+• \`/slowmode [Sek.]\` — Chat-Cooldown
+• \`/clearchat\` — Chatverlauf löschen
+• \`/say [Text]\` — Systemdurchsage
+• \`/announce [Text]\` — Rundnachricht
+• \`/wall [Text]\` — Textwand-Durchsage
+• \`/adminmsg "Name"\` — Flüstern
+• \`/alert "Name" [Text]\` — Alarmfenster
+
+👑 **3. Profil-Verwaltung:**
+• \`/setwins "Name" [Anzahl]\` — Siege setzen
+• \`/setelo "Name" [Rating]\` — ELO setzen
+• \`/setlevel "Name" [Level]\` — Level verändern
+• \`/setrole "Name" [Rolle]\` — Rolle zuweisen
+• \`/reset "Name"\` — Profil zurücksetzen
+• \`/clearleaderboard\` — Leaderboard löschen
+
+🔒 **4. Server-Sicherheit:**
+• \`/lock\` / \`/unlock\` — Schachbrett global sperren
+• \`/kickalltrolls\` — Gast-Accounts kicken
+• \`/kickall\` — Alle Spieler kicken
+• \`/kickip "IP"\` — IP-Verbindungen schließen
+• \`/disconnect "Name"\` — Leise trennen
+
+🖥️ **5. Diagnose & System:**
+• \`/diag\` / \`/testbot\` — Diagnosetest
+• \`/radar\` / \`/players\` — Live-Nutzerliste
+• \`/stats\` — Serverauslastung
+• \`/memory\` / \`/ram\` — RAM & Speicher
+• \`/uptime\` — Server Laufzeit
+• \`/pingall\` — Latenzmessung
+• \`/save\` — Hochsicherheits-Backup
+• \`/shutdown [Sek.]\` — Neustart
+[/FLEX]
+
+💡 *Tipp: Klicke auf einen Befehl!*
+[/CARD]`;
+
                 ws.send(JSON.stringify({ 
                     type: 'chat', 
-                    text: `🛡️ **ADMIN BEFEHLE (VOLLZUGRIFF)** 🛡️
-**1. Nutzer- & Account-Verwaltung:**
-• \`/kick "Name" [Grund]\` - Entfernt Spieler sofort
-• \`/ban "Name"\` - Permanent-Ban (IP & Account)
-• \`/offban "Name"\` - Bannt Offline-Spieler
-• \`/tempban "Name" [Min.]\` - Temporärer Ban
-• \`/pardon "Name/IP"\` - Entbannt Spieler/IP
-• \`/rename "Alt" "Neu"\` - Benennt Nutzer um
-• \`/setwins "Name" [Anzahl]\` - Siege überschreiben
-• \`/whois "Name"\` - Zeigt IP, Level, ELO & Rolle
-
-**2. Moderation & Chat-Kontrolle:**
-• \`/warn "Name"\` - Verwarnt Spieler
-• \`/warnip "IP"\` - Verwarnt IP
-• \`/mute "Name"\` - Muted Spieler
-• \`/unmute "Name"\` - Ent-muted Spieler
-• \`/freeze\` - Chat einfrieren
-• \`/slowmode [Sek.]\` - Chat-Verzögerung
-• \`/adminmsg "Name" [Text]\` - Flüstern
-• \`/alert "Name" [Text]\` - Pop-Up Warnung
-• \`/say [Text]\` - Rote System-Warnung
-• \`/announce [Text]\` - Hervorgehobene Durchsage
-• \`/wall [Text]\` - Große Textwand
-• \`/clearchat\` - Löscht den Chatverlauf
-
-**3. Sicherheits- & Anti-Cheat-Tools:**
-• \`/lock\` / \`/unlock\` - Spielfeld global sperren
-• \`/kickalltrolls\` - Kickt alle Gäste
-• \`/kickip "IP"\` - Kickt Verbindungen einer IP
-• \`/banip "IP"\` - Bannt IP-Adresse
-• \`/banlist\` / \`/mutelist\` - Zeigt Listen
-
-**4. Server-Diagnose & Netzwerk:**
-• \`/radar\` / \`/players\` - Liste aller Online-Nutzer
-• \`/myip\` - Zeigt eigene IP
-• \`/pingall\` - Latenz-Netzwerkmessung
-• \`/memory\` / \`/uptime\` - RAM & Laufzeit
-• \`/stats\` / \`/testmail\` - Status & Webhook-Test
-
-**5. System-Steuerung:**
-• \`/save\` / \`/load\` - Backup & Neuladen
-• \`/reset "Name"\` - Spielerprofil löschen
-• \`/cleardb\` / \`/clearleaderboard\`
-• \`/disconnect "Name"\` - Trennt Verbindung
-• \`/shutdown [Sek.]\` - Server-Neustart`, 
+                    text: adminHelpMenu, 
                     system: true 
                 }));
             } else if (isHelperUser) {
                 ws.send(JSON.stringify({ 
                     type: 'chat', 
-                    text: `🛡️ **MODERATOR BEFEHLE:**
-• \`?kick "Name"\` - Kickt einen störenden Spieler
-• \`?warn "Name" [Grund]\` - Verwarnt einen Spieler
-• \`?mute "Name"\` - Schaltet einen Spieler stumm
-• \`?unmute "Name"\` - Hebt Stummschaltung auf
-• \`/info "Name"\` - Zeigt Status und Raum
-• \`/list\` - Zeigt alle angemeldeten Spieler`, 
+                    text: `🛡️ **MODERATOR COMMANDS:**\n══════════════════════════════════════\n• \`?kick "Name" [Grund]\` — Kickt störenden Spieler vom Server\n• \`?warn "Name" [Grund]\` — Verwarnt einen Spieler offiziell\n• \`?mute "Name"\` — Schaltet Spieler für den Chat stumm\n• \`?unmute "Name"\` — Hebt Stummschaltung wieder auf\n• \`/whois "Name"\` — Zeigt Status, Rolle & Raum des Spielers\n• \`/players\` — Zeigt alle online angemeldeten Spieler\n• \`/clearchat\` — Leert das Chatfenster`, 
                     system: true 
                 }));
             } else {
                 ws.send(JSON.stringify({ 
                     type: 'chat', 
-                    text: `💬 **PROCHESS SPIELER-BEFEHLE (30+ BEFEHLE):**
-
-**1. Partie & Zuschauen:**
-• \`!watch "Name"\` - Schaut einer aktiven Partie live zu
-• \`!unwatch\` - Verlässt den Zuschauermodus
-• \`!draw\` / \`!remis\` - Bietet dem Gegner ein Unentschieden an
-• \`!resign\` / \`!aufgeben\` - Gibt die aktuelle Partie auf
-• \`!undo\` / \`!zurueck\` - Fordert Zug-Rücknahme an
-
-**2. Profil & Statistiken:**
-• \`!stats\` / \`!profile\` - Zeigt deine Elo & Statistiken an
-• \`!stats "Name"\` - Zeigt Profil & Elo eines Mitspielers
-• \`!rank\` / \`!top\` - Zeigt die aktuellen Top-Spieler
-• \`!myip\` - Zeigt deine aktuelle Verbindungs-IP
-• \`!ping\` - Misst die Latenz zum Server
-
-**3. Lobbies & Support:**
-• \`!lobby "Name"\` - Erstellt/Betritt eine Chat-Lobby
-• \`!ticket\` / \`!support\` - In-Game Support-Ticket Formular
-• \`!emotes\` - Liste verfügbarer Chat-Emoticons & Reaktionen
-
-**4. Design & Einstellungen:**
-• \`!theme\` - Öffnet das Menü für Farb- & Schachbrett-Designs
-• \`!glass\` - Umschalten des Glassmorphismus-Effekts
-• \`!keybinds\` - Übersicht der Tastatur-Steuerung
-
-**5. Regelwerk & Rechtliches:**
-• \`!agb\` / \`!rules\` - Fairplay- & Plattformregeln
-• \`!datenschutz\` / \`!impressum\` - Datenschutz & Impressum (Support: schachlivesupport.jailer914@slmail.me)
-• \`!help\` / \`!befehle\` - Zeigt diese Hilfe-Übersicht`, 
+                    text: `💬 **PROCHESS SPIELER-BEFEHLE:**\n══════════════════════════════════════\n🎮 **1. Partie & Zuschauen:**\n• \`!watch "Name"\` — Schaut einer aktiven Partie live zu\n• \`!unwatch\` — Verlässt den Zuschauermodus\n• \`!draw\` / \`!remis\` — Bietet dem Gegner Remis an\n• \`!resign\` / \`!aufgeben\` — Gibt die aktuelle Partie auf\n• \`!undo\` / \`!zurueck\` — Fordert Zug-Rücknahme an\n\n📊 **2. Profil & Statistiken:**\n• \`!stats\` / \`!profile\` — Zeigt dein persönliches Profil & ELO\n• \`!stats "Name"\` — Profil & Statistiken eines Mitspielers\n• \`!rank\` / \`!top\` — Zeigt die Bestenliste\n• \`!myip\` — Zeigt deine aktuelle Verbindungs-IP\n• \`!ping\` — Misst Latenz zum Server\n\n💬 **3. Lobbies & Support:**\n• \`!lobby "Name"\` — Erstellt/Betritt eine Chat-Lobby\n• \`!ticket\` — Support-Ticket & Entbannungsantrag\n• \`!emotes\` — Liste aller Chat-Emojis & Reaktionen\n\n🎨 **4. Design & Einstellungen:**\n• \`!theme\` — Menü für Farb- & Brettdesigns\n• \`!glass\` — Glassmorphismus-Effekt umschalten\n• \`!keybinds\` — Tastenkombinationen-Übersicht\n\n⚖️ **5. Rechtliches:**\n• \`!rules\` / \`!agb\` — Fairplay-Regeln\n• \`!impressum\` — Kontakt & Datenschutz (Support: schachlivesupport.jailer914@slmail.me)`, 
                     system: true 
                 }));
             }

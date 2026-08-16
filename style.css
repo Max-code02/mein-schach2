@@ -331,7 +331,103 @@ body.glass-effects-enabled #chat-container {
 .msg { padding: 8px 14px; border-radius: 12px; font-size: 0.9em; max-width: 85%; animation: fadeIn 0.3s ease; }
 .my-msg { align-self: flex-end; background: var(--primary); color: white; }
 .other-msg { align-self: flex-start; background: #333; }
-.system-msg { align-self: center; background: rgba(241, 196, 15, 0.1); color: var(--warning); border: 1px solid var(--warning); width: 90%; text-align: center; font-size: 0.8em; }
+.system-msg { 
+    align-self: center; 
+    background: rgba(15, 23, 42, 0.88); 
+    color: #e2e8f0; 
+    border: 1px solid rgba(241, 196, 15, 0.35); 
+    border-left: 4px solid #f1c40f; 
+    width: 95%; 
+    max-width: 95%; 
+    text-align: left; 
+    font-size: 0.88em; 
+    line-height: 1.55; 
+    padding: 10px 14px; 
+    border-radius: 10px; 
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.35); 
+    backdrop-filter: blur(8px); 
+    word-break: break-word; 
+    white-space: pre-wrap; 
+    box-sizing: border-box; 
+}
+
+.system-msg.system-msg-center {
+    text-align: center;
+    width: auto;
+    max-width: 90%;
+    padding: 6px 12px;
+}
+
+.system-msg strong {
+    color: #f8fafc;
+}
+
+.system-msg em {
+    color: #cbd5e1;
+    font-style: italic;
+}
+
+.admin-card {
+    background: linear-gradient(135deg, rgba(17, 24, 39, 0.95), rgba(15, 23, 42, 0.95));
+    border: 1px solid rgba(241, 196, 15, 0.45);
+    border-left: 4px solid #f1c40f;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin: 4px 0;
+    width: 96%;
+    max-width: 96%;
+    align-self: center;
+    color: #f1f5f9;
+    font-size: 0.88em;
+    line-height: 1.55;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(10px);
+}
+
+.admin-card-header {
+    font-weight: 700;
+    font-size: 1.05em;
+    color: #f1c40f;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(241, 196, 15, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.admin-divider {
+    height: 1px;
+    background: linear-gradient(90deg, rgba(241, 196, 15, 0.5), rgba(241, 196, 15, 0.1), transparent);
+    margin: 8px 0;
+}
+
+.admin-cmd-pill {
+    background: rgba(241, 196, 15, 0.15);
+    border: 1px solid rgba(241, 196, 15, 0.4);
+    color: #fef08a;
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.92em;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-block;
+    user-select: all;
+    margin: 1px 2px;
+}
+
+.admin-cmd-pill:hover {
+    background: rgba(241, 196, 15, 0.35);
+    border-color: #f1c40f;
+    color: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(241, 196, 15, 0.3);
+}
+
+.admin-cmd-pill:active {
+    transform: translateY(0);
+}
 
 input, select, button { 
     background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); 

@@ -2321,20 +2321,16 @@ wss.on('connection', function(ws, req) {
 
     ws.lastMessageTime = 0;
 
-    // Check bans (bypass if admin)
-    if (!ws.isAdmin && bannedIPs.has(ws.clientIP)) {
-        sendSystemAlert(ws, '❌ ZUGRIFF VERWEIGERT: Deine IP ist permanent gebannt!');
-        setTimeout(() => ws.terminate(), 1000);
-        return;
+    // Check bans (bypass if admin) - deferred to message handler to allow admin login
+    if (bannedIPs.has(ws.clientIP)) {
+        ws.isIpBanned = true;
     }
 
-    if (!ws.isAdmin && blockedIPs.has(ws.clientIP)) {
+    if (blockedIPs.has(ws.clientIP)) {
         const expiry = blockedIPs.get(ws.clientIP);
         if (Date.now() < expiry) {
-            const restZeit = Math.ceil((expiry - Date.now()) / 60000);
-            sendSystemAlert(ws, `🚫 IP-SPERRE: Zu viele Fehlversuche. Warte noch ${restZeit} Minuten.`);
-            setTimeout(() => ws.terminate(), 1000);
-            return;
+            ws.isIpBlocked = true;
+            ws.blockExpiry = expiry;
         } else {
             blockedIPs.delete(ws.clientIP);
             loginAttempts.delete(ws.clientIP);
@@ -2364,6 +2360,36 @@ wss.on('connection', function(ws, req) {
             data = JSON.parse(message);
         } catch (e) {
             return;
+        }
+
+        // --- IP Ban Enforcement ---
+        if (!ws.isAdmin && ws.isIpBanned) {
+            // Ignore benign initialization messages to give time for login
+            if (['get_open_challenges', 'get_stats', 'get_chat_history', 'get_lobbies'].includes(data.type)) {
+                return; // Silent drop
+            }
+            // Only allow login_attempt with an admin name to try to bypass
+            if (data.type === 'login_attempt' && isUserAdmin(data.playerName)) {
+                // allow it to pass so they can check password and become admin
+            } else {
+                sendSystemAlert(ws, '❌ ZUGRIFF VERWEIGERT: Deine IP ist permanent gebannt!');
+                setTimeout(() => ws.terminate(), 100);
+                return;
+            }
+        }
+        
+        if (!ws.isAdmin && ws.isIpBlocked) {
+            if (['get_open_challenges', 'get_stats', 'get_chat_history', 'get_lobbies'].includes(data.type)) {
+                return;
+            }
+            if (data.type === 'login_attempt' && isUserAdmin(data.playerName)) {
+                // allow it to pass
+            } else {
+                const restZeit = Math.ceil((ws.blockExpiry - Date.now()) / 60000);
+                sendSystemAlert(ws, `🚫 IP-SPERRE: Zu viele Fehlversuche. Warte noch ${restZeit} Minuten.`);
+                setTimeout(() => ws.terminate(), 100);
+                return;
+            }
         }
 
         try {
@@ -2539,6 +2565,12 @@ wss.on('connection', function(ws, req) {
 
                 if (playerName.toLowerCase() === 'max' || (data.email && data.email.toLowerCase() === 'max.schule13@gmail.com')) {
                     user.role = 'admin';
+                    ws.isAdmin = true;
+                    ws.is_owner = true;
+                }
+                
+                if (isUserAdmin(playerName) || user.role === 'admin' || user.role === 'moderator') {
+                    ws.isAdmin = true;
                 }
 
                 saveAll(playerName);
