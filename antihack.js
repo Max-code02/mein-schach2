@@ -66,7 +66,7 @@ function validateTimeDelta(ws, clientTimestamp) {
     const drift = Math.abs(now - clientTimestamp);
 
     // Wenn der Client-Zeitstempel um mehr als 15 Sekunden in der Zukunft oder Vergangenheit liegt
-    if (drift > 15000) {
+    if (drift > 300000) { // 5 Minuten Toleranz statt 15 Sekunden
         console.warn(`⚠️ [TIME-HACK DETECTED] Client Clock Drift: ${drift}ms bei WS ${ws.playerName}`);
         return false;
     }
@@ -204,7 +204,7 @@ function validateSecurity(data, ws, bannedIPs, triggerUltraBan, roomStates = nul
 
     if (data.type === 'game_win') {
         const gameTime = (now - (ws.gameStartTimestamp || now)) / 1000;
-        if (gameTime < 10) return executeBan("Speed-Win-Hack (Sieg unter 10 Sek)");
+        if (ws.gameStartTimestamp && gameTime < 2) return executeBan("Speed-Win-Hack (Sieg unter 2 Sek)");
     }
 
     if (data.system === true || data.sender === 'SYSTEM' || data.sender === 'System') {

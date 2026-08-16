@@ -530,7 +530,7 @@ async function saveTicketToFirestore(ticket) {
 function broadcastTicketsUpdate() {
     const msgStr = JSON.stringify({
         type: 'admin_tickets_update',
-        tickets: globalSupportTickets,
+        tickets: globalSupportTickets.filter(t => t.status !== 'Entbannt' && t.status !== 'Abgelehnt' && t.status !== 'Geschlossen'),
         supportEmail: 'schachlivesupport.jailer914@slmail.me'
     });
     if (wss && wss.clients) {
@@ -549,7 +549,7 @@ function broadcastAdminUsersUpdate() {
     // 1. Online WebSocket Users
     if (wss && wss.clients) {
         wss.clients.forEach(c => {
-            if (c.playerName) {
+            if (c.readyState === 1 && c.playerName) {
                 seenNames.add(c.playerName.toLowerCase());
                 const uData = (userDB && userDB[c.playerName]) || {};
                 allUsers.push({
@@ -2701,7 +2701,7 @@ wss.on('connection', function(ws, req) {
             if (data.type === 'get_admin_tickets') {
                 ws.send(JSON.stringify({
                     type: 'admin_tickets_update',
-                    tickets: globalSupportTickets,
+                    tickets: globalSupportTickets.filter(t => t.status !== 'Entbannt' && t.status !== 'Abgelehnt' && t.status !== 'Geschlossen'),
                     supportEmail: 'schachlivesupport.jailer914@slmail.me'
                 }));
                 return;
@@ -2785,7 +2785,7 @@ wss.on('connection', function(ws, req) {
 
                 // 1. Online WebSocket Users
                 wss.clients.forEach(c => {
-                    if (c.playerName) {
+                    if (c.readyState === 1 && c.playerName) {
                         seenNames.add(c.playerName.toLowerCase());
                         const uData = userDB[c.playerName] || {};
                         allUsers.push({
