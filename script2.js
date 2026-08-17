@@ -89,39 +89,57 @@ async function initFirebase() {
 
 
         // --- LEADERBOARD SYNC ---
+        function sanitizeLeaderboardUser(data, docId) {
+            if (!data && !docId) return null;
+            const u = data || {};
+            let rawName = (u.username || u.name || u.displayName || docId || '').trim();
+            if (!rawName) return null;
+
+            // Clean email addresses
+            if (rawName.includes('@')) {
+                const lowEmail = rawName.toLowerCase();
+                if (lowEmail === 'max.schule13@gmail.com') {
+                    rawName = 'Max';
+                } else if (lowEmail.includes('slmail.me') || lowEmail.includes('support') || lowEmail.includes('noreply') || lowEmail.includes('admin@')) {
+                    return null;
+                } else {
+                    if (u.username && !u.username.includes('@') && u.username.length >= 2) {
+                        rawName = u.username.trim();
+                    } else {
+                        rawName = rawName.split('@')[0].trim();
+                    }
+                }
+            }
+
+            const low = rawName.toLowerCase();
+            if (low === 'global' || low === 'null' || low === 'undefined' || low === 'anonymous' || low === 'anonym' || low === '[object object]' || low === 'connection_health' || low === 'system_ban_security') return null;
+            if (/^[0-9a-zA-Z_-]{24,36}$/.test(rawName) && !/[aeiou]/i.test(rawName)) return null;
+            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawName)) return null;
+
+            let cleanName = rawName;
+            if (low === 'maxadmin' || low === 'max.schule13@gmail.com') cleanName = 'Max';
+            cleanName = cleanName.replace(/[<>"'&]/g, '').trim();
+            if (!cleanName || cleanName.length < 2) return null;
+
+            return {
+                name: cleanName,
+                elo: Number(u.elo) || 1200,
+                wins: Math.max(0, Number(u.wins) || 0),
+                level: Math.max(1, Number(u.level) || 1),
+                xp: Math.max(0, Number(u.xp) || 0)
+            };
+        }
+
         onSnapshot(collection(fbDb, 'players'), (usersSnap) => {
             const userMap = new Map();
             usersSnap.forEach(uDoc => {
-                const u = uDoc.data();
-                let rawName = (u.username || u.name || '').trim();
-                if (!rawName || rawName.match(/^[0-9a-zA-Z]{28}$/)) {
-                    if (!uDoc.id.match(/^[0-9a-zA-Z]{28}$/)) {
-                        rawName = uDoc.id.trim();
-                    }
-                }
-                if (!rawName || rawName.match(/^[0-9a-zA-Z]{28}$/) || rawName.toLowerCase() === 'global') return;
-                
-                // Normalisiere Aliasse (z.B. MaxAdmin -> Max)
-                let cleanName = rawName;
-                if (cleanName.toLowerCase() === 'maxadmin' || (u.uid === '3xRGHWo0WyefZ2P4UcdqSIdNSVf1' && cleanName.toLowerCase() !== 'max')) {
-                    cleanName = 'Max';
-                }
+                const clean = sanitizeLeaderboardUser(uDoc.data(), uDoc.id);
+                if (!clean) return;
 
-                const key = cleanName.toLowerCase();
-                const elo = Number(u.elo) || 1200;
-                const wins = Number(u.wins) || 0;
-                const level = Number(u.level) || 1;
-                const xp = Number(u.xp) || 0;
-
+                const key = clean.name.toLowerCase();
                 const existing = userMap.get(key);
-                if (!existing || elo > existing.elo || (elo === existing.elo && wins > existing.wins)) {
-                    userMap.set(key, {
-                        name: cleanName,
-                        elo: elo,
-                        wins: wins,
-                        level: level,
-                        xp: xp
-                    });
+                if (!existing || clean.elo > existing.elo || (clean.elo === existing.elo && clean.wins > existing.wins)) {
+                    userMap.set(key, clean);
                 }
             });
             const firestoreUsers = Array.from(userMap.values());
@@ -933,10 +951,24 @@ window.addEventListener('load', () => {
                         if (listEl && Array.isArray(data.list)) {
                             const userMap = new Map();
                             data.list.forEach(p => {
-                                let rawName = (p.name || '').trim();
-                                if (!rawName || rawName.match(/^[0-9a-zA-Z]{28}$/) || rawName.toLowerCase() === 'global') return;
+                                let rawName = (p.name || p.username || '').trim();
+                                if (!rawName) return;
+                                if (rawName.includes('@')) {
+                                    const low = rawName.toLowerCase();
+                                    if (low === 'max.schule13@gmail.com') rawName = 'Max';
+                                    else if (low.includes('slmail.me') || low.includes('support') || low.includes('noreply') || low.includes('admin@')) return;
+                                    else rawName = rawName.split('@')[0];
+                                }
+                                const low = rawName.toLowerCase();
+                                if (low === 'global' || low === 'null' || low === 'undefined' || low === 'anonymous' || low === 'anonym' || low === '[object object]' || low === 'connection_health' || low === 'system_ban_security') return;
+                                if (/^[0-9a-zA-Z_-]{24,36}$/.test(rawName) && !/[aeiou]/i.test(rawName)) return;
+                                if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawName)) return;
+
                                 let cleanName = rawName;
-                                if (cleanName.toLowerCase() === 'maxadmin') cleanName = 'Max';
+                                if (low === 'maxadmin' || low === 'max.schule13@gmail.com') cleanName = 'Max';
+                                cleanName = cleanName.replace(/[<>"'&]/g, '').trim();
+                                if (!cleanName || cleanName.length < 2) return;
+
                                 const key = cleanName.toLowerCase();
                                 const elo = Number(p.elo) || 1200;
                                 const wins = Number(p.wins) || 0;

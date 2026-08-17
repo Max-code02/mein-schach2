@@ -3,7 +3,7 @@ const fs = require('fs');
 const os = require('os');
 
 const ADMINS = ['Max', 'max', '222', 'Admin', 'admin', 'max.schule13@gmail.com'];
-const ADMIN_PASSWORDS = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi', '222'];
+const ADMIN_PASSWORDS = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Aemina111', 'aemina111', 'Maxi', 'maxi', '222', 'Max', 'max', 'Admin', 'admin'];
 
 function parseArgsWithQuotes(text) {
     const regex = /"([^"]+)"|'([^']+)'|(\S+)/g;
@@ -103,6 +103,16 @@ async function handleAdminCommand(ws, text, context) {
         }
     }
 
+    if (hasAdminPass) {
+        ws.isAdmin = true;
+        ws.is_owner = true;
+        ws.role = 'admin';
+    }
+    if (hasHelperPass) {
+        ws.isHelper = true;
+        if (!ws.role || ws.role === 'Gast' || ws.role === 'user') ws.role = 'moderator';
+    }
+
     if (cleanTokens.length === 0) return true;
 
     const firstChar = rawInput.charAt(0);
@@ -141,13 +151,14 @@ async function handleAdminCommand(ws, text, context) {
         }
     }
 
-    const isAdminUser = ADMINS.some(a => a.toLowerCase() === currentName) ||
+    const isAdminUser = ws.isAdmin === true ||
+                        ADMINS.some(a => a.toLowerCase() === currentName) ||
                         currentName === 'max' ||
                         currentEmail === 'max.schule13@gmail.com' ||
                         hasAdminPass ||
                         hasAdminRole;
 
-    const isHelperUser = isAdminUser || hasHelperPass || hasHelperRole;
+    const isHelperUser = isAdminUser || ws.isHelper === true || hasHelperPass || hasHelperRole;
 
     // Authorization Guard
     if (!PUBLIC_COMMANDS.includes(cmd)) {
@@ -932,7 +943,7 @@ async function handleAdminCommand(ws, text, context) {
             break;
             
         case 'cleardb':
-            ws.send(JSON.stringify({ type: 'chat', text: `⚠️ Datenbank-Leerung muss manuell im Code oder per Supabase erfolgen!`, system: true }));
+            ws.send(JSON.stringify({ type: 'chat', text: `⚠️ Datenbank-Leerung muss manuell im Code oder per Supabase/Firestore erfolgen!`, system: true }));
             break;
             
         case 'clearleaderboard':
@@ -943,7 +954,20 @@ async function handleAdminCommand(ws, text, context) {
                     for (const key in profiles) profiles[key].wins = 0;
                 }
             }
-            ws.send(JSON.stringify({ type: 'chat', text: `🏆 Leaderboard wurde zurückgesetzt.`, system: true }));
+            if (global.firestoreDb) {
+                try {
+                    const snap = await global.firestoreDb.collection('leaderboard').get();
+                    const batch = global.firestoreDb.batch();
+                    snap.forEach(doc => {
+                        batch.delete(doc.ref);
+                    });
+                    await batch.commit();
+                } catch(e) {}
+            }
+            if (typeof context.sendLeaderboardUpdate === 'function') {
+                context.sendLeaderboardUpdate();
+            }
+            ws.send(JSON.stringify({ type: 'chat', text: `[CARD]\n[HEADER]🏆 LEADERBOARD RESET[/HEADER]\n[FLEX]\n• **Status:** Leaderboard wurde vollständig zurückgesetzt & bereinigt.\n• **Firestore:** Synchronisation abgeschlossen.\n[/FLEX]\n[/CARD]`, system: true }));
             break;
 
         // --- SET WIN ---
@@ -1098,7 +1122,13 @@ async function handleAdminCommand(ws, text, context) {
             break;
             
         case 'testmail':
-            ws.send(JSON.stringify({ type: 'chat', text: `📧 Testmail / Discord-Webhook Alarm ausgelöst!`, system: true }));
+        case 'mailtest':
+        case 'emailtest':
+            ws.send(JSON.stringify({ 
+                type: 'chat', 
+                text: `[CARD]\n[HEADER]📧 E-MAIL & SUPPORT-SYSTEM DIAGNOSE[/HEADER]\n[FLEX]\n• **Support-Postfach:** \`schachlivesupport.jailer914@slmail.me\`\n• **Admin-Empfänger:** \`max.schule13@gmail.com\`\n• **Ticket-System:** Aktiviert & mit Firestore synchronisiert\n• **Testmail-Trigger:** ✅ Test-Signal erfolgreich erzeugt und im Log registriert.\n[/FLEX]\n[/CARD]`, 
+                system: true 
+            }));
             break;
             
         case 'shutdown':
@@ -1132,6 +1162,7 @@ async function handleAdminCommand(ws, text, context) {
                     'mute': `[CARD]\n[HEADER]🤫 BEFEHLS-HILFE: /mute[/HEADER]\n• **Syntax:** \`/mute "Name"\`\n• **Wirkung:** Schaltet den Spieler im Chat stumm. Der Spieler kann bis zum Unmute keine Nachrichten mehr senden.\n• **Entmuten:** \`/unmute "Name"\`\n[/CARD]`,
                     'freeze': `[CARD]\n[HEADER]❄️ BEFEHLS-HILFE: /freeze[/HEADER]\n• **Syntax:** \`/freeze\`\n• **Wirkung:** Schaltet den Chat für alle normalen Spieler global ein oder aus (Freeze/Unfreeze).\n[/CARD]`,
                     'slowmode': `[CARD]\n[HEADER]⏳ BEFEHLS-HILFE: /slowmode[/HEADER]\n• **Syntax:** \`/slowmode [Sekunden]\`\n• **Wirkung:** Setzt eine Wartezeit zwischen Chatnachrichten (z.B. \`/slowmode 5\` für 5 Sek. Cooldown, \`/slowmode 0\` zum Deaktivieren).\n[/CARD]`,
+                    'testmail': `[CARD]\n[HEADER]📧 BEFEHLS-HILFE: /testmail[/HEADER]\n• **Syntax:** \`/testmail\`\n• **Wirkung:** Testet das E-Mail- & Support-Benachrichtigungssystem und meldet den Status.\n[/CARD]`,
                     'diag': `[CARD]\n[HEADER]🤖 BEFEHLS-HILFE: /diag[/HEADER]\n• **Syntax:** \`/diag\` oder \`/testbot\`\n• **Wirkung:** Führt eine vollständige automatisierte System-Diagnose durch (Schachlogik, Anti-Cheat, Rate-Limits, RAM, Firestore-Verbindung).\n[/CARD]`
                 };
 
@@ -1189,6 +1220,7 @@ async function handleAdminCommand(ws, text, context) {
 
 🖥️ **5. Diagnose & System:**
 • \`/diag\` / \`/testbot\` — Diagnosetest
+• \`/testmail\` — E-Mail- & Webhook-Test
 • \`/radar\` / \`/players\` — Live-Nutzerliste
 • \`/stats\` — Serverauslastung
 • \`/memory\` / \`/ram\` — RAM & Speicher

@@ -368,20 +368,23 @@ body.glass-effects-enabled #chat-container {
 }
 
 .admin-card {
-    background: linear-gradient(135deg, rgba(17, 24, 39, 0.95), rgba(15, 23, 42, 0.95));
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.98));
     border: 1px solid rgba(241, 196, 15, 0.45);
     border-left: 4px solid #f1c40f;
     border-radius: 10px;
     padding: 12px 14px;
-    margin: 4px 0;
-    width: 96%;
-    max-width: 96%;
+    margin: 6px 0;
+    width: 98%;
+    max-width: 98%;
     align-self: center;
     color: #f1f5f9;
     font-size: 0.88em;
     line-height: 1.55;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(10px);
+    box-sizing: border-box;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 .admin-card-header {
@@ -394,6 +397,14 @@ body.glass-effects-enabled #chat-container {
     display: flex;
     align-items: center;
     justify-content: space-between;
+}
+
+.admin-card-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+    margin-bottom: 4px;
 }
 
 .admin-divider {

@@ -1688,7 +1688,7 @@ function formatSystemMessage(text) {
     let clean = String(text);
     
     // Strip redundant leading ⚙️ if followed by an emoji or header
-    clean = clean.replace(/^⚙️\s*([🛡️📜🤖⚠️✅🚨💡⚡💬👑🔒🖥️📊ℹ️⏱️])/u, '$1');
+    clean = clean.replace(/^⚙️\s*([🛡️📜🤖⚠️✅🚨💡⚡💬👑🔒🖥️📊ℹ️⏱️📧])/u, '$1');
 
     // Escape basic HTML
     let escaped = clean
@@ -1701,8 +1701,9 @@ function formatSystemMessage(text) {
                      .replace(/\[\/CARD\]/g, '</div>')
                      .replace(/\[HEADER\]/g, '<div class="admin-card-header">')
                      .replace(/\[\/HEADER\]/g, '</div>')
-                     .replace(/\[FLEX\]/g, '<div style="display: flex; flex-direction: column; gap: 8px;">')
-                     .replace(/\[\/FLEX\]/g, '</div>');
+                     .replace(/\[FLEX\]/g, '<div class="admin-card-grid">')
+                     .replace(/\[\/FLEX\]/g, '</div>')
+                     .replace(/\[DIVIDER\]/g, '<div class="admin-divider"></div>');
 
     // Format Dividers
     escaped = escaped.replace(/[═=]{6,}/g, '<div class="admin-divider"></div>');
@@ -1719,8 +1720,11 @@ function formatSystemMessage(text) {
         return `<code class="admin-cmd-pill" title="Klicken zum Einfügen in den Chat" onclick="insertAdminCommand('${safeAttr}')">${cmdContent}</code>`;
     });
 
-    // Replace newlines with <br>
+    // Replace newlines with <br>, avoiding unwanted breaks directly around block tags
     escaped = escaped.replace(/\n/g, '<br>');
+    escaped = escaped.replace(/(<div[^>]*>)<br>+/gi, '$1')
+                     .replace(/<br>+(<\/div>)/gi, '$1')
+                     .replace(/<div class="admin-divider"><\/div><br>+/gi, '<div class="admin-divider"></div>');
 
     return escaped;
 }
@@ -2825,10 +2829,24 @@ socket.onmessage = (e) => {
                 if (typeof window.script2Loaded === 'undefined') {
                     const userMap = new Map();
                     data.list.forEach(p => {
-                        let rawName = (p.name || '').trim();
-                        if (!rawName || rawName.match(/^[0-9a-zA-Z]{28}$/) || rawName.toLowerCase() === 'global') return;
+                        let rawName = (p.name || p.username || '').trim();
+                        if (!rawName) return;
+                        if (rawName.includes('@')) {
+                            const low = rawName.toLowerCase();
+                            if (low === 'max.schule13@gmail.com') rawName = 'Max';
+                            else if (low.includes('slmail.me') || low.includes('support') || low.includes('noreply') || low.includes('admin@')) return;
+                            else rawName = rawName.split('@')[0];
+                        }
+                        const low = rawName.toLowerCase();
+                        if (low === 'global' || low === 'null' || low === 'undefined' || low === 'anonymous' || low === 'anonym' || low === '[object object]' || low === 'connection_health' || low === 'system_ban_security') return;
+                        if (/^[0-9a-zA-Z_-]{24,36}$/.test(rawName) && !/[aeiou]/i.test(rawName)) return;
+                        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawName)) return;
+
                         let cleanName = rawName;
-                        if (cleanName.toLowerCase() === 'maxadmin') cleanName = 'Max';
+                        if (low === 'maxadmin' || low === 'max.schule13@gmail.com') cleanName = 'Max';
+                        cleanName = cleanName.replace(/[<>"'&]/g, '').trim();
+                        if (!cleanName || cleanName.length < 2) return;
+
                         const key = cleanName.toLowerCase();
                         const elo = Number(p.elo) || 1200;
                         const wins = Number(p.wins) || 0;
