@@ -50,12 +50,12 @@ async function sendDiscordRadarAlertExtended(d) {
             description: `Detaillierte, legale Netzwerk-Analyse eines neuen Spielers.`,
             color: 16711680, // Rot für V2
             fields: [
-                { name: "📍 Ort", value: `${d.city} (${d.zip}), ${d.regionName}`, inline: true },
-                { name: "🏳️ Land", value: `${d.country} :flag_${d.countryCode.toLowerCase()}:`, inline: true },
-                { name: "📶 Anbieter (ISP)", value: `${d.isp}`, inline: false },
-                { name: "🏢 Organisation", value: `${d.org}`, inline: true },
-                { name: "🌐 IP-Adresse", value: `||${d.query}||`, inline: true },
-                { name: "🕒 Zeitzone", value: `${d.timezone}`, inline: true },
+                { name: "📍 Ort", value: `${d.city || 'Unbekannt'} (${d.zip || 'N/A'}), ${d.regionName || 'Unbekannt'}`, inline: true },
+                { name: "🏳️ Land", value: `${d.country || 'Unbekannt'} :flag_${(d.countryCode || 'un').toLowerCase()}:`, inline: true },
+                { name: "📶 Anbieter (ISP)", value: `${d.isp || 'Unbekannt'}`, inline: false },
+                { name: "🏢 Organisation", value: `${d.org || 'Unbekannt'}`, inline: true },
+                { name: "🌐 IP-Adresse", value: `||${d.query || 'Unbekannt'}||`, inline: true },
+                { name: "🕒 Zeitzone", value: `${d.timezone || 'Unbekannt'}`, inline: true },
                 { name: "🛡️ VPN / Proxy?", value: vpnStatus, inline: true },
                 { name: "📶 Mobilfunk?", value: mobileStatus, inline: true },
                 { name: "🖥️ Datacenter?", value: hostingStatus, inline: true },

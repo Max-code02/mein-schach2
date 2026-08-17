@@ -205,9 +205,9 @@ async function sendBanEmail(playerName, reason, ip) {
             title: "🚨 BAN-ALARM: Spieler gesperrt",
             color: 15158332,
             fields: [
-                { name: "Spieler", value: playerName, inline: true },
-                { name: "Grund", value: reason, inline: true },
-                { name: "IP-Adresse", value: `\`${ip}\``, inline: false }
+                { name: "Spieler", value: playerName || "Unbekannt", inline: true },
+                { name: "Grund", value: reason || "Unbekannt", inline: true },
+                { name: "IP-Adresse", value: `\`${ip || 'Unbekannt'}\``, inline: false }
             ],
             footer: { text: "Schach-Server Wächter" },
             timestamp: new Date()
@@ -1581,10 +1581,6 @@ async function loadFirestoreBans() {
     } catch (e) {
         console.warn("Firestore bans load error:", e.message);
     }
-}
-
-async function sendBanEmail(playerName, reason, ip) {
-    console.log(`✉️ E-Mail Benachrichtigung: Spieler ${playerName} (${ip}) wurde gesperrt. Grund: ${reason}`);
 }
 
 // --- ADMIN PROTECTION & LOGGING ENGINE ---

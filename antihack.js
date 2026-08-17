@@ -39,8 +39,8 @@ async function sendDiscordAlarm(playerName, reason, ip) {
             color: 0xff0000,
             fields: [
                 { name: "Spieler", value: playerName || "Unbekannt", inline: true },
-                { name: "IP-Adresse", value: ip, inline: true },
-                { name: "Grund", value: reason }
+                { name: "IP-Adresse", value: ip || "Unbekannt", inline: true },
+                { name: "Grund", value: reason || "Unbekannt" }
             ],
             timestamp: new Date()
         }]
