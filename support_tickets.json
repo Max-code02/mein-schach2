@@ -1,0 +1,54 @@
+[
+  {
+    "id": "TICK-MUOAY1G6",
+    "user": "TestUser",
+    "contact": "TestUser",
+    "clientIP": "127.0.0.1",
+    "email": "schachlivesupport.jailer914@slmail.me",
+    "text": "Test Entbannungsantrag",
+    "banReason": "Admin-Gesperrt",
+    "status": "Offen",
+    "createdAt": "30.9.2026, 16:10:52",
+    "timestamp": 1790784652758,
+    "reply": ""
+  },
+  {
+    "id": "TICK-MUOAJZRA",
+    "createdAt": "30.9.2026, 15:59:57",
+    "contact": "max.kistner12@gmail.com",
+    "clientIP": "217.231.69.105",
+    "text": "7",
+    "reply": "",
+    "user": "max.kistner12@gmail.com",
+    "email": "schachlivesupport.jailer914@slmail.me",
+    "banReason": "Verstoß gegen die Community-Richtlinien / Admin-Entscheidung",
+    "status": "Offen",
+    "timestamp": 1790783997382
+  },
+  {
+    "id": "TICK-MSVWQ7CD",
+    "createdAt": "16.8.2026, 14:35:37",
+    "contact": "max.schule13@gmail.com",
+    "clientIP": "217.231.72.241",
+    "text": "Testhallo",
+    "reply": "",
+    "user": "max.schule13@gmail.com",
+    "email": "schachlivesupport.jailer914@slmail.me",
+    "banReason": "❌ ZUGRIFF VERWEIGERT: Deine IP ist permanent gebannt!",
+    "status": "Offen",
+    "timestamp": 1786890937261
+  },
+  {
+    "id": "TICK-101",
+    "createdAt": "14.8.2026, 13:14:49",
+    "contact": "cheater99@mail.com",
+    "clientIP": "91.200.12.4",
+    "text": "Hallo Support, ich bitte um Entbannung meines Kontos.",
+    "reply": "",
+    "user": "cheater99",
+    "email": "schachlivesupport.jailer914@slmail.me",
+    "banReason": "Engine-Nutzung",
+    "status": "Offen",
+    "timestamp": 1786713289174
+  }
+]

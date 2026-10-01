@@ -1,4 +1,45 @@
 
+// Global cycle-safe JSON.stringify protection
+(function() {
+    if (typeof JSON !== 'undefined' && !JSON.__safe_patched) {
+        const originalStringify = JSON.stringify;
+        JSON.stringify = function(value, replacer, space) {
+            try {
+                return originalStringify(value, replacer, space);
+            } catch (err) {
+                if (err instanceof TypeError && (String(err.message).includes('circular') || String(err.message).includes('Converting circular structure to JSON'))) {
+                    const seen = new WeakSet();
+                    return originalStringify(value, function(k, v) {
+                        if (typeof v === 'object' && v !== null) {
+                            if (typeof Node !== 'undefined' && v instanceof Node) return undefined;
+                            if (typeof Window !== 'undefined' && v instanceof Window) return undefined;
+                            if (seen.has(v)) return undefined;
+                            seen.add(v);
+                        }
+                        if (typeof replacer === 'function') {
+                            return replacer.call(this, k, v);
+                        }
+                        return v;
+                    }, space);
+                }
+                throw err;
+            }
+        };
+        JSON.__safe_patched = true;
+    }
+})();
+
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+window.escapeHtml = escapeHtml;
+
 function parsePerlRegex(text) {
     let safeText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     // Strict chess move regex
@@ -257,16 +298,8 @@ window.showInAppNotification = function(title, message, level = 'info') {
 };
 
 window.showAccountBannedOverlay = function(reason) {
-    const modal = document.getElementById('account-banned-modal');
-    const reasonEl = document.getElementById('account-banned-reason-text');
-    if (reasonEl) {
-        reasonEl.innerText = reason || "Verstoß gegen die Community-Richtlinien / Admin-Entscheidung";
-    }
-    if (modal) {
-        modal.style.display = 'flex';
-    } else {
-        alert("⛔ ACCOUNT GESPERRT!\nGrund: " + (reason || "Admin-Entscheidung"));
-    }
+    const cleanReason = reason || "Verstoß gegen die Community-Richtlinien / Admin-Entscheidung";
+    window.location.href = '/banned?reason=' + encodeURIComponent(cleanReason);
 };
 
 window.showGameRequestModal = function(icon, title, message, acceptText, declineText, onAccept, onDecline) {
@@ -338,31 +371,35 @@ window.handleAdminUsersUpdate = function(users) {
         const isOnline = u.is_online ? '🟢 Online' : '⚪ Offline';
         const role = u.role || 'user';
         const isBanned = u.is_banned;
+        const safeUname = escapeHtml(u.username);
+        const encodedUname = encodeURIComponent(u.username || '');
+        const safeRole = escapeHtml(role);
+        const safeIP = escapeHtml(u.ip_address || '127.0.0.1');
         
         let roleBadge = '<span style="background: #34495e; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75em;">User</span>';
         if (role === 'admin' || role === 'Admin') roleBadge = '<span style="background: #e74c3c; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; font-weight: bold;">👑 Admin</span>';
         else if (role === 'moderator' || role === 'Mod') roleBadge = '<span style="background: #f39c12; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75em;">🛡️ Mod</span>';
 
-        let kickBtn = `<button onclick="adminKickUser('${u.username}')" style="background: #e67e22; color: white; border: none; padding: 3px 7px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;" title="Spieler kicken">⚡ Kick</button>`;
+        let kickBtn = `<button onclick="adminKickUser(decodeURIComponent('${encodedUname}'))" style="background: #e67e22; color: white; border: none; padding: 3px 7px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;" title="Spieler kicken">⚡ Kick</button>`;
 
-        let banBtn = `<button onclick="adminBanUser('${u.username}')" style="background: #c0392b; color: white; border: none; padding: 3px 7px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;" title="Spieler bannen">⛔ Ban</button>`;
+        let banBtn = `<button onclick="adminBanUser(decodeURIComponent('${encodedUname}'))" style="background: #c0392b; color: white; border: none; padding: 3px 7px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;" title="Spieler bannen">⛔ Ban</button>`;
         if (isBanned) {
-            banBtn = `<button onclick="adminUnbanUser('${u.username}')" style="background: #27ae60; color: white; border: none; padding: 3px 7px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;" title="Spieler entbannen">🔓 Entbannen</button>`;
+            banBtn = `<button onclick="adminUnbanUser(decodeURIComponent('${encodedUname}'))" style="background: #27ae60; color: white; border: none; padding: 3px 7px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;" title="Spieler entbannen">🔓 Entbannen</button>`;
         }
 
         return `
             <div style="background: rgba(255,255,255,0.05); padding: 8px 10px; border-radius: 6px; display: flex; flex-direction: column; gap: 4px; border: 1px solid rgba(255,255,255,0.1);">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div style="font-weight: bold; font-size: 0.9em; color: white;">
-                        ${u.username} ${roleBadge} <span style="font-size: 0.75em; color: ${u.is_online ? '#2ecc71' : '#7f8c8d'}; margin-left: 5px;">${isOnline}</span>
+                        ${safeUname} ${roleBadge} <span style="font-size: 0.75em; color: ${u.is_online ? '#2ecc71' : '#7f8c8d'}; margin-left: 5px;">${isOnline}</span>
                     </div>
-                    <div style="font-size: 0.8em; color: #f39c12; font-weight: bold;">${u.elo || 1200} ELO</div>
+                    <div style="font-size: 0.8em; color: #f39c12; font-weight: bold;">${Number(u.elo) || 1200} ELO</div>
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75em; color: #aaa; margin-top: 2px;">
-                    <div>IP: ${u.ip_address || '127.0.0.1'} | Siege: ${u.wins || 0}</div>
+                    <div>IP: ${safeIP} | Siege: ${Number(u.wins) || 0}</div>
                     <div style="display: flex; gap: 4px;">
-                        <button onclick="setUserRole('${u.username}', 'admin')" style="background: #8e44ad; color: white; border: none; padding: 3px 6px; border-radius: 3px; font-size: 0.7em; cursor: pointer;">👑 Admin</button>
-                        <button onclick="setUserRole('${u.username}', 'moderator')" style="background: #d35400; color: white; border: none; padding: 3px 6px; border-radius: 3px; font-size: 0.7em; cursor: pointer;">🛡️ Mod</button>
+                        <button onclick="setUserRole(decodeURIComponent('${encodedUname}'), 'admin')" style="background: #8e44ad; color: white; border: none; padding: 3px 6px; border-radius: 3px; font-size: 0.7em; cursor: pointer;">👑 Admin</button>
+                        <button onclick="setUserRole(decodeURIComponent('${encodedUname}'), 'moderator')" style="background: #d35400; color: white; border: none; padding: 3px 6px; border-radius: 3px; font-size: 0.7em; cursor: pointer;">🛡️ Mod</button>
                         ${kickBtn}
                         ${banBtn}
                     </div>
@@ -475,13 +512,13 @@ window.renderAdminTickets = function(tickets) {
                     <span style="background: ${statusColor}; color: white; padding: 1px 6px; border-radius: 10px; font-size: 0.7em; font-weight: bold;">${t.status || 'Offen'}</span>
                 </div>
                 <div style="font-size: 0.75em; color: #aaa; margin-bottom: 4px;">Kontakt: ${t.contact || t.email || 'N/A'} ${t.clientIP ? `| IP: ${t.clientIP}` : ''} | ${t.createdAt || ''}</div>
-                <div style="font-size: 0.8em; color: #ddd; background: rgba(0,0,0,0.3); padding: 6px; border-radius: 4px; margin-bottom: 6px;">${t.text}</div>
-                ${t.banReason ? `<div style="font-size: 0.75em; color: #ff9999; margin-bottom: 4px;">Bann-Grund: ${t.banReason}</div>` : ''}
-                ${t.reply ? `<div style="font-size: 0.75em; color: #2ecc71; margin-bottom: 4px;">Antwort: ${t.reply}</div>` : ''}
+                <div style="font-size: 0.8em; color: #ddd; background: rgba(0,0,0,0.3); padding: 6px; border-radius: 4px; margin-bottom: 6px;">${escapeHtml(t.text)}</div>
+                ${t.banReason ? `<div style="font-size: 0.75em; color: #ff9999; margin-bottom: 4px;">Bann-Grund: ${escapeHtml(t.banReason)}</div>` : ''}
+                ${t.reply ? `<div style="font-size: 0.75em; color: #2ecc71; margin-bottom: 4px;">Antwort: ${escapeHtml(t.reply)}</div>` : ''}
                 <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
-                    ${t.status !== 'Entbannt' ? `<button onclick="unbanTicket('${t.id}', '${t.user}')" style="background: #27ae60; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer; font-weight: bold;">🔓 Entbannen & Genehmigen</button>` : ''}
-                    <button onclick="replyToTicket('${t.id}')" style="background: #3498db; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer;">💬 Antworten</button>
-                    ${t.status !== 'Abgelehnt' ? `<button onclick="rejectTicket('${t.id}')" style="background: #e74c3c; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer;">❌ Ablehnen</button>` : ''}
+                    ${t.status !== 'Entbannt' ? `<button onclick="unbanTicket(decodeURIComponent('${encodeURIComponent(t.id)}'), decodeURIComponent('${encodeURIComponent(t.user || '')}'))" style="background: #27ae60; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer; font-weight: bold;">🔓 Entbannen & Genehmigen</button>` : ''}
+                    <button onclick="replyToTicket(decodeURIComponent('${encodeURIComponent(t.id)}'))" style="background: #3498db; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer;">💬 Antworten</button>
+                    ${t.status !== 'Abgelehnt' ? `<button onclick="rejectTicket(decodeURIComponent('${encodeURIComponent(t.id)}'))" style="background: #e74c3c; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer;">❌ Ablehnen</button>` : ''}
                 </div>
             </div>
         `;
@@ -565,29 +602,50 @@ window.adminUnbanUser = function(username) {
 };
 
 window.openBanReasonModal = function(username) {
-    const modal = document.getElementById('ban-reason-modal');
-    const targetText = document.getElementById('ban-reason-target-name');
-    const targetInput = document.getElementById('ban-reason-target-input');
-    const reasonInput = document.getElementById('ban-reason-text-input');
-
-    if (targetText) targetText.innerText = username;
-    if (targetInput) targetInput.value = username;
-    if (reasonInput) reasonInput.value = '';
-
-    if (modal) {
-        modal.style.display = 'flex';
-        if (reasonInput) reasonInput.focus();
+    let modal = document.getElementById('ban-reason-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'ban-reason-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display: flex; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(5px); z-index: 999999; justify-content: center; align-items: center; padding: 15px;';
+        modal.innerHTML = `
+        <div class="modal-box" style="max-width: 440px; width: 90%; border: 1px solid rgba(231, 76, 60, 0.5); background: #181c24; padding: 25px; border-radius: 12px; text-align: center; color: white; position: relative;">
+            <span class="close-modal" onclick="closeBanReasonModal()" style="position: absolute; top: 10px; right: 14px; font-size: 24px; cursor: pointer; color: #888;">&times;</span>
+            <h3 style="color: #e74c3c; margin-top: 0; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <span>🔨</span> Spieler bannen
+            </h3>
+            <p style="color: #bdc3c7; font-size: 0.85em; margin-bottom: 15px;">
+                Einen Grund für den Bann von <strong id="ban-reason-target-name" style="color: #3498db;">${username}</strong> eingeben:
+            </p>
+            <input type="hidden" id="ban-reason-target-input" value="${username}">
+            <div style="margin-bottom: 15px; text-align: left;">
+                <label style="display: block; font-size: 0.8em; color: #aaa; margin-bottom: 5px;">Bann-Grund:</label>
+                <textarea id="ban-reason-text-input" class="auth-input" style="width: 100%; height: 80px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(10, 10, 15, 0.5); color: white; padding: 10px; font-family: inherit; box-sizing: border-box; resize: vertical;" placeholder="z. B. Beleidigung im Chat, Cheating, Spam..."></textarea>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button style="flex: 1; background: #7f8c8d; color: white; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;" onclick="closeBanReasonModal()" class="glass-btn">Abbrechen</button>
+                <button style="flex: 1; color: white; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold;" onclick="submitBanWithReasonModal()" class="glass-btn danger">Bannen ausführen</button>
+            </div>
+        </div>`;
+        document.body.appendChild(modal);
     } else {
-        const reason = prompt(`Bitte gib einen Grund für den permanenten Bann von '${username}' ein:`, "Admin-Entscheidung");
-        if (reason !== null) {
-            window.executeBanUser(username, reason);
-        }
+        const targetText = document.getElementById('ban-reason-target-name');
+        const targetInput = document.getElementById('ban-reason-target-input');
+        if (targetText) targetText.innerText = username;
+        if (targetInput) targetInput.value = username;
+        modal.style.display = 'flex';
+    }
+
+    const reasonInput = document.getElementById('ban-reason-text-input');
+    if (reasonInput) {
+        reasonInput.value = '';
+        reasonInput.focus();
     }
 };
 
 window.closeBanReasonModal = function() {
     const modal = document.getElementById('ban-reason-modal');
-    if (modal) modal.style.display = 'none';
+    if (modal) modal.remove();
 };
 
 window.submitBanWithReasonModal = function() {
@@ -2617,8 +2675,8 @@ socket.onmessage = (e) => {
             if (window.showInAppNotification) window.showInAppNotification(data.title, data.message, data.level);
             return;
         }
-        if (data.type === 'account_banned_overlay') {
-            if (window.showAccountBannedOverlay) window.showAccountBannedOverlay(data.reason);
+        if (data.type === 'banned_redirect' || data.type === 'account_banned_overlay') {
+            window.location.href = data.url || ('/banned?reason=' + encodeURIComponent(data.reason || 'Account gesperrt'));
             return;
         }
         if (data.type === 'admin_logs_update') {
@@ -2640,20 +2698,16 @@ socket.onmessage = (e) => {
         if (data.type === 'login_error') {
             addChat("System", "❌ Login-Fehler: " + (data.text || "Zugriff verweigert"), "system");
             if (data.banned || (data.text && (data.text.includes('gesperrt') || data.text.includes('gebannt')))) {
-                if (window.showAccountBannedOverlay) {
-                    window.showAccountBannedOverlay(data.reason || data.text);
-                }
+                window.location.href = data.redirect || ('/banned?reason=' + encodeURIComponent(data.reason || data.text || 'Account gesperrt'));
+                return;
             }
             return;
         }
         if (data.type === 'system_alert') {
             addChat("SYSTEM ALERT", data.message, "system");
             if (data.message && (data.message.includes('GESPERRT') || data.message.includes('gebannt'))) {
-                if (window.showAccountBannedOverlay) {
-                    window.showAccountBannedOverlay(data.message);
-                } else if (typeof showBanOverlay === 'function') {
-                    showBanOverlay(data.message);
-                }
+                window.location.href = '/banned?reason=' + encodeURIComponent(data.message);
+                return;
             } else if (typeof showBanOverlay === 'function') {
                 showBanOverlay(data.message);
             } else {
@@ -3128,12 +3182,25 @@ socket.onopen = () => {
     
     if (savedName && savedUid) {
         console.log("Automatischer Firebase-Login für " + savedName);
-        socket.send(JSON.stringify({
-            type: 'login_attempt',
-            playerName: savedName,
-            uid: savedUid,
-            password: 'firebase-auth-token'
-        }));
+        (async () => {
+            try {
+                let token = '';
+                if (window.fbAuth && window.fbAuth.currentUser) {
+                    token = await window.fbAuth.currentUser.getIdToken();
+                }
+                if (socket && socket.readyState === 1) {
+                    socket.send(JSON.stringify({
+                        type: 'login_attempt',
+                        playerName: savedName,
+                        uid: savedUid,
+                        firebaseToken: token,
+                        isRegister: false
+                    }));
+                }
+            } catch (e) {
+                console.warn("Konnte Firebase Token für Auto-Login nicht abrufen:", e);
+            }
+        })();
     } else if (savedName && savedHash) {
         console.log("Automatischer Hintergrund-Login für " + savedName);
         socket.send(JSON.stringify({
@@ -4499,17 +4566,17 @@ window.renderAdminUsers = function(users) {
                     <div>${statusBadge}</div>
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.78em; color: #aaa;">
-                    <span>Elo: ${elo} | Siege: ${wins}</span>
-                    <span>${u.ip_address ? 'IP: ' + u.ip_address : ''}</span>
+                    <span>Elo: ${Number(elo) || 1200} | Siege: ${Number(wins) || 0}</span>
+                    <span>${u.ip_address ? 'IP: ' + escapeHtml(u.ip_address) : ''}</span>
                 </div>
-                ${isBanned ? `<div style="font-size: 0.75em; color: #ff8888; font-style: italic;">Grund: ${banReason}</div>` : ''}
+                ${isBanned ? `<div style="font-size: 0.75em; color: #ff8888; font-style: italic;">Grund: ${escapeHtml(banReason)}</div>` : ''}
                 <div style="display: flex; gap: 6px; margin-top: 4px; justify-content: flex-end;">
                     ${isBanned ? `
-                        <button onclick="window.unbanUser('${encodeURIComponent(name)}')" class="glass-btn success" style="padding: 3px 8px; font-size: 0.75em; cursor: pointer; background: rgba(46,204,113,0.25); border: 1px solid #2ecc71; color: #a3e4d7;">
+                        <button onclick="window.unbanUser(decodeURIComponent('${encodeURIComponent(name)}'))" class="glass-btn success" style="padding: 3px 8px; font-size: 0.75em; cursor: pointer; background: rgba(46,204,113,0.25); border: 1px solid #2ecc71; color: #a3e4d7;">
                             🔓 Entbannen
                         </button>
                     ` : `
-                        <button onclick="window.banUser('${encodeURIComponent(name)}')" class="glass-btn danger" style="padding: 3px 8px; font-size: 0.75em; cursor: pointer; background: rgba(231,76,60,0.25); border: 1px solid #e74c3c; color: #f5b7b1;">
+                        <button onclick="window.banUser(decodeURIComponent('${encodeURIComponent(name)}'))" class="glass-btn danger" style="padding: 3px 8px; font-size: 0.75em; cursor: pointer; background: rgba(231,76,60,0.25); border: 1px solid #e74c3c; color: #f5b7b1;">
                             🔨 Bannen
                         </button>
                     `}
@@ -4755,3 +4822,124 @@ window.renderAdminElixir = function(queue) {
     });
     container.innerHTML = html;
 };
+
+// --- SAVED GAMES LOGIC ---
+window.saveCurrentGame = function() {
+    const gameName = prompt("Gib einen Namen für die Partie ein:", "Partie " + new Date().toLocaleString());
+    if (!gameName) return;
+
+    const gameData = {
+        id: Date.now().toString(),
+        name: gameName,
+        date: new Date().toISOString(),
+        board: JSON.parse(JSON.stringify(board)),
+        turn: turn,
+        history: JSON.parse(JSON.stringify(history)),
+        moveHistoryLog: JSON.parse(JSON.stringify(moveHistoryLog)),
+        hasMoved: JSON.parse(JSON.stringify(hasMoved)),
+        enPassantTarget: JSON.parse(JSON.stringify(enPassantTarget)),
+        halfMoveClock: halfMoveClock,
+        positionHistory: JSON.parse(JSON.stringify(positionHistory)),
+        whiteTime: whiteTime,
+        blackTime: blackTime,
+        opponentName: opponentName,
+        myColor: myColor
+    };
+
+    let savedGames = JSON.parse(localStorage.getItem('saved_chess_games') || '[]');
+    savedGames.push(gameData);
+    localStorage.setItem('saved_chess_games', JSON.stringify(savedGames));
+
+    window.showInAppNotification("Gespeichert", `Partie "${gameName}" wurde erfolgreich gesichert!`, "success");
+    window.renderSavedGamesList();
+};
+
+window.loadSavedGame = function(id) {
+    let savedGames = JSON.parse(localStorage.getItem('saved_chess_games') || '[]');
+    const gameData = savedGames.find(g => g.id === id);
+    if (!gameData) return;
+
+    if (!confirm(`Möchtest du die Partie "${gameData.name}" wirklich laden? Dein aktuelles Spiel geht verloren, wenn es nicht gespeichert ist.`)) return;
+
+    // Stop current game connections if any
+    const gameModeSelect = document.getElementById("gameMode");
+    if (gameModeSelect) {
+        gameModeSelect.value = "local"; // fallback to local mode
+        const botDiff = document.getElementById("bot-difficulty-container");
+        if (botDiff) botDiff.style.display = "none";
+    }
+    
+    if (typeof socket !== 'undefined' && socket && socket.readyState === 1) {
+        socket.close();
+    }
+
+    // Restore state
+    board = JSON.parse(JSON.stringify(gameData.board));
+    turn = gameData.turn;
+    history = JSON.parse(JSON.stringify(gameData.history || []));
+    moveHistoryLog = JSON.parse(JSON.stringify(gameData.moveHistoryLog || []));
+    hasMoved = JSON.parse(JSON.stringify(gameData.hasMoved));
+    enPassantTarget = JSON.parse(JSON.stringify(gameData.enPassantTarget || null));
+    halfMoveClock = gameData.halfMoveClock || 0;
+    positionHistory = JSON.parse(JSON.stringify(gameData.positionHistory || {}));
+    whiteTime = gameData.whiteTime || 600;
+    blackTime = gameData.blackTime || 600;
+    opponentName = gameData.opponentName || "Unbekannt";
+    myColor = gameData.myColor || "white";
+    
+    selected = null;
+    lastMove = null;
+    premove = null;
+
+    if (typeof draw === 'function') draw();
+    if (typeof updateStatus === 'function') updateStatus();
+    if (typeof updateTimerUI === 'function') updateTimerUI();
+    
+    // Switch to game tab
+    if (typeof window.switchSidebarTab === "function") {
+        const gameBtn = document.querySelectorAll(".sidebar-tab-btn")[0];
+        if (gameBtn) window.switchSidebarTab("tab-game", gameBtn);
+    }
+    
+    window.showInAppNotification("Geladen", `Partie "${gameData.name}" geladen.`, "success");
+};
+
+window.deleteSavedGame = function(id) {
+    if (!confirm("Möchtest du diese Partie wirklich löschen?")) return;
+    let savedGames = JSON.parse(localStorage.getItem('saved_chess_games') || '[]');
+    savedGames = savedGames.filter(g => g.id !== id);
+    localStorage.setItem('saved_chess_games', JSON.stringify(savedGames));
+    window.renderSavedGamesList();
+};
+
+window.renderSavedGamesList = function() {
+    const listEl = document.getElementById('saved-games-list');
+    if (!listEl) return;
+    
+    let savedGames = JSON.parse(localStorage.getItem('saved_chess_games') || '[]');
+    if (savedGames.length === 0) {
+        listEl.innerHTML = `<div style="font-size: 0.85em; color: #aaa; text-align: center; padding: 10px;">Keine Partien gespeichert.</div>`;
+        return;
+    }
+    
+    listEl.innerHTML = savedGames.map(game => `
+        <div style="background: rgba(255,255,255,0.05); padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; flex-direction: column; gap: 3px; overflow: hidden;">
+                <span style="font-weight: bold; color: #3498db; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${game.name}">${game.name}</span>
+                <span style="font-size: 0.75em; color: #888;">${new Date(game.date).toLocaleString()} | Züge: ${game.history ? game.history.length : 0}</span>
+            </div>
+            <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                <button onclick="loadSavedGame('${game.id}')" class="glass-btn success" style="padding: 4px 8px; font-size: 0.8em; border-radius: 4px; border: none; cursor: pointer;">Laden</button>
+                <button onclick="deleteSavedGame('${game.id}')" class="glass-btn danger" style="padding: 4px 8px; font-size: 0.8em; border-radius: 4px; border: none; cursor: pointer;">X</button>
+            </div>
+        </div>
+    `).reverse().join('');
+};
+
+// Initialize list on load
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        window.renderSavedGamesList();
+    }, 1000);
+});
+window.renderSavedGamesList();

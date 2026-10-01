@@ -2,46 +2,95 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Helper functions for secure authentication and authorization
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email != null && request.auth.token.email.lower() == 'max.schule13@gmail.com') ||
+        (request.auth.token.admin == true)
+      );
+    }
+
     // 1. Spieler-Profile (Statistiken, Elo, XP, Themes)
     match /players/{playerId} {
+      // Profile sind zur Anzeige von Elo/Level/Avatar lesbar
       allow read: if true;
-      allow write: if true;
+
+      // 🔴 Schutz vor: role clientseitig setzen & Client darf Stats schreiben
+      // Initial-Erstellung: Nur der authentifizierte Benutzer für sein eigenes Dokument.
+      // Rolle MUSS 'user' sein. Initiale Stats müssen Standardwerte sein (keine Cheats bei Registrierung).
+      allow create: if isOwner(playerId)
+                    && request.resource.data.role == 'user'
+                    && request.resource.data.is_banned == false
+                    && (!('elo' in request.resource.data) || request.resource.data.elo <= 1200)
+                    && (!('wins' in request.resource.data) || request.resource.data.wins == 0)
+                    && (!('losses' in request.resource.data) || request.resource.data.losses == 0)
+                    && (!('xp' in request.resource.data) || request.resource.data.xp == 0)
+                    && (!('level' in request.resource.data) || request.resource.data.level == 1);
+
+      // 🔴 Schutz vor: setRole(uid, role) & Client darf fremde Dokumente schreiben & Client darf Stats schreiben
+      // Normale Benutzer dürfen NUR ihr eigenes Dokument updaten und DÜRFEN KEINE sensiblen Felder manipulieren!
+      // Geschützte Felder: role, is_banned, ban_reason, ip_ban, elo, wins, losses, xp, level, coins, email, ip_address
+      allow update: if isAdmin() || (
+        isOwner(playerId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'role', 'is_banned', 'ban_reason', 'ip_ban', 
+          'elo', 'wins', 'losses', 'xp', 'level', 'coins',
+          'email', 'ip_address'
+        ])
+      );
+
+      // Löschen nur für Administratoren
+      allow delete: if isAdmin();
     }
 
-    // 2. Globale Rangliste / Leaderboard
+    // 2. Private Benutzerdaten (z.B. E-Mail, Einstellungen, Sicherheitsdaten)
+    match /users_private/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // 3. Globale Rangliste / Leaderboard (Nur Server/Admin darf schreiben)
     match /leaderboard/{entryDocId} {
       allow read: if true;
-      allow write: if true;
+      allow write: if isAdmin();
     }
 
-    // 3. Bann-Listen (Gesperrte Benutzer & IPs)
+    // 4. Bann-Listen (Gesperrte Benutzer & IPs)
     match /bans/{banId} {
       allow read: if true;
-      allow write: if true;
+      allow write: if isAdmin();
     }
 
-    // 4. Spielhistorie & Snapshots
+    // 5. Spielhistorie & Snapshots (Nur Server/Admin schreibt autoritativ)
     match /games/{gameId} {
       allow read: if true;
-      allow write: if true;
+      allow write: if isAdmin();
     }
 
-    // 5. Chat-Nachrichten
+    // 6. Chat-Nachrichten
     match /messages/{messageId} {
       allow read: if true;
-      allow write: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
     }
 
-    // 6. Support-Tickets & Entbannungsanträge
+    // 7. Support-Tickets & Entbannungsanträge
     match /tickets/{ticketId} {
-      allow read: if true;
-      allow write: if true;
+      allow read: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow create: if true;
+      allow update, delete: if isAdmin();
     }
 
-    // Globaler Fallback für alle weiteren Dokumente
+    // Strenger globaler Fallback: Alle nicht explizit erlaubten Zugriffe verweigern
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }
-

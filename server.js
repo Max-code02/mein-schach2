@@ -1,4 +1,31 @@
 console.log("HELLO");
+// Global cycle-safe JSON.stringify protection
+(function() {
+    if (typeof JSON !== 'undefined' && !JSON.__safe_patched) {
+        const originalStringify = JSON.stringify;
+        JSON.stringify = function(value, replacer, space) {
+            try {
+                return originalStringify(value, replacer, space);
+            } catch (err) {
+                if (err instanceof TypeError && (String(err.message).includes('circular') || String(err.message).includes('Converting circular structure to JSON'))) {
+                    const seen = new WeakSet();
+                    return originalStringify(value, function(k, v) {
+                        if (typeof v === 'object' && v !== null) {
+                            if (seen.has(v)) return undefined;
+                            seen.add(v);
+                        }
+                        if (typeof replacer === 'function') {
+                            return replacer.call(this, k, v);
+                        }
+                        return v;
+                    }, space);
+                }
+                throw err;
+            }
+        };
+        JSON.__safe_patched = true;
+    }
+})();
 require('dotenv').config();
 const axios = require('axios');
 const path = require('path');
@@ -9,6 +36,8 @@ const fs = require('fs');
 const url = require('url');
 const WebSocket = require('ws');
 const { Chess } = require('chess.js');
+const crypto = require('crypto');
+const { renderAdminLoginPage, renderAdminDashboard } = require('./adminDashboard');
 let bannedIPs = new Set();
 let bannedPlayers = new Set();
 const ADMIN_PASSWORDS_LIST = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi', '222'];
@@ -227,6 +256,250 @@ async function sendBanEmail(playerName, reason, ip) {
     }
 }
 
+function renderBannedPage(clientIP, reason) {
+    const safeIP = String(clientIP || 'Unbekannt').replace(/[<>&"']/g, '');
+    const safeReason = String(reason || 'Verstoß gegen die Community-Richtlinien / Admin-Sperre').replace(/[<>&"']/g, '');
+    return `<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zugriff verweigert – Schach-Server</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: #090a0f;
+            color: #f1f2f6;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .ban-container {
+            background: #141721;
+            border: 2px solid #e74c3c;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(231, 76, 60, 0.35);
+            max-width: 520px;
+            width: 100%;
+            padding: 32px 26px;
+            text-align: center;
+        }
+        .ban-icon {
+            font-size: 3.6rem;
+            margin-bottom: 12px;
+            line-height: 1;
+        }
+        h1 {
+            color: #ff4d4d;
+            font-size: 1.8rem;
+            margin-bottom: 8px;
+            font-weight: 800;
+        }
+        .badge {
+            display: inline-block;
+            background: rgba(231, 76, 60, 0.2);
+            color: #ff6b6b;
+            border: 1px solid rgba(231, 76, 60, 0.5);
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 16px;
+        }
+        p.desc {
+            color: #bdc3c7;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            margin-bottom: 20px;
+        }
+        .info-card {
+            background: rgba(0, 0, 0, 0.4);
+            border-left: 4px solid #e74c3c;
+            border-radius: 6px;
+            padding: 12px 16px;
+            text-align: left;
+            margin-bottom: 22px;
+        }
+        .info-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: #888;
+            margin-bottom: 4px;
+            letter-spacing: 0.5px;
+        }
+        .info-value {
+            color: #ff9999;
+            font-size: 0.95rem;
+            font-weight: 600;
+            word-break: break-word;
+        }
+        .ticket-section {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(231, 76, 60, 0.3);
+            border-radius: 10px;
+            padding: 18px;
+            text-align: left;
+            margin-bottom: 20px;
+        }
+        .ticket-header {
+            font-size: 0.95rem;
+            font-weight: bold;
+            color: #f1c40f;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .ticket-email {
+            font-size: 0.75rem;
+            color: #3498db;
+            font-weight: normal;
+        }
+        .ticket-section p {
+            font-size: 0.82rem;
+            color: #aaa;
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        input, textarea {
+            width: 100%;
+            background: #1c202d;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            color: #fff;
+            padding: 10px 12px;
+            font-size: 0.9rem;
+            font-family: inherit;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #e74c3c;
+        }
+        button.btn-send {
+            background: #27ae60;
+            color: #fff;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button.btn-send:hover {
+            background: #219653;
+        }
+        #status-feedback {
+            margin-top: 10px;
+            font-size: 0.85rem;
+            text-align: center;
+            min-height: 18px;
+        }
+        .footer-info {
+            font-size: 0.75rem;
+            color: #666;
+            margin-top: 14px;
+        }
+        .footer-info a {
+            color: #3498db;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="ban-container">
+        <div class="ban-icon">⛔</div>
+        <h1>Zugriff verweigert</h1>
+        <div class="badge">Permanent gesperrt</div>
+        <p class="desc">
+            Dein Zugriff auf die Schach-Plattform wurde durch das Sicherheitssystem oder die Server-Administration gesperrt.
+        </p>
+
+        <div class="info-card">
+            <div class="info-label">Betroffene IP-Adresse</div>
+            <div class="info-value">${safeIP}</div>
+            <div class="info-label" style="margin-top: 8px;">Hinterlegter Sperr-Grund</div>
+            <div class="info-value">${safeReason}</div>
+        </div>
+
+        <div class="ticket-section">
+            <div class="ticket-header">
+                <span>📩 Support-Ticket / Entbannungsantrag</span>
+                <span class="ticket-email">schachlivesupport.jailer914@slmail.me</span>
+            </div>
+            <p>
+                Falls du glaubst, dass die Sperrung ein Missverständnis ist, kannst du hier direkt einen Entbannungsantrag einreichen.
+            </p>
+            <div class="form-group">
+                <input type="text" id="ticket-user" placeholder="Dein Spielername oder E-Mail...">
+                <textarea id="ticket-text" rows="3" placeholder="Beschreibe deinen Fall oder Entbannungsantrag..."></textarea>
+                <button type="button" class="btn-send" onclick="sendTicket()">✉️ Antrag an Support absenden</button>
+            </div>
+            <div id="status-feedback"></div>
+        </div>
+
+        <div class="footer-info">
+            Support-Kontakt: <a href="mailto:schachlivesupport.jailer914@slmail.me">schachlivesupport.jailer914@slmail.me</a>
+        </div>
+    </div>
+
+    <script>
+        function sendTicket() {
+            var contact = document.getElementById('ticket-user').value.trim();
+            var text = document.getElementById('ticket-text').value.trim();
+            var feedback = document.getElementById('status-feedback');
+
+            if (!text) {
+                feedback.style.color = '#e74c3c';
+                feedback.innerText = '❌ Bitte gib eine Nachricht oder Begründung ein.';
+                return;
+            }
+
+            feedback.style.color = '#f39c12';
+            feedback.innerText = '⏳ Sende Support-Ticket...';
+
+            fetch('/api/support-ticket', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contact: contact || 'Gesperrter Spieler',
+                    user: contact || 'Gesperrter Spieler',
+                    text: text,
+                    banReason: '${safeReason}'
+                })
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data && data.success) {
+                    feedback.style.color = '#2ecc71';
+                    feedback.innerHTML = '✅ Antrag übermittelt! Ticket-ID: <strong>' + (data.ticketId || 'OK') + '</strong>. Unser Support-Team prüft deine Anfrage.';
+                    document.getElementById('ticket-text').value = '';
+                } else {
+                    throw new Error(data && data.message ? data.message : 'Senden fehlgeschlagen');
+                }
+            })
+            .catch(function(err) {
+                feedback.style.color = '#e74c3c';
+                feedback.innerText = '❌ Fehler beim Senden. Bitte wende dich per E-Mail an schachlivesupport.jailer914@slmail.me';
+            });
+        }
+    </script>
+</body>
+</html>`;
+}
+
 // Emergency Unban & Security Middleware
 app.use((req, res, next) => {
     const rawIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
@@ -276,7 +549,261 @@ app.use((req, res, next) => {
         return res.redirect(`https://${req.hostname}${req.url}`);
     }
 
+    // Server-Side Ban Check: Intercept all HTTP requests from banned IPs
+    if (bannedIPs.has(clientIP)) {
+        if (req.path === '/api/support-ticket') {
+            return next(); // Allow banned users to submit support tickets
+        }
+        return res.status(403).send(renderBannedPage(clientIP, "Deine IP-Adresse wurde auf diesem Server permanent gesperrt."));
+    }
+
     next();
+});
+
+// Dedicated server-side banned page endpoint
+app.get('/banned', (req, res) => {
+    const rawIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+    const clientIP = String(rawIP).split(',')[0].replace(/^::ffff:/, '').trim();
+    const reason = req.query.reason || 'Zugriff verweigert / Sperrung durch Administration';
+    res.status(403).send(renderBannedPage(clientIP, reason));
+});
+
+// ==========================================
+// 🛡️ DEDICATED HIGH-SECURITY ADMIN PORTAL (/admin)
+// ==========================================
+const activeAdminSessions = new Map();
+
+async function verifyAdminAuth(req) {
+    // 1. Check admin_session cookie
+    const cookieHeader = req.headers.cookie || '';
+    const matchCookie = cookieHeader.match(/(?:^|;\s*)admin_session=([^;]+)/);
+    const sessionToken = matchCookie ? matchCookie[1] : null;
+
+    if (sessionToken && activeAdminSessions.has(sessionToken)) {
+        const session = activeAdminSessions.get(sessionToken);
+        if (Date.now() < session.expiresAt) {
+            return { authorized: true, adminName: session.adminName, email: session.email, method: 'session' };
+        } else {
+            activeAdminSessions.delete(sessionToken);
+        }
+    }
+
+    // 2. Check password via query or custom header or body
+    const passCandidate = req.query.pass || req.headers['x-admin-pass'] || req.headers['x-admin-key'] || req.body?.password;
+    if (passCandidate && ADMIN_PASSWORDS_LIST.includes(String(passCandidate).trim())) {
+        return { authorized: true, adminName: 'Max (Master-Admin)', email: 'max.schule13@gmail.com', method: 'password' };
+    }
+
+    // 3. Check Authorization Bearer or token
+    const authHeader = req.headers.authorization || '';
+    let token = '';
+    if (authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7).trim();
+    } else if (req.headers['x-admin-token']) {
+        token = req.headers['x-admin-token'].trim();
+    } else if (req.query.token) {
+        token = String(req.query.token).trim();
+    }
+
+    if (token) {
+        if (activeAdminSessions.has(token)) {
+            const s = activeAdminSessions.get(token);
+            if (Date.now() < s.expiresAt) {
+                return { authorized: true, adminName: s.adminName, email: s.email, method: 'session' };
+            }
+        }
+
+        try {
+            if (admin && admin.auth) {
+                const decodedToken = await admin.auth().verifyIdToken(token);
+                if (decodedToken) {
+                    const isOwnerEmail = decodedToken.email && decodedToken.email.toLowerCase() === 'max.schule13@gmail.com';
+                    let isDbAdmin = false;
+                    if (firestoreDb && decodedToken.uid) {
+                        try {
+                            const pSnap = await firestoreDb.collection('players').doc(decodedToken.uid).get();
+                            if (pSnap.exists && pSnap.data()?.role === 'admin') isDbAdmin = true;
+                        } catch(e) {}
+                    }
+                    if (isOwnerEmail || isDbAdmin) {
+                        return { 
+                            authorized: true, 
+                            adminName: decodedToken.name || decodedToken.email?.split('@')[0] || 'Admin', 
+                            email: decodedToken.email || '', 
+                            uid: decodedToken.uid, 
+                            method: 'firebase' 
+                        };
+                    }
+                }
+            }
+        } catch (e) {}
+    }
+
+    return { authorized: false };
+}
+
+function collectAdminDashboardData() {
+    const allUsers = [];
+    const seenNames = new Set();
+
+    if (wss && wss.clients) {
+        wss.clients.forEach(c => {
+            if (c.playerName) {
+                seenNames.add(c.playerName.toLowerCase());
+                const uData = (userDB && userDB[c.playerName]) || {};
+                allUsers.push({
+                    id: c.playerName,
+                    username: c.playerName,
+                    role: uData.role || (isUserAdmin(c.playerName) ? 'admin' : 'user'),
+                    elo: uData.elo || 1200,
+                    wins: uData.wins || 0,
+                    losses: uData.losses || 0,
+                    is_banned: !!(bannedPlayers.has(c.playerName.toLowerCase()) || (uData && (uData.is_banned || uData.ip_ban))),
+                    ban_reason: (uData && uData.ban_reason) || (bannedPlayers.has(c.playerName.toLowerCase()) ? 'Admin-Sperre' : null),
+                    is_online: true,
+                    ip_address: c.clientIP || uData.ip_address || '127.0.0.1'
+                });
+            }
+        });
+    }
+
+    if (userDB) {
+        for (const uname in userDB) {
+            if (!seenNames.has(uname.toLowerCase())) {
+                const uData = userDB[uname] || {};
+                allUsers.push({
+                    id: uname,
+                    username: uname,
+                    role: uData.role || (isUserAdmin(uname) ? 'admin' : 'user'),
+                    elo: uData.elo || 1200,
+                    wins: uData.wins || 0,
+                    losses: uData.losses || 0,
+                    is_banned: !!(bannedPlayers.has(uname.toLowerCase()) || (uData && (uData.is_banned || uData.ip_ban))),
+                    ban_reason: (uData && uData.ban_reason) || (bannedPlayers.has(uname.toLowerCase()) ? 'Admin-Sperre' : null),
+                    is_online: false,
+                    ip_address: uData.ip_address || 'Unbekannt'
+                });
+            }
+        }
+    }
+
+    bannedPlayers.forEach(bannedName => {
+        if (!seenNames.has(bannedName.toLowerCase()) && !allUsers.some(u => u.username.toLowerCase() === bannedName.toLowerCase())) {
+            allUsers.push({
+                id: bannedName,
+                username: bannedName,
+                role: 'user',
+                elo: 1200,
+                wins: 0,
+                losses: 0,
+                is_banned: true,
+                ban_reason: 'Permanent gesperrt',
+                is_online: false,
+                ip_address: 'Unbekannt'
+            });
+        }
+    });
+
+    const onlineClientsCount = wss && wss.clients ? Array.from(wss.clients).filter(c => c.readyState === 1).length : 0;
+    const activeRoomsCount = typeof rooms !== 'undefined' && rooms ? Object.keys(rooms).length : 0;
+
+    const stats = {
+        onlineCount: onlineClientsCount,
+        activeGames: activeRoomsCount,
+        totalUsers: allUsers.length,
+        totalBans: bannedPlayers.size + bannedIPs.size
+    };
+
+    return {
+        stats,
+        users: allUsers,
+        tickets: globalSupportTickets,
+        bannedIPs: Array.from(bannedIPs),
+        bannedPlayers: Array.from(bannedPlayers)
+    };
+}
+
+// 1. Admin Authentication API
+app.post('/admin/api/login', async (req, res) => {
+    const { password, firebaseToken } = req.body || {};
+    let authorized = false;
+    let adminName = 'Admin';
+    let email = '';
+
+    if (password && ADMIN_PASSWORDS_LIST.includes(String(password).trim())) {
+        authorized = true;
+        adminName = 'Max (Master-Admin)';
+        email = 'max.schule13@gmail.com';
+    } else if (firebaseToken && admin && admin.auth) {
+        try {
+            const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
+            if (decodedToken) {
+                const isOwnerEmail = decodedToken.email && decodedToken.email.toLowerCase() === 'max.schule13@gmail.com';
+                let isDbAdmin = false;
+                if (firestoreDb && decodedToken.uid) {
+                    try {
+                        const pSnap = await firestoreDb.collection('players').doc(decodedToken.uid).get();
+                        if (pSnap.exists && pSnap.data()?.role === 'admin') isDbAdmin = true;
+                    } catch(e) {}
+                }
+                if (isOwnerEmail || isDbAdmin) {
+                    authorized = true;
+                    adminName = decodedToken.name || decodedToken.email?.split('@')[0] || 'Admin';
+                    email = decodedToken.email || '';
+                }
+            }
+        } catch (e) {
+            console.warn("Admin login token error:", e.message);
+        }
+    }
+
+    if (!authorized) {
+        return res.status(403).json({
+            success: false,
+            message: 'Zugriff verweigert: Dein Konto besitzt keine Administratorrechte!'
+        });
+    }
+
+    const sessionToken = crypto.randomBytes(32).toString('hex');
+    activeAdminSessions.set(sessionToken, {
+        adminName,
+        email,
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000
+    });
+
+    res.setHeader('Set-Cookie', `admin_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`);
+    return res.json({ success: true, redirect: '/admin' });
+});
+
+// 2. Admin Logout
+app.get(['/admin/logout', '/api/admin/logout'], (req, res) => {
+    const cookieHeader = req.headers.cookie || '';
+    const matchCookie = cookieHeader.match(/(?:^|;\s*)admin_session=([^;]+)/);
+    if (matchCookie) {
+        activeAdminSessions.delete(matchCookie[1]);
+    }
+    res.setHeader('Set-Cookie', 'admin_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+    res.redirect('/');
+});
+
+// 3. GET /admin - Strictly Protected Route
+app.get(['/admin', '/admin/'], async (req, res) => {
+    const auth = await verifyAdminAuth(req);
+    if (!auth.authorized) {
+        return res.send(renderAdminLoginPage(req.query.err || ''));
+    }
+    const data = collectAdminDashboardData();
+    res.send(renderAdminDashboard(auth, data.stats, data.users, data.tickets, data.bannedIPs, data.bannedPlayers));
+});
+
+// 4. GET /admin/api/data
+app.get('/admin/api/data', async (req, res) => {
+    const auth = await verifyAdminAuth(req);
+    if (!auth.authorized) {
+        return res.status(403).json({ success: false, message: 'Zugriff verweigert' });
+    }
+    const data = collectAdminDashboardData();
+    res.json({ success: true, ...data });
 });
 
 // Serve Static Frontend Files & Root Route (1. Root-Route / & 2. Statische Dateien)
@@ -646,6 +1173,22 @@ function broadcastAdminUsersUpdate() {
     }
 }
 
+// ==========================================
+// 🔒 ADMIN-ONLY REST API MIDDLEWARE & ROUTES
+// ==========================================
+app.use('/api/admin', async (req, res, next) => {
+    if (req.path === '/login' || req.path === '/logout') return next();
+    const auth = await verifyAdminAuth(req);
+    if (!auth.authorized) {
+        return res.status(403).json({
+            success: false,
+            message: '⛔ Zugriff verweigert: Nur autorisierte Administratoren dürfen diesen API-Endpunkt aufrufen.'
+        });
+    }
+    req.adminAuth = auth;
+    next();
+});
+
 app.get('/api/admin/users', (req, res) => {
     const allUsers = [];
     const seenNames = new Set();
@@ -846,6 +1389,85 @@ app.post('/api/admin/reply-ticket', async (req, res) => {
     broadcastAdminUsersUpdate();
 
     return res.json({ success: true, ticket });
+});
+
+app.post('/api/admin/set-role', async (req, res) => {
+    const { target, role } = req.body || {};
+    if (!target || !['admin', 'user', 'moderator'].includes(role)) {
+        return res.status(400).json({ success: false, message: 'Ungültiger Benutzer oder Rolle' });
+    }
+    if (userDB && userDB[target]) {
+        userDB[target].role = role;
+    }
+    if (profiles && profiles[target]) {
+        profiles[target].role = role;
+    }
+    if (wss && wss.clients) {
+        wss.clients.forEach(c => {
+            if (c.playerName && c.playerName.toLowerCase() === target.toLowerCase()) {
+                c.role = role;
+                c.isAdmin = (role === 'admin');
+                c.send(JSON.stringify({
+                    type: 'role_updated',
+                    role: role,
+                    text: `Deine Rolle wurde von der Administration auf '${role}' gesetzt.`
+                }));
+            }
+        });
+    }
+    await saveAll(target);
+    broadcastAdminUsersUpdate();
+    return res.json({ success: true, message: `Rolle von '${target}' auf '${role}' gesetzt!` });
+});
+
+app.post('/api/admin/kick-user', (req, res) => {
+    const { target } = req.body || {};
+    if (!target) return res.status(400).json({ success: false, message: 'Zielname erforderlich' });
+    let kicked = false;
+    if (wss && wss.clients) {
+        wss.clients.forEach(c => {
+            if (c.playerName && c.playerName.toLowerCase() === target.toLowerCase()) {
+                c.send(JSON.stringify({ type: 'system_alert', message: 'Du wurdest von der Administration gekickt.' }));
+                c.terminate();
+                kicked = true;
+            }
+        });
+    }
+    broadcastAdminUsersUpdate();
+    return res.json({ success: true, message: kicked ? `Spieler '${target}' gekickt!` : `Spieler '${target}' war nicht online.` });
+});
+
+app.post('/api/admin/broadcast', (req, res) => {
+    const { title, message } = req.body || {};
+    if (!message) return res.status(400).json({ success: false, message: 'Nachricht erforderlich' });
+    broadcastInAppNotification({
+        title: title || 'Admin-Mitteilung',
+        message: message,
+        level: 'warning'
+    });
+    return res.json({ success: true, message: 'Globale Nachricht gesendet!' });
+});
+
+app.post('/api/admin/clear-chat', (req, res) => {
+    if (wss && wss.clients) {
+        wss.clients.forEach(c => {
+            if (c.readyState === 1) {
+                c.send(JSON.stringify({ type: 'chat', text: '🧹 System: Der Chat wurde vom Administrator geleert.', system: true }));
+            }
+        });
+    }
+    return res.json({ success: true, message: 'Chat erfolgreich geleert!' });
+});
+
+app.post('/api/admin/backup', (req, res) => {
+    try {
+        if (typeof runBackup === 'function') {
+            runBackup();
+        }
+        return res.json({ success: true, message: 'Backup erfolgreich ausgeführt!' });
+    } catch (e) {
+        return res.status(500).json({ success: false, message: 'Backup-Fehler: ' + e.message });
+    }
 });
 
 app.post('/analyse', async (req, res) => {
@@ -1603,20 +2225,26 @@ if (fs.existsSync(ADMIN_LOG_FILE)) {
 function isUserAdmin(target) {
     if (!target) return false;
     const str = String(target).toLowerCase().trim();
-    const ADMIN_LIST = ['max', '222', 'admin', 'max.schule13@gmail.com', 'owner', 'eigentümer'];
-    if (ADMIN_LIST.includes(str)) return true;
 
-    if (userDB) {
-        if (userDB[target] && (userDB[target].role === 'admin' || userDB[target].is_owner || userDB[target].role === 'moderator')) {
-            return true;
-        }
-        for (const k in userDB) {
-            const u = userDB[k];
-            if (u && (u.username?.toLowerCase() === str || u.email?.toLowerCase() === str || u.uid === target)) {
-                if (u.role === 'admin' || u.is_owner) return true;
+    // 1. Check if any active WebSocket client for this target is authenticated as admin
+    if (wss && wss.clients) {
+        for (const client of wss.clients) {
+            if (client.readyState === 1 && client.isAdmin) {
+                if (client.playerName?.toLowerCase() === str || client.uid === target || client.userEmail?.toLowerCase() === str) {
+                    return true;
+                }
             }
         }
     }
+
+    // 2. Check userDB: ONLY if the user was verified with the admin email or has verified role 'admin'
+    if (userDB && userDB[target]) {
+        const u = userDB[target];
+        if (u.role === 'admin' && (u.email?.toLowerCase() === 'max.schule13@gmail.com' || u.is_owner)) {
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -1830,15 +2458,22 @@ async function triggerUltraBan(targetOrReason, possibleReason = null, ws = null)
         const nameMatch = c.playerName && c.playerName.toLowerCase() === cleanTargetLower;
         const ipMatch = c.clientIP && c.clientIP === foundIP;
         if (nameMatch || ipMatch) {
-            c.send(JSON.stringify({
-                type: 'account_banned_overlay',
-                reason: reason
-            }));
-            c.send(JSON.stringify({ 
-                type: 'system_alert', 
-                message: `🚫 DEIN ACCOUNT UND DEINE IP WURDEN PERMANENT GESPERRT.\nGrund: ${reason}` 
-            }));
-            setTimeout(() => { c.terminate(); }, 400);
+            try {
+                c.send(JSON.stringify({
+                    type: 'banned_redirect',
+                    url: '/banned?reason=' + encodeURIComponent(reason),
+                    reason: reason
+                }));
+                c.send(JSON.stringify({
+                    type: 'account_banned_overlay',
+                    reason: reason
+                }));
+                c.send(JSON.stringify({ 
+                    type: 'system_alert', 
+                    message: `🚫 DEIN ACCOUNT UND DEINE IP WURDEN PERMANENT GESPERRT.\nGrund: ${reason}` 
+                }));
+            } catch (e) {}
+            setTimeout(() => { try { c.terminate(); } catch (e) {} }, 400);
         }
     });
 }
@@ -2252,11 +2887,27 @@ async function saveAll(specificPlayerName = null) {
             
             // 🔥 Firebase Cloud Firestore Sync for Players & Leaderboard!
             if (typeof firestoreDb !== 'undefined' && firestoreDb) {
+                const safeFirestorePlayer = {
+                    uid: u.uid || '',
+                    username: uname,
+                    role: u.role || 'user',
+                    elo: u.elo || 1200,
+                    wins: u.wins || 0,
+                    losses: u.losses || 0,
+                    level: u.level || 1,
+                    xp: u.xp || 0,
+                    coins: u.coins || 1000,
+                    avatar: u.avatar || '',
+                    selectedTheme: u.selectedTheme || 'classic',
+                    is_banned: !!u.is_banned,
+                    updatedAt: new Date().toISOString()
+                };
+
                 if (u.uid) {
-                    firestoreDb.collection('players').doc(u.uid).set({ ...u, username: uname }, { merge: true })
+                    firestoreDb.collection('players').doc(u.uid).set(safeFirestorePlayer, { merge: true })
                         .catch(e => console.error('Firestore player uid sync err:', e.message));
                 }
-                firestoreDb.collection('players').doc(uname).set(u, { merge: true })
+                firestoreDb.collection('players').doc(uname).set(safeFirestorePlayer, { merge: true })
                     .catch(e => console.error('Firestore player save err:', e.message));
 
                 if (!uname.match(/^[0-9a-zA-Z]{28}$/)) {
@@ -2312,9 +2963,46 @@ function broadcast(msgObj) {
     });
 }
 
+// 🛡️ WebSocket Connection Throttling & DoS Prevention
+const ipConnectionCount = new Map();
+const ipConnectionTimestamps = new Map();
+const MAX_CONCURRENT_WS_PER_IP = 10;
+const MAX_HANDSHAKES_PER_MINUTE = 35;
+
 wss.on('connection', function(ws, req) {
-    const detectedIP = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
+    const rawDetectedIP = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || '127.0.0.1';
+    const detectedIP = String(rawDetectedIP).replace(/^::ffff:/, '').trim();
     ws.clientIP = detectedIP;
+
+    if (!isLoopbackOrLocalIP(detectedIP)) {
+        const now = Date.now();
+        let timestamps = ipConnectionTimestamps.get(detectedIP) || [];
+        timestamps = timestamps.filter(t => now - t < 60000);
+        if (timestamps.length >= MAX_HANDSHAKES_PER_MINUTE) {
+            console.warn(`⚠️ Verbindungs-Rate-Limit überschritten für IP: ${detectedIP}`);
+            try { ws.close(1008, "Verbindungs-Rate-Limit überschritten. Bitte kurz warten."); } catch(e) {}
+            return ws.terminate();
+        }
+        timestamps.push(now);
+        ipConnectionTimestamps.set(detectedIP, timestamps);
+
+        const currentCount = ipConnectionCount.get(detectedIP) || 0;
+        if (currentCount >= MAX_CONCURRENT_WS_PER_IP) {
+            console.warn(`⚠️ Zu viele parallele Verbindungen (${currentCount}) von IP: ${detectedIP}`);
+            try { ws.close(1008, "Zu viele gleichzeitige Verbindungen von dieser IP."); } catch(e) {}
+            return ws.terminate();
+        }
+        ipConnectionCount.set(detectedIP, currentCount + 1);
+
+        ws.on('close', () => {
+            const count = ipConnectionCount.get(detectedIP) || 1;
+            if (count <= 1) {
+                ipConnectionCount.delete(detectedIP);
+            } else {
+                ipConnectionCount.set(detectedIP, count - 1);
+            }
+        });
+    }
     
     getLocationFromIP(detectedIP).then(locationData => {
         ws.location = locationData; 
@@ -2376,6 +3064,11 @@ wss.on('connection', function(ws, req) {
             if (data.type === 'login_attempt' && isUserAdmin(data.playerName)) {
                 // allow it to pass so they can check password and become admin
             } else {
+                ws.send(JSON.stringify({
+                    type: 'banned_redirect',
+                    url: '/banned?reason=' + encodeURIComponent('Deine IP ist permanent gesperrt.'),
+                    reason: 'Deine IP ist permanent gesperrt.'
+                }));
                 sendSystemAlert(ws, '❌ ZUGRIFF VERWEIGERT: Deine IP ist permanent gebannt!');
                 setTimeout(() => ws.terminate(), 100);
                 return;
@@ -2498,9 +3191,43 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'login_attempt') {
-                let { playerName, password, clientIP, uid } = data;
-                if (!playerName || !password) {
-                    return ws.send(JSON.stringify({ type: 'login_error', text: 'Bitte Name & Passwort eingeben!' }));
+                let { playerName, password, clientIP, uid, firebaseToken } = data;
+                let isFirebaseVerified = false;
+                let verifiedEmail = null;
+                let verifiedUid = null;
+
+                // 1. Authenticate via Firebase ID Token if provided
+                if (firebaseToken) {
+                    try {
+                        const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
+                        if (decodedToken && decodedToken.uid) {
+                            isFirebaseVerified = true;
+                            verifiedUid = decodedToken.uid;
+                            verifiedEmail = decodedToken.email || null;
+                            uid = verifiedUid;
+                            console.log(`🔐 Firebase Token erfolgreich verifiziert: UID=${verifiedUid}, Email=${verifiedEmail}`);
+                        }
+                    } catch (tokenErr) {
+                        console.warn("⚠️ Firebase ID-Token Verifikation fehlgeschlagen:", tokenErr.message);
+                        return ws.send(JSON.stringify({
+                            type: 'login_error',
+                            text: 'Firebase-Authentifizierung fehlgeschlagen: Ungültiger oder abgelaufener Token!'
+                        }));
+                    }
+                } else if (password === 'firebase-auth-token') {
+                    // Strictly reject any spoofed / dummy token strings!
+                    return ws.send(JSON.stringify({
+                        type: 'login_error',
+                        text: 'Sicherheitsfehler: Der String "firebase-auth-token" ist kein gültiger Token. Anmeldung verweigert.'
+                    }));
+                }
+
+                if (!playerName && !verifiedUid) {
+                    return ws.send(JSON.stringify({ type: 'login_error', text: 'Bitte Benutzername angeben!' }));
+                }
+
+                if (!isFirebaseVerified && !password) {
+                    return ws.send(JSON.stringify({ type: 'login_error', text: 'Bitte Passwort eingeben!' }));
                 }
 
                 let user = null;
@@ -2508,13 +3235,13 @@ wss.on('connection', function(ws, req) {
                     const existingName = Object.keys(userDB).find(name => userDB[name] && userDB[name].uid === uid);
                     if (existingName) {
                         user = userDB[existingName];
-                        // If incoming playerName is raw UID (e.g. 28 chars alphanumeric), but existingName is custom name (e.g. "Max"), keep custom name!
-                        const isPlayerNameRawUid = (playerName === uid || (playerName.length >= 20 && !playerName.includes(' ')));
-                        const isExistingNameReal = (existingName !== uid && (existingName.length < 20 || existingName.includes(' ') || existingName.toLowerCase() === 'max'));
+                        // If incoming playerName is raw UID, but existingName is custom name, keep custom name!
+                        const isPlayerNameRawUid = (playerName === uid || (playerName && playerName.length >= 20 && !playerName.includes(' ')));
+                        const isExistingNameReal = (existingName !== uid && (existingName.length < 20 || existingName.includes(' ')));
 
                         if (isPlayerNameRawUid && isExistingNameReal) {
                             playerName = existingName;
-                        } else if (existingName !== playerName) {
+                        } else if (existingName !== playerName && playerName) {
                             delete userDB[existingName];
                             delete profiles[existingName];
                             delete leaderboard[existingName];
@@ -2523,41 +3250,90 @@ wss.on('connection', function(ws, req) {
                         }
                     }
                 }
-                if (!user) {
+                if (!user && playerName) {
                     user = userDB[playerName];
+                }
+
+                if (!playerName) {
+                    playerName = user ? user.username : (verifiedEmail ? verifiedEmail.split('@')[0] : "Spieler_" + String(uid || Date.now()).substring(0, 5));
                 }
 
                 const pLower = (playerName || "").toLowerCase();
                 const connIP = clientIP || ws.clientIP;
                 const isBannedUser = bannedPlayers.has(pLower) || (connIP && bannedIPs.has(connIP)) || (user && (user.is_banned || user.ip_ban));
 
-                if (isBannedUser && !isUserAdmin(playerName)) {
+                // 2. Strict Server-Side Admin Decision
+                let isActualAdmin = false;
+                // A. Firebase verified email is 'max.schule13@gmail.com'
+                if (isFirebaseVerified && verifiedEmail && verifiedEmail.toLowerCase() === 'max.schule13@gmail.com') {
+                    isActualAdmin = true;
+                }
+                // B. Verified user previously assigned role 'admin' in userDB
+                if (isFirebaseVerified && verifiedUid) {
+                    const existingU = Object.values(userDB).find(u => u && u.uid === verifiedUid);
+                    if (existingU && existingU.role === 'admin') {
+                        isActualAdmin = true;
+                    }
+                }
+                // C. Traditional password check with admin password for name 'Max'
+                if (!isFirebaseVerified && password && ADMIN_PASSWORDS_LIST.includes(password) && (pLower === 'max' || pLower === 'admin')) {
+                    isActualAdmin = true;
+                }
+
+                if (isBannedUser && !isActualAdmin) {
                     const banReason = (user && user.ban_reason) || "Account gesperrt von der Administration";
                     return ws.send(JSON.stringify({
                         type: 'login_error',
                         banned: true,
+                        redirect: '/banned?reason=' + encodeURIComponent(banReason),
                         reason: banReason,
                         text: `Dieser Account ist permanent gesperrt!\nHinterlegter Grund: ${banReason}`
                     }));
                 }
 
+                // Prevent impostors from claiming the admin name "Max"
+                if (pLower === 'max' && !isActualAdmin) {
+                    return ws.send(JSON.stringify({
+                        type: 'login_error',
+                        text: 'Der Name "Max" ist für die Administration reserviert. Bitte wähle einen anderen Namen oder logge dich mit deinem Admin-Konto ein!'
+                    }));
+                }
+
                 if (user) {
-                    if (password !== 'firebase-auth-token' && user.password && user.password !== password) {
-                        return ws.send(JSON.stringify({ type: 'login_error', text: 'Falsches Passwort für diesen Namen!' }));
+                    // 🔒 Strict UID & Identity Verification
+                    if (user.uid) {
+                        // Account is linked to Firebase: MUST have valid token matching this exact UID
+                        if (!isFirebaseVerified || verifiedUid !== user.uid) {
+                            return ws.send(JSON.stringify({ 
+                                type: 'login_error', 
+                                text: 'Dieser Account ist mit Firebase geschützt. Bitte melde dich über dein verifiziertes Firebase/Google-Konto an!' 
+                            }));
+                        }
+                    } else {
+                        // Legacy password account: password must be provided and match
+                        if (!password || user.password !== password) {
+                            return ws.send(JSON.stringify({ type: 'login_error', text: 'Falsches Passwort für diesen Spielernamen!' }));
+                        }
                     }
                     user.last_login = new Date();
-                    if (password !== 'firebase-auth-token') user.password = password;
-                    if (uid) user.uid = uid;
+                    if (isFirebaseVerified && verifiedUid) user.uid = verifiedUid;
+                    if (verifiedEmail) user.email = verifiedEmail;
                     user.username = playerName;
                     if (user.coins === undefined) user.coins = 1000;
                 } else {
+                    // New account creation
+                    if (!isFirebaseVerified && !password) {
+                        return ws.send(JSON.stringify({ type: 'login_error', text: 'Bitte ein Passwort eingeben!' }));
+                    }
                     user = {
                         username: playerName,
-                        uid: uid || "",
-                        role: 'user',
-                        password: password === 'firebase-auth-token' ? '' : password,
+                        uid: isFirebaseVerified ? (verifiedUid || '') : '',
+                        email: verifiedEmail || "",
+                        role: isActualAdmin ? 'admin' : 'user',
+                        password: isFirebaseVerified ? '' : (password || ''),
                         elo: 1200,
                         wins: 0,
+                        losses: 0,
                         xp: 0,
                         level: 1,
                         coins: 1000,
@@ -2567,29 +3343,27 @@ wss.on('connection', function(ws, req) {
                     userDB[playerName] = user;
                 }
 
-                if (playerName.toLowerCase() === 'max' || (data.email && data.email.toLowerCase() === 'max.schule13@gmail.com')) {
-                    user.role = 'admin';
-                    ws.isAdmin = true;
-                    ws.is_owner = true;
-                }
-                
-                if (isUserAdmin(playerName) || user.role === 'admin' || user.role === 'moderator') {
-                    ws.isAdmin = true;
-                }
+                // Set server-authoritative role
+                ws.isAdmin = isActualAdmin;
+                ws.is_owner = isActualAdmin;
+                ws.role = isActualAdmin ? 'admin' : (user.role === 'admin' && isActualAdmin ? 'admin' : 'user');
+                user.role = ws.role;
 
                 saveAll(playerName);
 
                 ws.playerName = playerName;
                 if (uid) ws.uid = uid;
-                if (data.email) ws.userEmail = data.email;
+                if (verifiedEmail) ws.userEmail = verifiedEmail;
                 profiles[playerName] = user; 
                 
                 sendLeaderboardUpdate();
                 
                 ws.send(JSON.stringify({ 
-                    type: 'login_success', 
+                    type: isActualAdmin ? 'admin_login_success' : 'login_success', 
                     name: playerName, 
-                    role: user.role || 'user',
+                    playerName: playerName,
+                    role: ws.role,
+                    isAdmin: isActualAdmin,
                     elo: user.elo || 1200,
                     wins: user.wins || 0,
                     losses: user.losses || 0,
@@ -2600,7 +3374,7 @@ wss.on('connection', function(ws, req) {
                     piece_theme: user.piece_theme || 'classic',
                     achievements: user.achievements || []
                 }));
-                console.log(`✅ Login & Profil bereit: ${playerName}`);
+                console.log(`✅ Login & Profil bereit: ${playerName} (Rolle: ${ws.role}, Admin: ${isActualAdmin})`);
                 return; 
             }
 
@@ -2647,7 +3421,6 @@ wss.on('connection', function(ws, req) {
                 } else {
                     userData.username = newUsername;
                     if (uid) userData.uid = uid;
-                    if (newUsername.toLowerCase() === 'max' || isUserAdmin(newUsername)) userData.role = 'admin';
                 }
 
                 userDB[newUsername] = userData;
@@ -2673,8 +3446,8 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'admin_ban_user') {
-                if (!isUserAdmin(ws.playerName) && ws.role !== 'admin' && ws.role !== 'moderator') {
-                    ws.send(JSON.stringify({ type: 'system_alert', message: 'Keine Berechtigung, um Spieler zu bannen.' }));
+                if (!ws.isAdmin) {
+                    ws.send(JSON.stringify({ type: 'system_alert', message: '⛔ Keine Berechtigung: Nur verifizierte Administratoren dürfen Spieler bannen.' }));
                     return;
                 }
                 const target = data.target || data.username;
@@ -2685,7 +3458,34 @@ wss.on('connection', function(ws, req) {
                 return;
             }
 
+            if (data.type === 'admin_action') {
+                if (!ws.isAdmin) {
+                    ws.send(JSON.stringify({ type: 'system_alert', message: '⛔ Keine Berechtigung: Nur verifizierte Administratoren dürfen Admin-Aktionen ausführen.' }));
+                    return;
+                }
+                const { action, target, reason } = data;
+                if (action === 'kick' && target) {
+                    let kicked = false;
+                    if (wss && wss.clients) {
+                        wss.clients.forEach(c => {
+                            if (c.playerName && c.playerName.toLowerCase() === target.toLowerCase()) {
+                                c.send(JSON.stringify({ type: 'system_alert', message: `Du wurdest gekickt: ${reason || 'Admin-Entscheidung'}` }));
+                                c.terminate();
+                                kicked = true;
+                            }
+                        });
+                    }
+                    ws.send(JSON.stringify({ type: 'chat', text: kicked ? `✅ Spieler '${target}' wurde gekickt.` : `⚠️ Spieler '${target}' war nicht online.`, system: true }));
+                    broadcastAdminUsersUpdate();
+                }
+                return;
+            }
+
             if (data.type === 'get_admin_logs') {
+                if (!ws.isAdmin) {
+                    ws.send(JSON.stringify({ type: 'system_alert', message: 'Zugriff verweigert.' }));
+                    return;
+                }
                 ws.send(JSON.stringify({
                     type: 'admin_logs_update',
                     logs: adminBanLogs
@@ -2694,6 +3494,10 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'get_admin_elixir') {
+                if (!ws.isAdmin) {
+                    ws.send(JSON.stringify({ type: 'system_alert', message: 'Zugriff verweigert.' }));
+                    return;
+                }
                 const q = elixirMatchQueue.map(p => ({ playerName: p.playerName, timeControl: p.timeControl, bet: p.bet || 0 }));
                 ws.send(JSON.stringify({
                     type: 'admin_elixir_update',
@@ -2703,6 +3507,10 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'get_admin_tickets') {
+                if (!ws.isAdmin) {
+                    ws.send(JSON.stringify({ type: 'system_alert', message: 'Zugriff verweigert.' }));
+                    return;
+                }
                 ws.send(JSON.stringify({
                     type: 'admin_tickets_update',
                     tickets: globalSupportTickets.filter(t => t.status !== 'Entbannt' && t.status !== 'Abgelehnt' && t.status !== 'Geschlossen'),
@@ -2769,8 +3577,8 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'admin_unban_user') {
-                if (!isUserAdmin(ws.playerName) && ws.role !== 'admin' && ws.role !== 'moderator') {
-                    ws.send(JSON.stringify({ type: 'system_alert', message: 'Keine Berechtigung, um Spieler zu entbannen.' }));
+                if (!ws.isAdmin) {
+                    ws.send(JSON.stringify({ type: 'system_alert', message: '⛔ Keine Berechtigung: Nur verifizierte Administratoren dürfen Spieler entbannen.' }));
                     return;
                 }
                 const target = data.target || data.username;
@@ -2784,6 +3592,10 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'get_admin_users') {
+                if (!ws.isAdmin) {
+                    ws.send(JSON.stringify({ type: 'system_alert', message: 'Zugriff verweigert: Nur Administratoren dürfen Benutzerdaten abrufen.' }));
+                    return;
+                }
                 const allUsers = [];
                 const seenNames = new Set();
 
@@ -2795,7 +3607,7 @@ wss.on('connection', function(ws, req) {
                         allUsers.push({
                             id: c.playerName,
                             username: c.playerName,
-                            role: uData.role || (isUserAdmin(c.playerName) ? 'admin' : 'user'),
+                            role: uData.role || (c.isAdmin ? 'admin' : 'user'),
                             elo: uData.elo || 1200,
                             wins: uData.wins || 0,
                             losses: uData.losses || 0,
@@ -2813,7 +3625,7 @@ wss.on('connection', function(ws, req) {
                         allUsers.push({
                             id: uname,
                             username: uname,
-                            role: uData.role || (isUserAdmin(uname) ? 'admin' : 'user'),
+                            role: uData.role || 'user',
                             elo: uData.elo || 1200,
                             wins: uData.wins || 0,
                             losses: uData.losses || 0,
@@ -2832,12 +3644,25 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'set_user_role') {
+                if (!ws.isAdmin) {
+                    ws.send(JSON.stringify({ type: 'system_alert', message: '⛔ Keine Berechtigung: Nur Administratoren dürfen Rollen ändern!' }));
+                    return;
+                }
                 const { target, role } = data;
                 if (target && role) {
+                    const safeRole = (role === 'admin' || role === 'moderator') ? role : 'user';
                     if (!userDB[target]) userDB[target] = { username: target, elo: 1200 };
-                    userDB[target].role = role;
+                    userDB[target].role = safeRole;
                     saveAll(target);
-                    ws.send(JSON.stringify({ type: 'chat', text: `✅ Rolle von '${target}' auf '${role}' gesetzt.`, system: true }));
+                    if (firestoreDb) {
+                        try {
+                            const userUid = userDB[target].uid || target;
+                            firestoreDb.collection('players').doc(userUid).set({ role: safeRole }, { merge: true });
+                        } catch (e) {
+                            console.warn("Firestore role update error:", e.message);
+                        }
+                    }
+                    ws.send(JSON.stringify({ type: 'chat', text: `✅ Rolle von '${target}' auf '${safeRole}' gesetzt.`, system: true }));
                     
                     // Send updated user list to all admins
                     const updateList = [];
@@ -2853,7 +3678,7 @@ wss.on('connection', function(ws, req) {
                         });
                     }
                     wss.clients.forEach(c => {
-                        if (c.readyState === 1 && (isUserAdmin(c.playerName) || c.role === 'admin')) {
+                        if (c.readyState === 1 && c.isAdmin) {
                             c.send(JSON.stringify({ type: 'admin_users_update', users: updateList }));
                         }
                     });

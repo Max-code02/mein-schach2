@@ -1,5 +1,46 @@
 // script2.js - Account & Leaderboard Management
 
+// Global cycle-safe JSON.stringify protection
+(function() {
+    if (typeof JSON !== 'undefined' && !JSON.__safe_patched) {
+        const originalStringify = JSON.stringify;
+        JSON.stringify = function(value, replacer, space) {
+            try {
+                return originalStringify(value, replacer, space);
+            } catch (err) {
+                if (err instanceof TypeError && (String(err.message).includes('circular') || String(err.message).includes('Converting circular structure to JSON'))) {
+                    const seen = new WeakSet();
+                    return originalStringify(value, function(k, v) {
+                        if (typeof v === 'object' && v !== null) {
+                            if (typeof Node !== 'undefined' && v instanceof Node) return undefined;
+                            if (typeof Window !== 'undefined' && v instanceof Window) return undefined;
+                            if (seen.has(v)) return undefined;
+                            seen.add(v);
+                        }
+                        if (typeof replacer === 'function') {
+                            return replacer.call(this, k, v);
+                        }
+                        return v;
+                    }, space);
+                }
+                throw err;
+            }
+        };
+        JSON.__safe_patched = true;
+    }
+})();
+
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+window.escapeHtml = window.escapeHtml || escapeHtml;
+
 // 1. Demo-Modus (Das automatische Schachspiel im Hintergrund)
 const demoMoves = [
     { from: 'e2', to: 'e4' }, { from: 'e7', to: 'e5' },
@@ -151,19 +192,21 @@ async function initFirebase() {
                     let badge = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
                     let color = i === 0 ? '#f1c40f' : i === 1 ? '#bdc3c7' : i === 2 ? '#cd7f32' : 'rgba(255,255,255,0.7)';
                     let bg = i === 0 ? 'linear-gradient(135deg, rgba(241,196,15,0.2) 0%, rgba(0,0,0,0) 100%)' : 'rgba(255,255,255,0.03)';
+                    const safeName = escapeHtml(p.name);
+                    const encName = encodeURIComponent(p.name || '');
                     return `
-                    <div onclick="viewPlayerProfile('${p.name}')" style="cursor: pointer; background: ${bg}; padding: 12px; border-radius: 10px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; transition: 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+                    <div onclick="viewPlayerProfile(decodeURIComponent('${encName}'))" style="cursor: pointer; background: ${bg}; padding: 12px; border-radius: 10px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; transition: 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <div style="width: 24px; text-align: center; font-weight: bold; color: ${color}; font-size: 1.1em;">
                                 ${badge || `#${i + 1}`}
                             </div>
                             <div style="display: flex; flex-direction: column;">
-                                <strong style="color: white; font-size: 1.05em; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">${p.name}</strong>
-                                <span style="color: #95a5a6; font-size: 0.8em;">Lvl ${p.level || 1} • Elo: ${p.elo || 1200}</span>
+                                <strong style="color: white; font-size: 1.05em; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">${safeName}</strong>
+                                <span style="color: #95a5a6; font-size: 0.8em;">Lvl ${Number(p.level) || 1} • Elo: ${Number(p.elo) || 1200}</span>
                             </div>
                         </div>
                         <div style="text-align: right;">
-                            <div style="color: #f1c40f; font-weight: bold; font-size: 1.1em;">${p.wins || 0} 🏆</div>
+                            <div style="color: #f1c40f; font-weight: bold; font-size: 1.1em;">${Number(p.wins) || 0} 🏆</div>
                             <div style="color: #ccc; font-size: 0.7em;">Siege</div>
                         </div>
                     </div>
@@ -262,6 +305,14 @@ async function initFirebase() {
                     let pName = user.displayName || savedCustom || (savedPlayer && savedPlayer !== user.uid ? savedPlayer : (emailPrefix || "Spieler_" + user.uid.substring(0, 5)));
                     const userDoc = doc(fbDb, 'players', user.uid);
                     
+                    // Retrieve genuine Firebase ID Token for secure server verification
+                    let idToken = '';
+                    try {
+                        idToken = await user.getIdToken();
+                    } catch (tErr) {
+                        console.warn("Could not get ID token:", tErr);
+                    }
+
                     // Listen for real-time changes (e.g. role updates, elo changes)
                     userUnsubscribe = onSnapshot(userDoc, (snapshot) => {
                         if (snapshot.exists()) {
@@ -269,9 +320,9 @@ async function initFirebase() {
                             const dbName = data.username || data.name || pName;
                             
                             if (data.is_banned || data.ip_ban) {
-                                if (window.showAccountBannedOverlay) {
-                                    window.showAccountBannedOverlay(data.ban_reason || data.reason || "Verstoß gegen die Community-Richtlinien");
-                                }
+                                const bReason = data.ban_reason || data.reason || "Verstoß gegen die Community-Richtlinien";
+                                window.location.href = '/banned?reason=' + encodeURIComponent(bReason);
+                                return;
                             }
 
                             // Speichere den Namen für Websocket und andere Features
@@ -283,7 +334,7 @@ async function initFirebase() {
                                     type: 'login_attempt',
                                     playerName: dbName,
                                     uid: user.uid,
-                                    password: 'firebase-auth-token',
+                                    firebaseToken: idToken,
                                     isRegister: false
                                 }));
                                 ws.playerName = dbName;
@@ -291,18 +342,14 @@ async function initFirebase() {
                             
                             updateProfileDisplay(dbName, data.elo || 1200, data.wins || 0, data.losses || 0, data.level || 1, data.xp || 0, data.achievements || []);
                             
-                            // Check admin role
-                            const isAdminList = ['max', '222', 'admin', 'max.schule13@gmail.com', 'owner', 'eigentümer'];
-                            const isUserAdminClient = isAdminList.includes(dbName.toLowerCase()) || (user.email && user.email.toLowerCase() === 'max.schule13@gmail.com');
-                            const isAdmin = (data.role === 'admin' || data.role === 'moderator' || isUserAdminClient);
+                            // Admin role is strictly server-authoritative
+                            const isAdmin = (data.role === 'admin');
                             const adminPanel = document.getElementById('admin-panel');
                             if (adminPanel) {
-                                adminPanel.style.display = (data.role === 'admin' || isUserAdminClient) ? 'block' : 'none';
+                                adminPanel.style.display = isAdmin ? 'block' : 'none';
                             }
                             
-                            if (data.role === 'admin' || isUserAdminClient) {
-                                if (adminPanel) adminPanel.style.display = 'block';
-                                
+                            if (isAdmin) {
                                 // Call server WebSocket admin refresh
                                 setTimeout(() => {
                                     if (typeof window.requestAdminUsersRefresh === 'function') {
@@ -315,7 +362,6 @@ async function initFirebase() {
                                     if (!usersSnap.empty) {
                                         const listEl = document.getElementById('admin-user-list');
                                         if (!listEl) return;
-                                        // If firestore has items, update list
                                         const firestoreUsers = [];
                                         usersSnap.forEach(uDoc => {
                                             const u = uDoc.data();
@@ -335,18 +381,18 @@ async function initFirebase() {
                                         }
                                     }
                                 }, (err) => {
-                                    console.log("Firestore admin listener fallback to WS:", err);
+                                    console.log("Firestore admin listener notice:", err);
                                     if (typeof window.requestAdminUsersRefresh === 'function') {
                                         window.requestAdminUsersRefresh();
                                     }
                                 });
                             }
                         } else {
-                            // Erstelle initiales Nutzer-Dokument falls noch nicht vorhanden
+                            // Erstelle initiales Profil: Neue Konten haben IMMER die Rolle 'user'
                             setDoc(userDoc, {
                                 username: pName,
                                 uid: user.uid,
-                                role: (pName.toLowerCase() === 'max' || (user.email && user.email.toLowerCase() === 'max.schule13@gmail.com')) ? 'admin' : 'user',
+                                role: 'user',
                                 elo: 1200,
                                 wins: 0,
                                 losses: 0,
@@ -355,10 +401,6 @@ async function initFirebase() {
                             }, { merge: true });
                         }
                     });
-                    
-                    if (user.email === 'max.schule13@gmail.com' || pName.toLowerCase() === 'max') {
-                        localStorage.setItem('isAdmin', 'true');
-                    }
                     
                     localStorage.setItem('playerName', pName);
                     localStorage.setItem('firebaseUid', user.uid);
@@ -382,56 +424,45 @@ async function initFirebase() {
                             playerName: pName,
                             uid: user.uid,
                             email: user.email || '',
-                            password: 'firebase-auth-token',
+                            firebaseToken: idToken,
                             isRegister: false
                         }));
                     }
                 } else {
-                    const isLocalAdmin = localStorage.getItem('isAdmin') === 'true' && (localStorage.getItem('playerName') === 'Max' || localStorage.getItem('customUsername') === 'Max');
-
-                    if (isLocalAdmin) {
-                        updateProfileDisplay("Max", 1200, 0, 0, 1, 0, []);
-                        
+                    const savedGuest = localStorage.getItem('guestName') || localStorage.getItem('playerName');
+                    if (savedGuest && savedGuest !== 'Gastspieler') {
+                        localStorage.setItem('playerName', savedGuest);
+                        updateProfileDisplay(savedGuest, 1200, 0, 0, 1, 0, []);
                         const openAuthBtn = document.getElementById('openAuthBtn');
                         const logoutBtn = document.getElementById('logoutBtn');
                         if (openAuthBtn) openAuthBtn.style.display = 'none';
                         if (logoutBtn) logoutBtn.style.display = 'block';
-
-                        const adminPanel = document.getElementById('admin-panel');
-                        if (adminPanel) adminPanel.style.display = 'block';
                     } else {
-                        const savedGuest = localStorage.getItem('guestName') || localStorage.getItem('playerName');
-                        if (savedGuest && savedGuest !== 'Gastspieler' && localStorage.getItem('isAdmin') !== 'true') {
-                            localStorage.setItem('playerName', savedGuest);
-                            updateProfileDisplay(savedGuest, 1200, 0, 0, 1, 0, []);
-                            const openAuthBtn = document.getElementById('openAuthBtn');
-                            const logoutBtn = document.getElementById('logoutBtn');
-                            if (openAuthBtn) openAuthBtn.style.display = 'none';
-                            if (logoutBtn) logoutBtn.style.display = 'block';
-                        } else {
-                            updateProfileDisplay("Gastspieler", 1200, 0, 0, 1, 0, []);
-                            localStorage.removeItem('playerName');
-                            localStorage.removeItem('firebaseUid');
-                            localStorage.removeItem('isAdmin');
-                            
-                            const openAuthBtn = document.getElementById('openAuthBtn');
-                            const logoutBtn = document.getElementById('logoutBtn');
-                            if (openAuthBtn) openAuthBtn.style.display = 'block';
-                            if (logoutBtn) logoutBtn.style.display = 'none';
-                        }
+                        updateProfileDisplay("Gastspieler", 1200, 0, 0, 1, 0, []);
+                        localStorage.removeItem('playerName');
+                        localStorage.removeItem('firebaseUid');
+                        localStorage.removeItem('isAdmin');
                         
-                        const adminPanel = document.getElementById('admin-panel');
-                        if (adminPanel) adminPanel.style.display = 'none';
+                        const openAuthBtn = document.getElementById('openAuthBtn');
+                        const logoutBtn = document.getElementById('logoutBtn');
+                        if (openAuthBtn) openAuthBtn.style.display = 'block';
+                        if (logoutBtn) logoutBtn.style.display = 'none';
                     }
+                    
+                    const adminPanel = document.getElementById('admin-panel');
+                    if (adminPanel) adminPanel.style.display = 'none';
+                    window.__serverVerifiedAdmin = false;
+                    window.isAdmin = false;
                 }
             });
             
             window.setRole = async function(uid, role) {
-                if (!fbDb) return;
-                try {
-                    await setDoc(doc(fbDb, 'players', uid), { role: role }, { merge: true });
-                } catch(e) {
-                    console.error("Fehler beim Ändern der Rolle", e);
+                // Rollen können nur durch einen verifizierten Admin über den Server geändert werden
+                const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'set_user_role', target: uid, role: role }));
+                } else if (typeof window.setUserRole === 'function') {
+                    window.setUserRole(uid, role);
                 }
             };
 
@@ -518,7 +549,7 @@ window.submitAuthEmailLogin = async function() {
             await setDoc(userDoc, {
                 username: pName,
                 uid: user.uid,
-                role: (pName.toLowerCase() === 'max' || (user.email && user.email.toLowerCase() === 'max.schule13@gmail.com')) ? 'admin' : 'user',
+                role: 'user',
                 elo: 1200,
                 wins: 0,
                 losses: 0,
@@ -531,13 +562,19 @@ window.submitAuthEmailLogin = async function() {
         localStorage.setItem('customUsername', pName);
         localStorage.setItem('firebaseUid', user.uid);
 
+        let idToken = '';
+        try {
+            idToken = await user.getIdToken();
+        } catch (tErr) {}
+
         const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
                 type: 'login_attempt',
                 playerName: pName,
                 uid: user.uid,
-                password: 'firebase-auth-token',
+                email: user.email || '',
+                firebaseToken: idToken,
                 isRegister: false
             }));
             ws.playerName = pName;
@@ -598,7 +635,7 @@ window.submitAuthEmailRegister = async function() {
         await setDoc(userDoc, {
             username: pName,
             uid: user.uid,
-            role: (pName.toLowerCase() === 'max' || (user.email && user.email.toLowerCase() === 'max.schule13@gmail.com')) ? 'admin' : 'user',
+            role: 'user',
             elo: 1200,
             wins: 0,
             losses: 0,
@@ -610,13 +647,19 @@ window.submitAuthEmailRegister = async function() {
         localStorage.setItem('customUsername', pName);
         localStorage.setItem('firebaseUid', user.uid);
 
+        let idToken = '';
+        try {
+            idToken = await user.getIdToken();
+        } catch (tErr) {}
+
         const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
                 type: 'login_attempt',
                 playerName: pName,
                 uid: user.uid,
-                password: 'firebase-auth-token',
+                email: user.email || '',
+                firebaseToken: idToken,
                 isRegister: true
             }));
             ws.playerName = pName;
@@ -667,7 +710,7 @@ window.submitAuthGoogle = async function() {
             await setDoc(userDoc, {
                 username: pName,
                 uid: user.uid,
-                role: (pName.toLowerCase() === 'max' || (user.email && user.email.toLowerCase() === 'max.schule13@gmail.com')) ? 'admin' : 'user',
+                role: 'user',
                 elo: 1200,
                 wins: 0,
                 losses: 0,
@@ -680,13 +723,19 @@ window.submitAuthGoogle = async function() {
         localStorage.setItem('customUsername', pName);
         localStorage.setItem('firebaseUid', user.uid);
         
+        let idToken = '';
+        try {
+            idToken = await user.getIdToken();
+        } catch (tErr) {}
+
         const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
                 type: 'login_attempt',
                 playerName: pName,
                 uid: user.uid,
-                password: 'firebase-auth-token',
+                email: user.email || '',
+                firebaseToken: idToken,
                 isRegister: !docSnap.exists()
             }));
             ws.playerName = pName;
@@ -835,10 +884,10 @@ function updateProfileDisplay(name, elo, wins, losses = 0, level = 1, xp = 0, ac
     const logoutBtn = document.getElementById('logoutBtn');
     const adminPanel = document.getElementById('admin-panel');
 
-    const isAdmin = localStorage.getItem('isAdmin') === 'true' && (name && name.toLowerCase() === 'max');
+    const isAdmin = window.__serverVerifiedAdmin === true || (typeof window.isAdmin === 'boolean' && window.isAdmin && localStorage.getItem('isAdmin') === 'true');
 
     if (profileName) {
-        profileName.innerText = isAdmin ? 'Max (Admin)' : name;
+        profileName.innerText = isAdmin ? `${name || 'Admin'} (Admin)` : name;
     }
     if (profileStats) profileStats.innerText = `Elo: ${elo || 1200} | S: ${wins || 0} N: ${losses || 0}`;
 
@@ -847,7 +896,7 @@ function updateProfileDisplay(name, elo, wins, losses = 0, level = 1, xp = 0, ac
         if (logoutBtn) logoutBtn.style.display = 'block';
         if (navAuthBtn) navAuthBtn.style.display = 'none';
         if (navUserPill) navUserPill.style.display = 'flex';
-        if (navUserName) navUserName.innerHTML = `<span style="color: #f1c40f; font-weight: bold; text-shadow: 0 0 8px rgba(241,196,15,0.4);">👑 Max (Admin)</span>`;
+        if (navUserName) navUserName.innerHTML = `<span style="color: #f1c40f; font-weight: bold; text-shadow: 0 0 8px rgba(241,196,15,0.4);">👑 ${name || 'Admin'} (Admin)</span>`;
         if (adminPanel) adminPanel.style.display = 'block';
     } else if (name && name !== 'Gastspieler') {
         if (authBtn) authBtn.style.display = 'none';
@@ -991,19 +1040,21 @@ window.addEventListener('load', () => {
                                 let badge = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
                                 let color = i === 0 ? '#f1c40f' : i === 1 ? '#bdc3c7' : i === 2 ? '#cd7f32' : 'rgba(255,255,255,0.7)';
                                 let bg = i === 0 ? 'linear-gradient(135deg, rgba(241,196,15,0.2) 0%, rgba(0,0,0,0) 100%)' : 'rgba(255,255,255,0.03)';
+                                const safeName = escapeHtml(p.name);
+                                const encName = encodeURIComponent(p.name || '');
                                 return `
-                                <div onclick="viewPlayerProfile('${p.name}')" style="cursor: pointer; background: ${bg}; padding: 12px; border-radius: 10px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; transition: 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+                                <div onclick="viewPlayerProfile(decodeURIComponent('${encName}'))" style="cursor: pointer; background: ${bg}; padding: 12px; border-radius: 10px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; transition: 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
                                     <div style="display: flex; align-items: center; gap: 10px;">
                                         <div style="width: 24px; text-align: center; font-weight: bold; color: ${color}; font-size: 1.1em;">
                                             ${badge || `#${i + 1}`}
                                         </div>
                                         <div style="display: flex; flex-direction: column;">
-                                            <strong style="color: white; font-size: 1.05em; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">${p.name}</strong>
-                                            <span style="color: #95a5a6; font-size: 0.8em;">Lvl ${p.level || 1} • Elo: ${p.elo || 1200}</span>
+                                            <strong style="color: white; font-size: 1.05em; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">${safeName}</strong>
+                                            <span style="color: #95a5a6; font-size: 0.8em;">Lvl ${Number(p.level) || 1} • Elo: ${Number(p.elo) || 1200}</span>
                                         </div>
                                     </div>
                                     <div style="text-align: right;">
-                                        <div style="color: #f1c40f; font-weight: bold; font-size: 1.1em;">${p.wins || 0} 🏆</div>
+                                        <div style="color: #f1c40f; font-weight: bold; font-size: 1.1em;">${Number(p.wins) || 0} 🏆</div>
                                         <div style="color: #ccc; font-size: 0.7em;">Siege</div>
                                     </div>
                                 </div>
@@ -1021,12 +1072,18 @@ window.addEventListener('load', () => {
                         }
                         updateProfileDisplay(data.name, data.elo, data.wins, data.losses || 0, data.level || 1, data.xp || 0, data.achievements || []);
                         
-                        // Show admin panel if admin
-                        const isAdminList = ['max', '222', 'admin', 'max.schule13@gmail.com', 'owner', 'eigentümer'];
-                        const isAdminUser = data.role === 'admin' || (data.name && isAdminList.includes(data.name.toLowerCase()));
+                        // Show admin panel ONLY if verified by server
+                        const isServerAdmin = data.role === 'admin' && (data.isAdmin === true || data.type === 'admin_login_success');
+                        window.__serverVerifiedAdmin = isServerAdmin;
+                        window.isAdmin = isServerAdmin;
+                        if (isServerAdmin) {
+                            localStorage.setItem('isAdmin', 'true');
+                        } else {
+                            localStorage.removeItem('isAdmin');
+                        }
                         const adminPanel = document.getElementById('admin-panel');
                         if (adminPanel) {
-                            adminPanel.style.display = isAdminUser ? 'block' : 'none';
+                            adminPanel.style.display = isServerAdmin ? 'block' : 'none';
                         }
 
                         // Apply themes from database

@@ -14,7 +14,7 @@ function getFirebaseConfig() {
 }
 
 // Convert native JS values to Firestore REST field format
-function toFirestoreValue(val) {
+function toFirestoreValue(val, seen = new WeakSet()) {
     if (val === null || val === undefined) {
         return { nullValue: null };
     }
@@ -31,17 +31,21 @@ function toFirestoreValue(val) {
         return { stringValue: val };
     }
     if (Array.isArray(val)) {
+        if (seen.has(val)) return { arrayValue: { values: [] } };
+        seen.add(val);
         return {
             arrayValue: {
-                values: val.map(toFirestoreValue)
+                values: val.map(item => toFirestoreValue(item, seen))
             }
         };
     }
     if (typeof val === 'object') {
+        if (seen.has(val)) return { nullValue: null };
+        seen.add(val);
         const fields = {};
         for (const [k, v] of Object.entries(val)) {
             if (v !== undefined) {
-                fields[k] = toFirestoreValue(v);
+                fields[k] = toFirestoreValue(v, seen);
             }
         }
         return { mapValue: { fields } };

@@ -655,6 +655,10 @@
 
             <!-- Admin Panel if visible -->
             <div class="glass-panel" id="admin-panel" style="display: none;">
+                <a href="/admin" target="_blank" style="display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; width: 100%; margin-bottom: 10px; padding: 8px 12px; background: linear-gradient(135deg, #f39c12, #e67e22); color: #fff; font-weight: bold; font-size: 0.85rem; border-radius: 8px; box-shadow: 0 4px 15px rgba(230, 126, 34, 0.4); text-align: center;">
+                    <span>🛡️</span>
+                    <span>Admin-Zentrale öffnen (/admin) ↗</span>
+                </a>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                     <span>🛡️ <strong>Admin-Verwaltung</strong></span>
                     <button onclick="requestAdminUsersRefresh()" class="glass-btn primary" style="padding: 4px 8px; font-size: 0.75rem;">🔄 Laden</button>
@@ -945,16 +949,6 @@
                 <button id="cancelJoinLobbyPasswordBtn" class="glass-btn" style="padding: 6px 12px;">Abbrechen</button>
                 <button id="submitJoinLobbyPasswordBtn" class="glass-btn success" style="padding: 6px 14px; font-weight: bold;">Beitreten</button>
             </div>
-        </div>
-    </div>
-
-    <!-- Account Banned Modal -->
-    <div id="account-banned-modal" class="modal-overlay" style="display: none; z-index: 1000000; background: rgba(15, 5, 5, 0.95); padding: 15px;">
-        <div class="modal-box" style="max-width: 400px; width: 100%; border: 2px solid #e74c3c; background: #1a0c0c; text-align: center; border-radius: 12px; padding: 18px; color: white;">
-            <div style="font-size: 2.5rem;">⛔</div>
-            <h3 style="color: #ff4d4d; margin: 4px 0 8px 0;">Account gesperrt</h3>
-            <p id="account-banned-reason-text" style="color: #ff9999; font-size: 0.85rem; margin-bottom: 12px;">Gesperrt durch Administrator</p>
-            <button class="glass-btn danger" onclick="document.getElementById('account-banned-modal').style.display='none'" style="width: 100%; padding: 8px;">Schließen</button>
         </div>
     </div>
 

@@ -146,7 +146,12 @@ function validateSecurity(data, ws, bannedIPs, triggerUltraBan, roomStates = nul
     if (!data || typeof data !== 'object') return executeBan("Manipuliertes Datenpaket (Ungültiges Objekt)");
 
     // 1. Payload Limit
-    const rawLength = JSON.stringify(data).length;
+    let rawLength = 0;
+    try {
+        rawLength = JSON.stringify(data).length;
+    } catch (e) {
+        return executeBan("Manipuliertes Datenpaket (Zirkuläres Objekt)");
+    }
     if (rawLength > 5000) return executeBan("Payload-Attacke (Datenmenge zu groß)");
 
     // 2. Client-Identität-Check
@@ -198,8 +203,13 @@ function validateSecurity(data, ws, bannedIPs, triggerUltraBan, roomStates = nul
     }
 
     // 8. Technical Hacks
-    if (JSON.stringify(data).includes("__proto__") || JSON.stringify(data).includes("constructor")) {
-        return executeBan("Prototype Pollution Attacke");
+    try {
+        const jsonStr = JSON.stringify(data);
+        if (jsonStr.includes("__proto__") || jsonStr.includes("constructor")) {
+            return executeBan("Prototype Pollution Attacke");
+        }
+    } catch (e) {
+        return executeBan("Manipuliertes Datenpaket (Zirkuläres Objekt)");
     }
 
     if (data.type === 'game_win') {

@@ -125,7 +125,12 @@ window.initFeatures = function(socket, myName) {
                 
                 peerConnection.onicecandidate = (e) => {
                     if (e.candidate) {
-                        if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'voice_signal', signalType: 'candidate', candidate: e.candidate }));
+                        const candidateData = e.candidate.toJSON ? e.candidate.toJSON() : {
+                            candidate: e.candidate.candidate,
+                            sdpMid: e.candidate.sdpMid,
+                            sdpMLineIndex: e.candidate.sdpMLineIndex
+                        };
+                        if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'voice_signal', signalType: 'candidate', candidate: candidateData }));
                     }
                 };
                 
@@ -142,7 +147,13 @@ window.initFeatures = function(socket, myName) {
 
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
-                if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'voice_signal', signalType: 'offer', offer: offer }));
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({
+                        type: 'voice_signal',
+                        signalType: 'offer',
+                        offer: { type: offer.type, sdp: offer.sdp }
+                    }));
+                }
                 voiceStatus.innerText = 'Verbunden 🎙️';
             }
         } else if (data.signalType === 'offer') {
@@ -151,7 +162,12 @@ window.initFeatures = function(socket, myName) {
             
             peerConnection.onicecandidate = (e) => {
                 if (e.candidate) {
-                    if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'voice_signal', signalType: 'candidate', candidate: e.candidate }));
+                    const candidateData = e.candidate.toJSON ? e.candidate.toJSON() : {
+                        candidate: e.candidate.candidate,
+                        sdpMid: e.candidate.sdpMid,
+                        sdpMLineIndex: e.candidate.sdpMLineIndex
+                    };
+                    if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'voice_signal', signalType: 'candidate', candidate: candidateData }));
                 }
             };
             
@@ -169,7 +185,13 @@ window.initFeatures = function(socket, myName) {
             await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
             const answer = await peerConnection.createAnswer();
             await peerConnection.setLocalDescription(answer);
-            if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'voice_signal', signalType: 'answer', answer: answer }));
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'voice_signal',
+                    signalType: 'answer',
+                    answer: { type: answer.type, sdp: answer.sdp }
+                }));
+            }
             voiceStatus.innerText = 'Verbunden 🎙️';
 
         } else if (data.signalType === 'answer') {
