@@ -1229,3 +1229,425 @@ body.chess-mode .glow-orb {
         border-width: 3px;
     }
 }
+
+/* ========================================================
+   ♟️ CHESS.COM STYLE COLLAPSIBLE SIDEBAR & ELEVATED LAYOUT
+   ======================================================== */
+:root {
+    --cc-bg: #161512;
+    --cc-panel: #262421;
+    --cc-panel-hover: #312e2b;
+    --cc-border: rgba(255, 255, 255, 0.08);
+    --cc-border-strong: rgba(255, 255, 255, 0.16);
+    --cc-text: #ffffff;
+    --cc-text-muted: #8c8a87;
+    --cc-green: #81b64c;
+    --cc-green-hover: #95c95d;
+    --cc-green-active: #74a444;
+    --cc-sidebar-width: 210px;
+    --cc-sidebar-collapsed: 64px;
+}
+
+body {
+    background-color: var(--cc-bg) !important;
+    color: var(--cc-text);
+    overflow-x: hidden;
+}
+
+/* Main Outer Grid Layout */
+.chesscom-layout {
+    display: flex;
+    width: 100%;
+    min-height: 100vh;
+    position: relative;
+    background: var(--cc-bg);
+}
+
+/* Collapsible Left Rail */
+.chesscom-sidebar {
+    width: var(--cc-sidebar-width);
+    background: #1b1a17;
+    border-right: 1px solid var(--cc-border);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: 100vh;
+    z-index: 1050;
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-sizing: border-box;
+    box-shadow: 2px 0 16px rgba(0, 0, 0, 0.4);
+    user-select: none;
+}
+
+.chesscom-sidebar.collapsed {
+    width: var(--cc-sidebar-collapsed);
+}
+
+/* Top brand row in sidebar */
+.sidebar-top-brand {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 12px;
+    border-bottom: 1px solid var(--cc-border);
+    min-height: 60px;
+    box-sizing: border-box;
+}
+
+.sidebar-brand-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    color: white;
+    cursor: pointer;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.sidebar-logo {
+    font-size: 1.6rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #272522, #363431);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
+}
+
+.sidebar-title {
+    font-weight: 800;
+    font-size: 1.05rem;
+    letter-spacing: -0.3px;
+    color: #ffffff;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.chesscom-sidebar.collapsed .sidebar-title {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-10px);
+}
+
+.sidebar-collapse-btn {
+    background: transparent;
+    border: 1px solid var(--cc-border);
+    color: var(--cc-text-muted);
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1.1rem;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.sidebar-collapse-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Nav Item List */
+.sidebar-nav-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 8px;
+    flex-grow: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.sidebar-nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 10px 12px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: #bab8b5;
+    font-size: 0.92rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+    text-decoration: none;
+    position: relative;
+    transition: all 0.15s ease;
+    box-sizing: border-box;
+    white-space: nowrap;
+}
+
+.sidebar-nav-btn:hover {
+    background: var(--cc-panel-hover);
+    color: #ffffff;
+}
+
+.sidebar-nav-btn.active {
+    background: #2b2926;
+    color: #ffffff;
+    border-left: 3px solid var(--cc-green);
+    box-shadow: inset 0 0 10px rgba(129, 182, 76, 0.1);
+}
+
+.sidebar-nav-btn .nav-icon {
+    font-size: 1.25rem;
+    line-height: 1;
+    width: 24px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.sidebar-nav-btn .nav-label {
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    flex-grow: 1;
+}
+
+.chesscom-sidebar.collapsed .sidebar-nav-btn .nav-label {
+    opacity: 0;
+    transform: translateX(-8px);
+    pointer-events: none;
+    width: 0;
+    overflow: hidden;
+}
+
+.sidebar-nav-btn .nav-badge {
+    background: var(--cc-green);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: auto;
+    text-transform: uppercase;
+}
+
+.chesscom-sidebar.collapsed .sidebar-nav-btn .nav-badge {
+    display: none;
+}
+
+/* Tooltip for collapsed mode */
+.chesscom-sidebar.collapsed .sidebar-nav-btn {
+    justify-content: center;
+    padding: 12px 0;
+}
+
+.chesscom-sidebar.collapsed .sidebar-nav-btn[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: #262421;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+    border: 1px solid var(--cc-border-strong);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    z-index: 2000;
+    pointer-events: none;
+}
+
+/* Sidebar Footer & User Profile */
+.sidebar-footer {
+    padding: 12px 8px;
+    border-top: 1px solid var(--cc-border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sidebar-user-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    cursor: pointer;
+    transition: background 0.2s;
+    overflow: hidden;
+}
+
+.sidebar-user-card:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #363431;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.sidebar-user-info {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.sidebar-user-name {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #ffffff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar-user-rating {
+    font-size: 0.75rem;
+    color: var(--cc-text-muted);
+}
+
+.chesscom-sidebar.collapsed .sidebar-user-info {
+    display: none;
+}
+
+/* Main Content Area next to Sidebar */
+.chesscom-main {
+    flex: 1;
+    margin-left: var(--cc-sidebar-width);
+    transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    width: calc(100% - var(--cc-sidebar-width));
+    box-sizing: border-box;
+}
+
+.chesscom-layout.sidebar-collapsed .chesscom-main {
+    margin-left: var(--cc-sidebar-collapsed);
+    width: calc(100% - var(--cc-sidebar-collapsed));
+}
+
+/* Mobile Sidebar Backdrop */
+.sidebar-backdrop {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(3px);
+    z-index: 1040;
+}
+
+.mobile-sidebar-toggle {
+    display: none;
+    background: transparent;
+    border: 1px solid var(--cc-border);
+    color: white;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 1.2rem;
+    cursor: pointer;
+}
+
+/* Elevated Chess.com Player Cards */
+.top-scoreboard {
+    background: #21201d !important;
+    border: 1px solid var(--cc-border) !important;
+    border-radius: 10px !important;
+    padding: 10px 18px !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3) !important;
+}
+
+.player-clock .time {
+    background: #161512 !important;
+    border: 2px solid #363431 !important;
+    color: #e2e1e0 !important;
+    font-family: monospace, ui-monospace !important;
+    letter-spacing: 1px;
+}
+
+.player-clock.active .time {
+    border-color: var(--cc-green) !important;
+    background: #2d3e23 !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 12px rgba(129, 182, 76, 0.4) !important;
+}
+
+/* Chess.com Signature Action Buttons */
+.glass-btn.primary,
+.glass-btn.success,
+.btn-chesscom-play {
+    background: var(--cc-green) !important;
+    color: #ffffff !important;
+    border: none !important;
+    font-weight: 700 !important;
+    transition: background 0.15s ease, transform 0.1s ease !important;
+    box-shadow: 0 4px 12px rgba(129, 182, 76, 0.3) !important;
+}
+
+.glass-btn.primary:hover,
+.glass-btn.success:hover,
+.btn-chesscom-play:hover {
+    background: var(--cc-green-hover) !important;
+    transform: translateY(-1px) !important;
+}
+
+.glass-btn.primary:active,
+.glass-btn.success:active,
+.btn-chesscom-play:active {
+    background: var(--cc-green-active) !important;
+    transform: translateY(1px) !important;
+}
+
+/* Elevated Panels */
+.glass-panel {
+    background: #21201d !important;
+    border: 1px solid var(--cc-border) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* Responsive Rules for Small Screens */
+@media (max-width: 1024px) {
+    .chesscom-sidebar {
+        transform: translateX(-100%);
+        width: 250px !important;
+    }
+
+    .chesscom-sidebar.mobile-open {
+        transform: translateX(0);
+    }
+
+    .sidebar-backdrop.active {
+        display: block;
+    }
+
+    .chesscom-main {
+        margin-left: 0 !important;
+        width: 100% !important;
+    }
+
+    .mobile-sidebar-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+}

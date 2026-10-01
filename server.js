@@ -832,6 +832,16 @@ app.get(['/handy', '/handy.html', '/mobile'], (req, res) => {
     }
 });
 
+app.get(['/stats', '/stats.html', '/rangliste', '/leaderboard'], (req, res) => {
+    if (fs.existsSync(path.join(__dirname, 'stats.html'))) {
+        res.sendFile(path.join(__dirname, 'stats.html'));
+    } else if (fs.existsSync(path.join(__dirname, 'public', 'stats.html'))) {
+        res.sendFile(path.join(__dirname, 'public', 'stats.html'));
+    } else {
+        res.sendFile(path.join(__dirname, 'index.html'));
+    }
+});
+
 // REST Endpoints for Auth and Analysis
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body || {};

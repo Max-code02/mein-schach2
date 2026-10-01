@@ -2924,6 +2924,11 @@ socket.onmessage = (e) => {
                         .sort((a, b) => (b.elo !== a.elo ? b.elo - a.elo : b.wins - a.wins))
                         .slice(0, 100);
 
+                    window.currentLeaderboardUsers = cleanList;
+                    if (typeof window.renderModalLeaderboard === 'function') {
+                        window.renderModalLeaderboard(cleanList);
+                    }
+
                     listEl.innerHTML = cleanList.map((p, i) => {
                         let badge = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
                         let color = i === 0 ? '#f1c40f' : i === 1 ? '#bdc3c7' : i === 2 ? '#cd7f32' : 'rgba(255,255,255,0.7)';

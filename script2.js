@@ -190,6 +190,10 @@ async function initFirebase() {
             const firestoreUsers = Array.from(userMap.values());
             firestoreUsers.sort((a, b) => (b.elo !== a.elo ? b.elo - a.elo : b.wins - a.wins));
             const topUsers = firestoreUsers.slice(0, 100);
+            window.currentLeaderboardUsers = topUsers;
+            if (typeof window.renderModalLeaderboard === 'function') {
+                window.renderModalLeaderboard(topUsers);
+            }
             const listEl = document.getElementById('leaderboard-list');
             if (listEl) {
                 listEl.innerHTML = topUsers.map((p, i) => {
@@ -883,6 +887,33 @@ function updateProfileDisplay(name, elo, wins, losses = 0, level = 1, xp = 0, ac
     const adminPanel = document.getElementById('admin-panel');
 
     const isAdmin = window.__serverVerifiedAdmin === true || (typeof window.isAdmin === 'boolean' && window.isAdmin && localStorage.getItem('isAdmin') === 'true');
+
+    // Sync Chess.com Collapsible Sidebar User Card
+    const sbName = document.getElementById('sidebar-user-name');
+    const sbRating = document.getElementById('sidebar-user-rating');
+    const sbAvatar = document.getElementById('sidebar-avatar-icon');
+    const sbAuthBtn = document.getElementById('sidebar-auth-btn');
+
+    if (sbName) {
+        sbName.innerText = isAdmin ? `👑 ${name || 'Admin'}` : (name || 'Gastspieler');
+    }
+    if (sbRating) {
+        sbRating.innerText = `${elo || 1200} Elo`;
+    }
+    if (sbAvatar) {
+        sbAvatar.innerText = isAdmin ? '👑' : (name && name !== 'Gastspieler' ? '👤' : '♟️');
+    }
+    if (sbAuthBtn) {
+        if (name && name !== 'Gastspieler') {
+            sbAuthBtn.innerHTML = '🚪 Abmelden';
+            sbAuthBtn.className = 'glass-btn danger';
+            sbAuthBtn.onclick = () => (typeof window.logout === 'function' ? window.logout() : null);
+        } else {
+            sbAuthBtn.innerHTML = '🔐 Anmelden';
+            sbAuthBtn.className = 'glass-btn primary';
+            sbAuthBtn.onclick = () => (typeof window.openAuthModal === 'function' ? window.openAuthModal() : null);
+        }
+    }
 
     if (profileName) {
         profileName.innerText = isAdmin ? `${name || 'Admin'} (Admin)` : name;
