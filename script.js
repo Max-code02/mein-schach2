@@ -186,10 +186,15 @@ function showBanOverlay(message) {
 }
 
 if (localStorage.getItem('banned') === 'true') {
-    const savedMsg = localStorage.getItem('ban_message');
-    window.addEventListener('DOMContentLoaded', () => {
-        showBanOverlay(savedMsg);
-    });
+    const savedMsg = localStorage.getItem('ban_message') || '';
+    if (savedMsg.includes('Nur Administratoren dürfen') || savedMsg.includes('Benutzerdaten abrufen') || savedMsg.includes('Keine Berechtigung')) {
+        localStorage.removeItem('banned');
+        localStorage.removeItem('ban_message');
+    } else {
+        window.addEventListener('DOMContentLoaded', () => {
+            showBanOverlay(savedMsg);
+        });
+    }
 }
 
 // --- IN-APP BENACHRICHTIGUNGEN & ADMIN-PANEL HELFER ---
@@ -2705,13 +2710,13 @@ socket.onmessage = (e) => {
         }
         if (data.type === 'system_alert') {
             addChat("SYSTEM ALERT", data.message, "system");
-            if (data.message && (data.message.includes('GESPERRT') || data.message.includes('gebannt'))) {
+            if (data.message && (data.message.includes('GESPERRT') || data.message.includes('gebannt') || data.message.includes('ANTI-CHEAT SYSTEM'))) {
                 window.location.href = '/banned?reason=' + encodeURIComponent(data.message);
                 return;
-            } else if (typeof showBanOverlay === 'function') {
-                showBanOverlay(data.message);
             } else {
-                alert(data.message);
+                if (typeof window.showInAppNotification === 'function') {
+                    window.showInAppNotification("Hinweis", data.message, "info");
+                }
             }
             return;
         }

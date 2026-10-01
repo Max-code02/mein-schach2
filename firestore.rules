@@ -27,8 +27,8 @@ service cloud.firestore {
       // Initial-Erstellung: Nur der authentifizierte Benutzer für sein eigenes Dokument.
       // Rolle MUSS 'user' sein. Initiale Stats müssen Standardwerte sein (keine Cheats bei Registrierung).
       allow create: if isOwner(playerId)
-                    && request.resource.data.role == 'user'
-                    && request.resource.data.is_banned == false
+                    && (!('role' in request.resource.data) || request.resource.data.role == 'user')
+                    && (!('is_banned' in request.resource.data) || request.resource.data.is_banned == false)
                     && (!('elo' in request.resource.data) || request.resource.data.elo <= 1200)
                     && (!('wins' in request.resource.data) || request.resource.data.wins == 0)
                     && (!('losses' in request.resource.data) || request.resource.data.losses == 0)
@@ -86,6 +86,12 @@ service cloud.firestore {
       allow read: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
       allow create: if true;
       allow update, delete: if isAdmin();
+    }
+
+    // 8. System Status & Health Monitoring
+    match /system/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     // Strenger globaler Fallback: Alle nicht explizit erlaubten Zugriffe verweigern

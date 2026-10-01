@@ -128,6 +128,10 @@ async function initFirebase() {
             fbDb = getFirestore(fbApp);
         }
 
+        window.fbApp = fbApp;
+        window.fbAuth = fbAuth;
+        window.fbDb = fbDb;
+
 
         // --- LEADERBOARD SYNC ---
         function sanitizeLeaderboardUser(data, docId) {
@@ -259,13 +263,7 @@ async function initFirebase() {
                 }
             }, (err) => {
                 if (err.code === 'permission-denied') {
-                    if (typeof window.showInAppNotification === 'function') {
-                        window.showInAppNotification(
-                            "⚠️ Firebase Berechtigungen fehlen",
-                            "Bitte erlaube Lese-/Schreibzugriff in den Firestore Rules deiner Firebase Console.",
-                            "warning"
-                        );
-                    }
+                    console.info("Firestore connection check info:", err.message);
                     return;
                 }
                 if (!wasFirestoreOffline) {

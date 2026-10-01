@@ -786,8 +786,8 @@ app.get(['/admin/logout', '/api/admin/logout'], (req, res) => {
     res.redirect('/');
 });
 
-// 3. GET /admin - Strictly Protected Route
-app.get(['/admin', '/admin/'], async (req, res) => {
+// 3. GET /admin - Strictly Protected Route (All admin paths require authenticated login)
+app.get(['/admin', '/admin/', '/admindashboard', '/admindashboard/', '/admin-dashboard', '/admindashboard.html'], async (req, res) => {
     const auth = await verifyAdminAuth(req);
     if (!auth.authorized) {
         return res.send(renderAdminLoginPage(req.query.err || ''));
@@ -3593,7 +3593,7 @@ wss.on('connection', function(ws, req) {
 
             if (data.type === 'get_admin_users') {
                 if (!ws.isAdmin) {
-                    ws.send(JSON.stringify({ type: 'system_alert', message: 'Zugriff verweigert: Nur Administratoren dürfen Benutzerdaten abrufen.' }));
+                    ws.send(JSON.stringify({ type: 'admin_users_update', users: [] }));
                     return;
                 }
                 const allUsers = [];
