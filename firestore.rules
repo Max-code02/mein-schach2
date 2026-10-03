@@ -2,60 +2,102 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 🔒 Hilfsfunktionen zur Authentifizierung & Berechtigungsprüfung
+    // 🔒 1. Authentifizierungs- & Admin-Prüfungsfunktionen
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isAdmin() {
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isMasterAdmin() {
       return isSignedIn() && (
         (request.auth.token.email != null && request.auth.token.email.lower() == 'max.schule13@gmail.com') ||
         (request.auth.token.admin == true)
       );
     }
 
-    // 1. Spieler-Profile (Elo, Level, Avatar, XP, Themes)
+    // 🔒 2. Spieler-Profile (/players/{playerId})
     match /players/{playerId} {
-      allow read, write: if true;
+      // Öffentliches Lesen für Ranglisten & Matchmaking
+      allow read: if true;
+
+      // 🛡️ ERSTELLUNG: Client DARF NIEMALS 'is_owner: true' oder 'role: admin' setzen!
+      allow create: if (isOwner(playerId) || isMasterAdmin())
+                    && (!('is_owner' in request.resource.data) || request.resource.data.is_owner == false || isMasterAdmin())
+                    && (!('role' in request.resource.data) || request.resource.data.role == 'user' || request.resource.data.role == 'Gast' || isMasterAdmin())
+                    && (!('is_banned' in request.resource.data) || request.resource.data.is_banned == false || isMasterAdmin())
+                    && (!('elo' in request.resource.data) || request.resource.data.elo <= 1200 || isMasterAdmin());
+
+      // 🛡️ AKTUALISIERUNG: Client darf kosmetische Felder ändern (Themes, Avatar),
+      // aber KEINE Sicherheits-, Rollen- oder Ranking-Felder manipulieren!
+      allow update: if isMasterAdmin() || (
+        isOwner(playerId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'is_owner', 'role', 'is_banned', 'ban_reason', 'ip_ban',
+          'email', 'ip_address'
+        ])
+      );
+
+      // Löschen nur für den Master-Admin
+      allow delete: if isMasterAdmin();
     }
 
-    // 2. Private Benutzerdaten
+    // 🔒 3. Private Benutzerdaten (/users_private/{userId})
     match /users_private/{userId} {
-      allow read, write: if true;
+      allow read, write: if isOwner(userId) || isMasterAdmin();
     }
 
-    // 3. Globale Rangliste / Leaderboard
+    // 🔒 4. Globale Rangliste (/leaderboard/{entryDocId})
     match /leaderboard/{entryDocId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isMasterAdmin() || (
+        isSignedIn() && 
+        (!('role' in request.resource.data) || request.resource.data.role != 'admin') &&
+        (!('is_owner' in request.resource.data) || request.resource.data.is_owner != true)
+      );
     }
 
-    // 4. Bann-Listen (Gesperrte Spieler & IP-Sperren)
+    // 🔒 5. Bann-Listen & IP-Sperren (/bans/{banId})
     match /bans/{banId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isMasterAdmin();
     }
 
-    // 5. Spielhistorie & Snapshots
+    // 🔒 6. Partien & Snapshots (/games/{gameId})
     match /games/{gameId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if isMasterAdmin();
     }
 
-    // 6. Chat-Nachrichten
+    // 🔒 7. Chat-Nachrichten (/messages/{messageId})
     match /messages/{messageId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.content is string && request.resource.data.content.size() <= 1000;
+      allow update, delete: if isMasterAdmin();
     }
 
-    // 7. Support-Tickets & Entbannungsanträge
+    // 🔒 8. Support-Tickets & Entbannungsanträge (/tickets/{ticketId})
     match /tickets/{ticketId} {
-      allow read, write: if true;
+      allow read: if isMasterAdmin() || (isSignedIn() && (
+        ('uid' in resource.data && resource.data.uid == request.auth.uid) ||
+        ('userId' in resource.data && resource.data.userId == request.auth.uid)
+      ));
+      allow create: if request.resource.data.text is string && request.resource.data.text.size() <= 2000;
+      allow update, delete: if isMasterAdmin();
     }
 
-    // 8. System Status & Verbindungs-Monitoring
+    // 🔒 9. System-Status & Verbindungsüberwachung (/system/{docId})
     match /system/{docId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isMasterAdmin();
     }
 
+    // 🚫 10. Strenger Fallback: Alle nicht explizit definierten Pfade sperren
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }
