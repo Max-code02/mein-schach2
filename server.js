@@ -88,7 +88,12 @@ try {
 } catch (e) {}
 
 let startAutoMessages = () => {};
-try { startAutoMessages = require('./autoMessages').startAutoMessages || startAutoMessages; } catch (e) {}
+let sendWelcomeTip = () => {};
+try { 
+    const am = require('./autoMessages');
+    startAutoMessages = am.startAutoMessages || startAutoMessages;
+    sendWelcomeTip = am.sendWelcomeTip || sendWelcomeTip;
+} catch (e) {}
 
 let handleAdminCommand = async () => false;
 try { handleAdminCommand = require('./adminSystem').handleAdminCommand || handleAdminCommand; } catch (e) {}
@@ -3006,6 +3011,10 @@ wss.on('connection', function(ws, req) {
     }
     sendLeaderboardUpdate(ws);
 
+    setTimeout(() => {
+        if (typeof sendWelcomeTip === 'function') sendWelcomeTip(ws);
+    }, 2500);
+
     ws.on('message', async function(message) {
         const ip = ws.clientIP;
         const now = Date.now();
@@ -4116,19 +4125,92 @@ wss.on('connection', function(ws, req) {
                     data.type = 'join_room';
                 } else {
                     console.log(`⚢ [Elixir BEAM Engine] Spieler ${ws.playerName || "Gast"} in die Matchmaking-Queue eingereiht!`);
+                    
+                    // Clear any previous botTimeout
+                    if (ws.botTimeout) {
+                        clearTimeout(ws.botTimeout);
+                        ws.botTimeout = null;
+                    }
+
                     // Use Elixir Matchmaking Queue
                     elixirMatchQueue.push({ ws: ws, playerName: ws.playerName || "Gast", timeControl: data.timeControl || 'unlimited', bet: parseInt(data.bet) || 0 });
                     
                     // Broadcast to client about Elixir queue
                     ws.send(JSON.stringify({ type: 'chat', text: '⚢ [Elixir Hub] In der Matchmaking-Queue eingereiht...', playerName: 'System', lobby: 'global' }));
                     
-                    // Inform user about real matchmaking queue (no fake ghost bots)
                     ws.send(JSON.stringify({ 
                         type: 'chat', 
-                        text: '⏳ In der Online-Warteschlange. Sobald ein weiterer echter Spieler sucht, startet das Spiel automatisch!', 
+                        text: '⏳ Suche Online-Gegner... Wenn in 10 Sek. kein Spieler beitritt, startet ein Match gegen den Bot!', 
                         playerName: 'System', 
                         lobby: 'global' 
                     }));
+
+                    // 10-Sekunden Fallback: Bot springt ein, wenn kein Gegner kommt
+                    ws.botTimeout = setTimeout(() => {
+                        const idx = elixirMatchQueue.findIndex(e => e.ws === ws);
+                        if (idx !== -1 && ws.readyState === WebSocket.OPEN && !ws.room) {
+                            elixirMatchQueue.splice(idx, 1);
+                            
+                            const botName = "SchachBot (KI)";
+                            const roomID = "room_" + Math.random().toString(36).substr(2, 9);
+                            const tc = data.timeControl || '10+0';
+                            
+                            ws.room = roomID;
+                            ws.color = 'white';
+                            ws.opponentName = botName;
+                            ws.isGhostMatch = true;
+
+                            let tSecs = 600, tInc = 0;
+                            if (tc !== 'unlimited') {
+                                if (tc.includes('+')) {
+                                    const pts = tc.split('+');
+                                    tSecs = (parseInt(pts[0]) || 10) * 60;
+                                    tInc = parseInt(pts[1]) || 0;
+                                } else {
+                                    tSecs = (parseInt(tc) || 10) * 60;
+                                }
+                            } else {
+                                tSecs = null;
+                            }
+
+                            activeRoomStates.set(roomID, {
+                                chess: new Chess(),
+                                pot: 0,
+                                board: null,
+                                turn: 'white',
+                                isGhostMatch: true,
+                                whitePlayer: ws.playerName || "Gast",
+                                blackPlayer: botName,
+                                timeControl: tc,
+                                timeWhite: tSecs,
+                                timeBlack: tSecs,
+                                timeInc: tInc,
+                                gameOver: false
+                            });
+
+                            ws.send(JSON.stringify({
+                                type: 'gameStart',
+                                room: roomID,
+                                color: 'white',
+                                opponent: botName,
+                                timeControl: tc,
+                                timeWhite: tSecs,
+                                timeBlack: tSecs
+                            }));
+
+                            ws.send(JSON.stringify({
+                                type: 'chat',
+                                text: `🤖 Nach 10s Wartezeit: ${botName} ist als Gegner beigetreten! Viel Erfolg!`,
+                                playerName: 'System',
+                                lobby: roomID
+                            }));
+
+                            if (typeof ghost !== 'undefined' && ghost && ghost.handleGhostGreeting) {
+                                ghost.handleGhostGreeting(ws, botName);
+                            }
+                            console.log(`🤖 [Bot Fallback] ${botName} spielt gegen ${ws.playerName || 'Gast'} in ${roomID}`);
+                        }
+                    }, 10000);
                 }
                 return;
             }
@@ -4598,10 +4680,77 @@ wss.on('connection', function(ws, req) {
                     ws.send(JSON.stringify({
                         type: 'room_joined',
                         room: roomName,
-                        text: `⏳ Raum '${roomName}' beigetreten. Warte auf menschliche(n) Mitspieler...`
+                        text: `⏳ Raum '${roomName}' beigetreten. Warte auf Mitspieler (Bot springt nach 10s ein)...`
                     }));
 
-                    // Real human matchmaking - no ghost bots pretending to be humans
+                    if (ws.botTimeout) {
+                        clearTimeout(ws.botTimeout);
+                        ws.botTimeout = null;
+                    }
+
+                    ws.botTimeout = setTimeout(() => {
+                        const waiting = roomWaitingMap.get(roomName) || [];
+                        if (waiting.includes(ws) && ws.readyState === WebSocket.OPEN && !activeRoomStates.has(roomName)) {
+                            roomWaitingMap.set(roomName, waiting.filter(c => c !== ws));
+
+                            const botName = "SchachBot (KI)";
+                            const tc = ws.timeControl || '10+0';
+                            ws.room = roomName;
+                            ws.color = 'white';
+                            ws.opponentName = botName;
+                            ws.isGhostMatch = true;
+
+                            let tSecs = 600, tInc = 0;
+                            if (tc !== 'unlimited') {
+                                if (tc.includes('+')) {
+                                    const pts = tc.split('+');
+                                    tSecs = (parseInt(pts[0]) || 10) * 60;
+                                    tInc = parseInt(pts[1]) || 0;
+                                } else {
+                                    tSecs = (parseInt(tc) || 10) * 60;
+                                }
+                            } else {
+                                tSecs = null;
+                            }
+
+                            activeRoomStates.set(roomName, {
+                                chess: new Chess(),
+                                pot: 0,
+                                board: null,
+                                turn: 'white',
+                                isGhostMatch: true,
+                                whitePlayer: ws.playerName || "Gast",
+                                blackPlayer: botName,
+                                timeControl: tc,
+                                timeWhite: tSecs,
+                                timeBlack: tSecs,
+                                timeInc: tInc,
+                                gameOver: false
+                            });
+
+                            ws.send(JSON.stringify({
+                                type: 'gameStart',
+                                room: roomName,
+                                color: 'white',
+                                opponent: botName,
+                                timeControl: tc,
+                                timeWhite: tSecs,
+                                timeBlack: tSecs
+                            }));
+
+                            ws.send(JSON.stringify({
+                                type: 'chat',
+                                text: `🤖 Nach 10s Wartezeit: ${botName} ist dem Raum beigetreten!`,
+                                playerName: 'System',
+                                lobby: roomName
+                            }));
+
+                            if (typeof ghost !== 'undefined' && ghost && ghost.handleGhostGreeting) {
+                                ghost.handleGhostGreeting(ws, botName);
+                            }
+                            console.log(`🤖 [Bot Fallback] ${botName} spielt in Raum ${roomName} gegen ${ws.playerName || 'Gast'}`);
+                        }
+                    }, 10000);
                 }
                 return;
             }
@@ -4885,6 +5034,13 @@ wss.on('connection', function(ws, req) {
     });
 
     ws.on('close', function() {
+        if (ws.botTimeout) {
+            clearTimeout(ws.botTimeout);
+            ws.botTimeout = null;
+        }
+        const qIdx = elixirMatchQueue.findIndex(e => e.ws === ws);
+        if (qIdx !== -1) elixirMatchQueue.splice(qIdx, 1);
+
         if (waitingPlayer === ws) {
             waitingPlayer = null;
         }
@@ -4917,6 +5073,10 @@ server.listen(PORT, '0.0.0.0', async function() {
     }
 
     console.log("✅ MASTER-SERVER READY AUF PORT " + PORT);
+
+    if (typeof startAutoMessages === 'function') {
+        startAutoMessages(wss, 90000);
+    }
 
     try {
         if (fs.existsSync('./chaosLernBot.js')) {

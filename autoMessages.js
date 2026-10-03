@@ -17,44 +17,50 @@ const BROADCAST_MESSAGES = [
 /**
  * Startet den automatischen Info-Bot für das WebSocket-Server-Netzwerk
  * @param {WebSocketServer} wss - WebSocket Server Instanz
- * @param {number} intervalMs - Intervall in Millisekunden (Standard: 6 Minuten)
+ * @param {number} intervalMs - Intervall in Millisekunden (Standard: 90 Sekunden)
  */
-function startAutoMessages(wss, intervalMs = 360000) {
+function startAutoMessages(wss, intervalMs = 90000) {
     if (intervalId) {
         clearInterval(intervalId);
     }
 
     console.log(`🤖 AutoMessages-Bot gestartet (Intervall: ${Math.round(intervalMs / 1000)}s)`);
 
-    intervalId = setInterval(() => {
-        if (isPaused) return;
+    function sendNextTip() {
+        if (isPaused || !wss || !wss.clients) return;
 
-        if (wss && wss.clients && wss.clients.size > 0) {
-            // Zähle aktiver Verbindungen
-            let activeClients = 0;
-            wss.clients.forEach(client => {
-                if (client.readyState === 1) activeClients++;
-            });
+        let activeClients = 0;
+        wss.clients.forEach(client => {
+            if (client.readyState === 1) activeClients++;
+        });
 
-            if (activeClients === 0) return;
+        if (activeClients === 0) return;
 
-            const text = BROADCAST_MESSAGES[messageIndex];
-            const broadcastPayload = JSON.stringify({
-                type: 'chat',
-                text: `🤖 INFO: ${text}`,
-                system: true
-            });
+        const text = BROADCAST_MESSAGES[messageIndex];
+        const broadcastPayload = JSON.stringify({
+            type: 'chat',
+            text: `🤖 INFO: ${text}`,
+            playerName: '🤖 Bot-Info',
+            sender: '🤖 Bot-Info',
+            lobby: 'global',
+            system: true
+        });
 
-            wss.clients.forEach(client => {
-                if (client.readyState === 1) {
-                    client.send(broadcastPayload);
-                }
-            });
+        wss.clients.forEach(client => {
+            if (client.readyState === 1) {
+                client.send(broadcastPayload);
+            }
+        });
 
-            console.log(`[AutoMessages] Broadcast gesendet an ${activeClients} Client(s): "${text}"`);
-            messageIndex = (messageIndex + 1) % BROADCAST_MESSAGES.length;
-        }
-    }, intervalMs);
+        console.log(`[AutoMessages] Broadcast gesendet an ${activeClients} Client(s): "${text}"`);
+        messageIndex = (messageIndex + 1) % BROADCAST_MESSAGES.length;
+    }
+
+    // Erstes Tip-Broadcast kurz nach Start (nach 5 Sekunden)
+    setTimeout(sendNextTip, 5000);
+
+    // Periodisches Senden
+    intervalId = setInterval(sendNextTip, intervalMs);
 }
 
 /**
@@ -97,8 +103,27 @@ function toggleAutoMessages(pauseState) {
     console.log(`[AutoMessages] Status geändert. Pausiert: ${isPaused}`);
 }
 
+/**
+ * Sendet sofort einen Willkommens-Tipp an einen neu verbundenen Client
+ */
+function sendWelcomeTip(ws) {
+    if (!ws || ws.readyState !== 1) return;
+    const text = BROADCAST_MESSAGES[Math.floor(Math.random() * BROADCAST_MESSAGES.length)];
+    try {
+        ws.send(JSON.stringify({
+            type: 'chat',
+            text: `🤖 INFO: ${text}`,
+            playerName: '🤖 Bot-Info',
+            sender: '🤖 Bot-Info',
+            lobby: 'global',
+            system: true
+        }));
+    } catch(e){}
+}
+
 module.exports = { 
     startAutoMessages, 
+    sendWelcomeTip,
     sendBroadcastNow, 
     addAutoMessage, 
     toggleAutoMessages, 
