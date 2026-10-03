@@ -1340,9 +1340,12 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
         // --- DAILY TACTICAL PUZZLE CHECKER ---
         if (window.isTacticalPuzzleMode && window.activePuzzle) {
             const ap = window.activePuzzle;
+            const pStatus = document.getElementById("puzzle-status") || document.getElementById("modal-puzzle-status");
             if (fr === ap.solution.fr && fc === ap.solution.fc && tr === ap.solution.tr && tc === ap.solution.tc) {
-                document.getElementById("puzzle-status").innerText = "🎉 RICHTIG! Berechne Belohnung...";
-                document.getElementById("puzzle-status").style.color = "#2ecc71";
+                if (pStatus) {
+                    pStatus.innerText = "🎉 RICHTIG! Berechne Belohnung...";
+                    pStatus.style.color = "#2ecc71";
+                }
                 if (typeof triggerGoldDustCelebration === 'function') {
                     triggerGoldDustCelebration();
                 }
@@ -1351,8 +1354,10 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
                 }
                 window.activePuzzle = null;
             } else {
-                document.getElementById("puzzle-status").innerText = "❌ Falscher Zug! Versuche es noch einmal.";
-                document.getElementById("puzzle-status").style.color = "#e74c3c";
+                if (pStatus) {
+                    pStatus.innerText = "❌ Falscher Zug! Versuche es noch einmal.";
+                    pStatus.style.color = "#e74c3c";
+                }
                 setTimeout(() => {
                     if (typeof loadFEN === 'function') {
                         loadFEN(ap.fen);
@@ -1539,13 +1544,17 @@ function resetGame(keepCurrentMode = true) {
     if (listEl) listEl.innerHTML = '';
 
     const statusEl = document.getElementById('status-display');
+    const liveTitleEl = document.getElementById('match-live-title');
     if (statusEl) {
         if (currentMode === "bot") {
             statusEl.textContent = "🤖 Partie gegen KI - Weiß am Zug";
+            if (liveTitleEl) liveTitleEl.textContent = "🤖 Spiel gegen KI-Bot";
         } else if (currentMode === "online" || currentMode === "random") {
             statusEl.textContent = "Online gegen " + (opponentName || "Gegner") + " (" + (myColor === "white" ? "Weiß" : "Schwarz") + ")";
+            if (liveTitleEl) liveTitleEl.textContent = "⚔️ Online-Partie";
         } else {
             statusEl.textContent = "Weiß am Zug";
+            if (liveTitleEl) liveTitleEl.textContent = "👥 Lokale Partie";
         }
     }
     if (typeof draw === "function") draw();
@@ -2819,31 +2828,53 @@ socket.onmessage = (e) => {
             const p = data.puzzle;
             window.activePuzzle = p;
             
-            document.getElementById("puzzle-title").innerText = p.title;
-            document.getElementById("puzzle-desc").innerText = p.description + " (Deine Farbe: " + (p.color === "white" ? "Weiß" : "Schwarz") + ")";
+            const titleEl = document.getElementById("puzzle-title") || document.getElementById("modal-puzzle-title");
+            if (titleEl && p && p.title) {
+                titleEl.innerText = p.title;
+            }
             
-            const statusEl = document.getElementById("puzzle-status");
+            const descEl = document.getElementById("puzzle-desc") || document.getElementById("modal-puzzle-desc");
+            if (descEl && p && p.description) {
+                descEl.innerText = p.description + " (Deine Farbe: " + (p.color === "white" ? "Weiß" : "Schwarz") + ")";
+            }
+            
+            const statusEl = document.getElementById("puzzle-status") || document.getElementById("modal-puzzle-status");
+            const loadBtn = document.getElementById("loadPuzzleBtn");
             if (data.alreadySolved) {
-                statusEl.innerText = "✅ Heute bereits gelöst!";
-                statusEl.style.color = "#2ecc71";
-                document.getElementById("loadPuzzleBtn").innerText = "Geklärt (Heute gelöst)";
-                document.getElementById("loadPuzzleBtn").disabled = true;
-                document.getElementById("loadPuzzleBtn").style.opacity = "0.6";
+                if (statusEl) {
+                    statusEl.innerText = "✅ Heute bereits gelöst!";
+                    statusEl.style.color = "#2ecc71";
+                }
+                if (loadBtn) {
+                    loadBtn.innerText = "Geklärt (Heute gelöst)";
+                    loadBtn.disabled = true;
+                    loadBtn.style.opacity = "0.6";
+                }
             } else {
-                statusEl.innerText = "Bereit zum Lösen!";
-                statusEl.style.color = "#f1c40f";
-                document.getElementById("loadPuzzleBtn").innerText = "Rätsel starten";
-                document.getElementById("loadPuzzleBtn").disabled = false;
-                document.getElementById("loadPuzzleBtn").style.opacity = "1";
+                if (statusEl) {
+                    statusEl.innerText = "Bereit zum Lösen!";
+                    statusEl.style.color = "#f1c40f";
+                }
+                if (loadBtn) {
+                    loadBtn.innerText = "Rätsel starten";
+                    loadBtn.disabled = false;
+                    loadBtn.style.opacity = "1";
+                }
             }
             return;
         }
         
         if (data.type === 'puzzle_success') {
-            const statusEl = document.getElementById("puzzle-status");
-            statusEl.innerText = data.text;
-            statusEl.style.color = "#2ecc71";
-            alert(data.text);
+            const statusEl = document.getElementById("puzzle-status") || document.getElementById("modal-puzzle-status");
+            if (statusEl) {
+                statusEl.innerText = data.text;
+                statusEl.style.color = "#2ecc71";
+            }
+            if (typeof window.showInAppNotification === 'function') {
+                window.showInAppNotification("Rätsel gelöst!", data.text, "success");
+            } else {
+                alert(data.text);
+            }
             
             // Re-fetch puzzle state to update solved indicator
             if (socket && socket.readyState === WebSocket.OPEN) {
@@ -2853,10 +2884,16 @@ socket.onmessage = (e) => {
         }
 
         if (data.type === 'puzzle_info') {
-            const statusEl = document.getElementById("puzzle-status");
-            statusEl.innerText = data.text;
-            statusEl.style.color = "#f1c40f";
-            alert(data.text);
+            const statusEl = document.getElementById("puzzle-status") || document.getElementById("modal-puzzle-status");
+            if (statusEl) {
+                statusEl.innerText = data.text;
+                statusEl.style.color = "#f1c40f";
+            }
+            if (typeof window.showInAppNotification === 'function') {
+                window.showInAppNotification("Rätsel Info", data.text, "info");
+            } else {
+                alert(data.text);
+            }
             return;
         }
 
@@ -3709,8 +3746,11 @@ function initPuzzleControls() {
                 socket.send(JSON.stringify({ type: 'get_daily_puzzle' }));
                 
                 // Show status feedback
-                document.getElementById("puzzle-status").innerText = "Lade Position...";
-                document.getElementById("puzzle-status").style.color = "#bdc3c7";
+                const pStatus = document.getElementById("puzzle-status") || document.getElementById("modal-puzzle-status");
+                if (pStatus) {
+                    pStatus.innerText = "Lade Position...";
+                    pStatus.style.color = "#bdc3c7";
+                }
                 
                 // Activate puzzle load delay
                 setTimeout(() => {
@@ -3719,8 +3759,11 @@ function initPuzzleControls() {
                         loadFEN(window.activePuzzle.fen);
                         myColor = window.activePuzzle.color;
                         
-                        document.getElementById("puzzle-status").innerText = "Rätsel aktiv! Mache deinen Zug.";
-                        document.getElementById("puzzle-status").style.color = "#f1c40f";
+                        const pStat = document.getElementById("puzzle-status") || document.getElementById("modal-puzzle-status");
+                        if (pStat) {
+                            pStat.innerText = "Rätsel aktiv! Mache deinen Zug.";
+                            pStat.style.color = "#f1c40f";
+                        }
                         
                         if (resetPuzzleBtn) resetPuzzleBtn.style.display = "block";
                     }
@@ -3735,8 +3778,11 @@ function initPuzzleControls() {
         resetPuzzleBtn.addEventListener("click", () => {
             if (window.activePuzzle) {
                 loadFEN(window.activePuzzle.fen);
-                document.getElementById("puzzle-status").innerText = "Position zurückgesetzt.";
-                document.getElementById("puzzle-status").style.color = "#f1c40f";
+                const pStat = document.getElementById("puzzle-status") || document.getElementById("modal-puzzle-status");
+                if (pStat) {
+                    pStat.innerText = "Position zurückgesetzt.";
+                    pStat.style.color = "#f1c40f";
+                }
             }
         });
     }

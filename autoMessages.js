@@ -9,7 +9,7 @@ const BROADCAST_MESSAGES = [
     "💡 Tipp: Nutze `/watch [Spieler]`, um Freunden live beim Schachspiel zuzuschauen!",
     "💡 Tipp: Ändere dein Brett- und Figuren-Design jederzeit unten in den Einstellungen! 🎨",
     "🚫 Bitte bleib höflich im Chat. Fairplay steht an erster Stelle! 🤝",
-    "💡 Tipp: Du kannst gegen den Grandmaster Ghost KI-Bot antreten, um deine Fähigkeiten zu testen!",
+    "💡 Tipp: Du kannst gegen den Computer (KI) mit verschiedenen Schwierigkeitsstufen trainieren!",
     "🏆 Meistere deine Taktik im Puzzle-Modus oder fordere Spieler im Multiplayer heraus!",
     "💡 Tipp: Bei Verbindungsproblemen synchronisiert Google Firestore deine Daten automatisch neu."
 ];

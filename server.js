@@ -1539,36 +1539,13 @@ Berechne die Genauigkeit (0 bis 100), Aggressivitätsgesamtindex (0 bis 100) und
     });
 });
 
-// Ghost Player configuration
-const ghostNames = [
-    "SofortBot", "FlashBot", "luca_99", "SchachMatt123", "JulianB", "Felix_M", "Anna_Chess", "alex88", "MariusK", "PawnStar", "max_gamer", "Lena_22", 
-    "simon_p", "david_91", "kevin_pro", "sarah_k", "tim_123", "jan_schach", "peter_pan", "lara_croft", "michael_m", "tobias_k", 
-    "stephan_b", "chris_99", "julia_s", "lisa_m", "marcel_x", "dennis_d", "philipp_r", "johannes_h", "matthias_w", "christian_g",
-    "BulletKing", "blitz_god", "rapid_master", "slow_thinker", "aggressor_99", "defend_pro", "tactics_fan", "endgame_boss"
+// Bot Player configuration (Nur echte KI-Bots für Training)
+const botNames = [
+    "SchachBot (KI)", "AnfängerBot (KI)", "MeisterBot (KI)", "SofortBot", "FlashBot"
 ];
-const ghostSentences = ["hi", "moin", "gl hf", "hi :)", "viel glück", "hallo"];
 
 function createGhostPlayer() {
-    const randomName = ghostNames[Math.floor(Math.random() * ghostNames.length)];
-    
-    const ghostBot = {
-        playerName: randomName,
-        isBot: true,
-        readyState: 1,
-        send: (data) => {},
-        terminate: () => {},
-        on: () => {}
-    };
-
-    setTimeout(() => {
-        broadcast({ 
-            type: 'chat', 
-            text: ghostSentences[Math.floor(Math.random() * ghostSentences.length)], 
-            playerName: randomName 
-        });
-    }, Math.random() * 5000 + 3000);
-
-    return ghostBot;
+    return null;
 }
 
 let serverConfig = { globalMute: false };
@@ -1916,69 +1893,53 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function preloadPieceImages() {
     if (!loadImage) return;
-    console.log("⏳ Lade Schachfiguren von Wikimedia (mit Sicherheits-Pausen)...");
-    
-    let geladeneAnzahl = 0;
     const figurenKeys = Object.entries(PIECE_URLS);
-
     for (const [key, url] of figurenKeys) {
         try {
-            loadedPieceImages[key] = await loadImage(url);
-            geladeneAnzahl++;
-            console.log(`✅ Geladen (${geladeneAnzahl}/12): Figur ${key}`);
-            await sleep(600); 
-        } catch (err) {
-            console.error(`❌ Fehler beim Laden von Figur ${key}:`, err.message);
-            if (err.message && err.message.includes('429')) {
-                console.log(`🔄 Warteschlange voll (429). Versuche ${key} in 3 Sek. erneut...`);
-                await sleep(3000);
-                try {
-                    loadedPieceImages[key] = await loadImage(url);
-                    geladeneAnzahl++;
-                    console.log(`✅ Im zweiten Versuch geladen: ${key}`);
-                } catch (retryErr) {
-                    console.error(`❌ Finaler Abbruch für Figur ${key}`);
-                }
+            const resp = await fetch(url, { headers: { 'User-Agent': 'SchachLiveApp/1.0 (https://mein-schach2.onrender.com; contact: max.schule13@gmail.com)' } });
+            if (resp.ok) {
+                const buf = Buffer.from(await resp.arrayBuffer());
+                loadedPieceImages[key] = await loadImage(buf);
             }
-        }
-    }
-
-    if (geladeneAnzahl === 12) {
-        console.log("🏁 PERFEKT: Alle 12 Figuren sind im Speicher!");
-    } else {
-        console.warn(`⚠️ ACHTUNG: Nur ${geladeneAnzahl} von 12 Figuren geladen.`);
+        } catch (e) {}
     }
 }
 
-preloadPieceImages();
+preloadPieceImages().catch(() => {});
 
 async function captureMoveSnapshot(gameId, boardArray, moveCount) {
-    if (!createCanvas) return;
-    const canvas = createCanvas(400, 400);
-    const ctx = canvas.getContext('2d');
+    if (!createCanvas || !boardArray || !Array.isArray(boardArray)) return;
+    try {
+        const canvas = createCanvas(400, 400);
+        const ctx = canvas.getContext('2d');
 
-    for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-            ctx.fillStyle = (r + c) % 2 === 0 ? '#eeeed2' : '#769656';
-            ctx.fillRect(c * 50, r * 50, 50, 50);
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                ctx.fillStyle = (r + c) % 2 === 0 ? '#eeeed2' : '#769656';
+                ctx.fillRect(c * 50, r * 50, 50, 50);
+            }
         }
-    }
 
-    boardArray.forEach((row, r) => {
-        row.forEach((pieceCode, c) => {
-            if (pieceCode && loadedPieceImages[pieceCode]) {
-                const img = loadedPieceImages[pieceCode];
-                ctx.drawImage(img, c * 50 + 5, r * 50 + 5, 40, 40);
+        boardArray.forEach((row, r) => {
+            if (Array.isArray(row)) {
+                row.forEach((pieceCode, c) => {
+                    if (pieceCode && loadedPieceImages[pieceCode]) {
+                        const img = loadedPieceImages[pieceCode];
+                        ctx.drawImage(img, c * 50 + 5, r * 50 + 5, 40, 40);
+                    }
+                });
             }
         });
-    });
 
-    const fileName = `game_${gameId}_move_${String(moveCount).padStart(3, '0')}.png`;
-    const filePath = path.join(TEMP_DIR, fileName);
-    
-    const out = fs.createWriteStream(filePath);
-    const stream = canvas.createPNGStream();
-    stream.pipe(out);
+        const fileName = `game_${gameId}_move_${String(moveCount).padStart(3, '0')}.png`;
+        const filePath = path.join(TEMP_DIR, fileName);
+        
+        const out = fs.createWriteStream(filePath);
+        const stream = canvas.createPNGStream();
+        stream.pipe(out);
+    } catch (err) {
+        // Silently ignore snapshot errors to avoid crashing game
+    }
 }
 
 function generateGameVideo(gameId, ws) {
@@ -4161,47 +4122,13 @@ wss.on('connection', function(ws, req) {
                     // Broadcast to client about Elixir queue
                     ws.send(JSON.stringify({ type: 'chat', text: '⚢ [Elixir Hub] In der Matchmaking-Queue eingereiht...', playerName: 'System', lobby: 'global' }));
                     
-                    // Ghost bot fallback after 12 seconds in elixir queue
-                    ws.botTimeout = setTimeout(() => {
-                        const qIndex = elixirMatchQueue.findIndex(p => p.ws === ws);
-                        if (qIndex !== -1) {
-                            elixirMatchQueue.splice(qIndex, 1); // Remove from queue
-                            const roomID = "room_" + Date.now();
-                            const botName = ghostNames[Math.floor(Math.random() * ghostNames.length)];
-                            if (!userDB[botName]) {
-                                userDB[botName] = { level: 1 + Math.floor(Math.random() * 5), xp: Math.floor(Math.random() * 100), wins: Math.floor(Math.random() * 20), losses: Math.floor(Math.random() * 20), elo: 1000 + Math.floor(Math.random() * 500), role: 'user' };
-                            }
-                            let tc = data.timeControl || 'unlimited';
-                            let tSecs = 600, tInc = 0;
-                            if (tc !== 'unlimited') {
-                                if (tc.includes('+')) {
-                                    const pts = tc.split('+');
-                                    tSecs = (parseInt(pts[0]) || 10) * 60;
-                                    tInc = parseInt(pts[1]) || 0;
-                                } else {
-                                    tSecs = (parseInt(tc) || 10) * 60;
-                                }
-                            } else { tSecs = Infinity; }
-                            
-                            
-                            let pCoins = userDB[ws.playerName] ? (userDB[ws.playerName].coins !== undefined ? userDB[ws.playerName].coins : 1000) : 1000;
-                            let pot = 0;
-                            let betAmount = parseInt(data.bet) || 0;
-                            if (pCoins >= betAmount && betAmount > 0) {
-                                if (userDB[ws.playerName]) userDB[ws.playerName].coins = pCoins - betAmount;
-                                pot = betAmount * 2; // Ghost covers the bet
-                                console.log(`🏦 [COBOL BANK] ${betAmount} Coins von ${ws.playerName} abgebucht. Ghost covert. Pot: ${pot}`);
-                            }
-                            
-                            activeRoomStates.set(roomID, { pot: pot, chess: new Chess(), board: null, turn: 'white', isGhostMatch: true, whitePlayer: ws.playerName || "Gast", blackPlayer: botName, timeControl: tc, timeWhite: tSecs, timeBlack: tSecs, timeInc: tInc, gameOver: false });
-                            ws.room = roomID;
-                            ws.isGhostMatch = true;
-                            ws.opponentName = botName;
-                            ws.color = 'white';
-                            ws.send(JSON.stringify({ type: 'gameStart', opponent: botName, room: roomID, color: 'white', timeControl: tc, timeWhite: tSecs, timeBlack: tSecs }));
-                            console.log(`👻 [Elixir Hub] Ghost-Player '${botName}' hat das Spiel gegen ${ws.playerName || "Gast"} übernommen.`);
-                        }
-                    }, 12000);
+                    // Inform user about real matchmaking queue (no fake ghost bots)
+                    ws.send(JSON.stringify({ 
+                        type: 'chat', 
+                        text: '⏳ In der Online-Warteschlange. Sobald ein weiterer echter Spieler sucht, startet das Spiel automatisch!', 
+                        playerName: 'System', 
+                        lobby: 'global' 
+                    }));
                 }
                 return;
             }
@@ -4344,7 +4271,9 @@ wss.on('connection', function(ws, req) {
                     if (!moveCounters[targetRoom]) moveCounters[targetRoom] = 0;
                     moveCounters[targetRoom]++; 
                     
-                    captureMoveSnapshot(targetRoom, data.board, moveCounters[targetRoom]);
+                    try {
+                        captureMoveSnapshot(targetRoom, data.board, moveCounters[targetRoom]).catch(() => {});
+                    } catch (e) {}
                     ws.lastBoardState = data.board; 
 
                     roomState = activeRoomStates.get(targetRoom);
@@ -4383,7 +4312,7 @@ wss.on('connection', function(ws, req) {
                     broadcastRoomMessage(data, targetRoom, ws);
 
                     if (ws.isGhostMatch) {
-                        const currentBotName = ws.opponentName || "luca_99";
+                        const currentBotName = ws.opponentName || "SchachBot (KI)";
                         const tc = roomState && roomState.timeControl ? roomState.timeControl : '10+0';
                         if (typeof ghost !== 'undefined' && ghost && ghost.handleGhostMove) {
                             ghost.handleGhostMove(ws, data.board, 'black', currentBotName, tc);
@@ -4672,72 +4601,7 @@ wss.on('connection', function(ws, req) {
                         text: `⏳ Raum '${roomName}' beigetreten. Warte auf menschliche(n) Mitspieler...`
                     }));
 
-                    // In tournament/custom rooms, bot fallback is ONLY executed if explicitly enabled!
-                    if (data.allowBotFallback === true) {
-                        ws.botTimeout = setTimeout(() => {
-                            let currList = roomWaitingMap.get(roomName) || [];
-                            if (currList.includes(ws)) {
-                                currList = currList.filter(c => c !== ws);
-                                roomWaitingMap.set(roomName, currList);
-
-                                const botName = ghostNames[Math.floor(Math.random() * ghostNames.length)];
-                                if (!userDB[botName]) {
-                                    userDB[botName] = { 
-                                        level: 1 + Math.floor(Math.random() * 5), 
-                                        xp: Math.floor(Math.random() * 100), 
-                                        wins: Math.floor(Math.random() * 20), 
-                                        losses: Math.floor(Math.random() * 20), 
-                                        elo: 1000 + Math.floor(Math.random() * 500), 
-                                        role: 'user' 
-                                    };
-                                }
-                                let tc = ws.timeControl || '10+0';
-                                let tSecs = 600;
-                                let tInc = 0;
-                                if (tc !== 'unlimited') {
-                                    if (tc.includes('+')) {
-                                        const pts = tc.split('+');
-                                        tSecs = (parseInt(pts[0]) || 10) * 60;
-                                        tInc = parseInt(pts[1]) || 0;
-                                    } else {
-                                        tSecs = (parseInt(tc) || 10) * 60;
-                                    }
-                                } else {
-                                    tSecs = Infinity;
-                                }
-
-                                activeRoomStates.set(roomName, {
-                                    board: null,
-                                    turn: 'white',
-                                    isGhostMatch: true,
-                                    whitePlayer: ws.playerName || "Gast",
-                                    blackPlayer: botName,
-                                    timeControl: tc,
-                                    timeWhite: tSecs,
-                                    timeBlack: tSecs,
-                                    timeInc: tInc,
-                                    gameOver: false
-                                });
-
-                                ws.isGhostMatch = true;
-                                ws.opponentName = botName;
-                                ws.color = 'white';
-
-                                ws.send(JSON.stringify({
-                                    type: 'gameStart',
-                                    opponent: botName,
-                                    room: roomName,
-                                    color: 'white',
-                                    timeControl: tc,
-                                    timeWhite: tSecs,
-                                    timeBlack: tSecs
-                                }));
-                                if (typeof ghost !== 'undefined' && ghost && ghost.handleGhostGreeting) {
-                                    ghost.handleGhostGreeting(ws, botName);
-                                }
-                            }
-                        }, 15000);
-                    }
+                    // Real human matchmaking - no ghost bots pretending to be humans
                 }
                 return;
             }
@@ -5050,13 +4914,6 @@ server.listen(PORT, '0.0.0.0', async function() {
 
     if (typeof startBackupScheduler === 'function') {
         startBackupScheduler(firestoreDb);
-    }
-    if (typeof startAutoMessages === 'function') {
-        startAutoMessages(wss); 
-        console.log("🤖 Info-Bot (AutoMessages) wurde gestartet.");
-    }
-    if (typeof startAutoTestBot === 'function') {
-        startAutoTestBot({ wss, db: firestoreDb, profiles: userDB }, 5);
     }
 
     console.log("✅ MASTER-SERVER READY AUF PORT " + PORT);
