@@ -1380,6 +1380,41 @@ app.post('/api/admin/unban-user', async (req, res) => {
     });
 });
 
+app.post('/api/admin/delete-user', async (req, res) => {
+    const { target, username } = req.body || {};
+    const targetName = target || username;
+    if (!targetName) {
+        return res.status(400).json({ success: false, message: 'Spielername erforderlich' });
+    }
+
+    const cleanTarget = targetName.trim();
+    if (userDB[cleanTarget]) {
+        delete userDB[cleanTarget];
+    }
+    if (leaderboard[cleanTarget]) {
+        delete leaderboard[cleanTarget];
+    }
+    bannedPlayers.delete(cleanTarget.toLowerCase());
+
+    if (firestoreDb) {
+        try {
+            await firestoreDb.collection('players').doc(cleanTarget).delete().catch(() => {});
+            await firestoreDb.collection('leaderboard').doc(cleanTarget).delete().catch(() => {});
+            console.log(`🔥 Spieler '${cleanTarget}' aus Firestore gelöscht.`);
+        } catch(e) {
+            console.error("Fehler beim Löschen des Benutzers aus Firestore:", e.message);
+        }
+    }
+
+    try {
+        fs.writeFileSync(USER_FILE, JSON.stringify(userDB, null, 2));
+        fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2));
+    } catch(e) {}
+
+    broadcastAdminUsersUpdate();
+    return res.json({ success: true, message: `✅ Spieler '${cleanTarget}' wurde vollständig aus Firestore und Datenbank gelöscht!` });
+});
+
 app.post('/api/admin/ban-user', async (req, res) => {
     const { target, username, reason } = req.body || {};
     const targetName = target || username;
@@ -2179,12 +2214,13 @@ async function loadProfilesFromDB() {
     try {
         if (firestoreDb) {
             const snapshot = await firestoreDb.collection('players').get();
+            const freshUserDB = {};
             let count = 0;
             snapshot.forEach(doc => {
                 const clean = sanitizeLeaderboardEntry(doc.data(), doc.id);
                 if (!clean) return;
                 const p = doc.data();
-                userDB[clean.name] = {
+                freshUserDB[clean.name] = {
                     password: p.password || "",
                     elo: clean.elo,
                     wins: clean.wins,
@@ -2198,6 +2234,7 @@ async function loadProfilesFromDB() {
                 };
                 count++;
             });
+            userDB = freshUserDB;
             console.log(`✅ ${count} Profile erfolgreich aus Firestore geladen.`);
         }
     } catch (err) {
@@ -2209,12 +2246,15 @@ async function loadFirestoreProfiles() {
     if (!firestoreDb) return;
     try {
         const snapshot = await firestoreDb.collection('players').get();
+        const freshUserDB = {};
+        const freshLeaderboard = {};
+
         snapshot.forEach(doc => {
             const data = doc.data();
             const clean = sanitizeLeaderboardEntry(data, doc.id);
             if (clean) {
                 const uname = clean.name;
-                userDB[uname] = {
+                freshUserDB[uname] = {
                     username: uname,
                     uid: data.uid || doc.id || "",
                     role: data.role || (isUserAdmin(uname) ? "admin" : "user"),
@@ -2230,68 +2270,23 @@ async function loadFirestoreProfiles() {
                     board_theme: data.board_theme || "classic",
                     piece_theme: data.piece_theme || "classic",
                     achievements: data.achievements || [],
-                    last_puzzle_solved: data.last_puzzle_solved || "",
-                    last_puzzle_solved_date: data.last_puzzle_solved_date || "",
-                    puzzle_streak: data.puzzle_streak || 0
+                    is_banned: !!data.is_banned,
+                    ban_reason: data.ban_reason || null
                 };
-                leaderboard[uname] = clean.wins;
-
-                if (doc.id !== uname && userDB[doc.id]) {
-                    delete userDB[doc.id];
-                    delete leaderboard[doc.id];
-                }
-            } else if (doc.id.includes('@') || doc.id === 'MaxAdmin') {
-                delete userDB[doc.id];
-                delete leaderboard[doc.id];
-            }
-        });
-        console.log(`🔥 ${snapshot.size} Nutzer-Profile aus Firestore synchronisiert.`);
-
-        // Also clean up leaderboard collection from Firestore
-        const lbSnapshot = await firestoreDb.collection('leaderboard').get();
-        lbSnapshot.forEach(doc => {
-            const data = doc.data();
-            const clean = sanitizeLeaderboardEntry(data, doc.id);
-            if (clean) {
-                const uname = clean.name;
-                if (!userDB[uname]) {
-                    userDB[uname] = {
-                        username: uname,
-                        elo: clean.elo,
-                        wins: clean.wins,
-                        losses: clean.losses,
-                        level: clean.level,
-                        xp: clean.xp,
-                        role: clean.role || "user"
-                    };
-                }
-                leaderboard[uname] = clean.wins;
-            } else {
-                // Delete invalid / orphan email / UID doc from leaderboard collection
-                firestoreDb.collection('leaderboard').doc(doc.id).delete().catch(() => {});
+                freshLeaderboard[uname] = clean.wins;
             }
         });
 
-        // Ensure clean leaderboard collection in Firestore
-        for (const uname in userDB) {
-            const clean = sanitizeLeaderboardEntry(userDB[uname], uname);
-            if (clean) {
-                firestoreDb.collection('leaderboard').doc(clean.name).set({
-                    username: clean.name,
-                    name: clean.name,
-                    elo: clean.elo,
-                    wins: clean.wins,
-                    losses: clean.losses,
-                    level: clean.level,
-                    xp: clean.xp,
-                    role: clean.role || 'Gast',
-                    updatedAt: new Date().toISOString()
-                }, { merge: true }).catch(() => {});
-            } else {
-                delete userDB[uname];
-                delete leaderboard[uname];
-            }
-        }
+        // Authoritative replacement from Firestore
+        userDB = freshUserDB;
+        leaderboard = freshLeaderboard;
+
+        try {
+            fs.writeFileSync(USER_FILE, JSON.stringify(userDB, null, 2));
+            fs.writeFileSync(LB_FILE, JSON.stringify(leaderboard, null, 2));
+        } catch (e) {}
+
+        console.log(`🔥 ${Object.keys(userDB).length} Nutzer-Profile aus Firestore synchronisiert (gelöschte Einträge bereinigt).`);
     } catch (e) {
         console.warn("Firestore profiles load error:", e.message);
     }
@@ -2301,6 +2296,9 @@ async function loadFirestoreBans() {
     if (!firestoreDb) return;
     try {
         const snapshot = await firestoreDb.collection('bans').get();
+        const freshBannedIPs = new Set();
+        const freshBannedPlayers = new Set();
+
         snapshot.forEach(doc => {
             const data = doc.data();
             const target = data.target;
@@ -2308,16 +2306,24 @@ async function loadFirestoreBans() {
             if (target && type) {
                 if (type === 'ip') {
                     if (!isLoopbackOrLocalIP(target)) {
-                        bannedIPs.add(target);
+                        freshBannedIPs.add(target);
                     }
                 } else if (type === 'username') {
                     if (!isUserAdmin(target)) {
-                        bannedPlayers.add(target.trim().toLowerCase());
+                        freshBannedPlayers.add(target.trim().toLowerCase());
                     }
                 }
             }
         });
-        console.log(`🔥 ${snapshot.size} Bans aus Firestore geladen. (Banned IPs: ${bannedIPs.size}, Banned Players: ${bannedPlayers.size})`);
+
+        bannedIPs = freshBannedIPs;
+        bannedPlayers = freshBannedPlayers;
+
+        try {
+            fs.writeFileSync(BAN_FILE, JSON.stringify([...bannedIPs], null, 2));
+        } catch (e) {}
+
+        console.log(`🔥 ${snapshot.size} Bans aus Firestore synchronisiert. (Banned IPs: ${bannedIPs.size}, Banned Players: ${bannedPlayers.size})`);
     } catch (e) {
         console.warn("Firestore bans load error:", e.message);
     }
@@ -2807,107 +2813,19 @@ async function unbanPlayerHelper(targetName) {
 async function syncAllToFirestore() {
     if (!firestoreDb) return;
     try {
-        console.log("🔥 Starte Initial-Synchronisation aller Daten mit Firebase Firestore...");
+        console.log("🔥 Firestore Synchronisationsprüfung aktiv (Single Source of Truth: schachlive)...");
         
-        // 1. Ensure default/existing player profiles exist in Firestore
-        if (!userDB['Max']) {
-            userDB['Max'] = {
-                username: 'Max',
-                role: 'admin',
-                elo: 1500,
-                wins: 12,
-                losses: 1,
-                xp: 1200,
-                level: 10,
-                email: 'max.schule13@gmail.com',
-                board_theme: 'classic',
-                piece_theme: 'classic',
-                achievements: ['first_win', 'veteran'],
-                created_at: new Date().toISOString()
-            };
-        }
-
-        for (const [uname, u] of Object.entries(userDB)) {
-            const safeProfile = { ...u };
-            delete safeProfile.password;
-            await firestoreDb.collection('players').doc(uname).set(safeProfile, { merge: true });
-            await firestoreDb.collection('leaderboard').doc(uname).set({
-                username: uname,
-                name: uname,
-                elo: u.elo || 1200,
-                wins: u.wins || 0,
-                losses: u.losses || 0,
-                level: u.level || 1,
-                xp: u.xp || 0,
-                role: u.role || 'Gast',
-                updatedAt: new Date().toISOString()
+        // Ensure initial welcome message exists if empty
+        try {
+            await firestoreDb.collection('messages').doc('welcome_msg').set({
+                username: 'System',
+                content: 'Willkommen in der SchachLive Community Lobby!',
+                lobby: 'global',
+                timestamp: new Date().toISOString()
             }, { merge: true });
-        }
+        } catch(e) {}
 
-        // 2. Ensure bans collection in Firestore has documents
-        if (bannedIPs.size === 0 && bannedPlayers.size === 0) {
-            await firestoreDb.collection('bans').doc('system_ban_security').set({
-                target: '0.0.0.0',
-                type: 'ip',
-                reason: 'Initial Security Ban Filter',
-                createdAt: new Date().toISOString()
-            }, { merge: true });
-        } else {
-            for (const ip of bannedIPs) {
-                const banId = `ip_${ip.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
-                await firestoreDb.collection('bans').doc(banId).set({
-                    target: ip,
-                    type: 'ip',
-                    reason: 'IP-Sperre',
-                    createdAt: new Date().toISOString()
-                }, { merge: true });
-            }
-            for (const player of bannedPlayers) {
-                const banId = `username_${player.toLowerCase().replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
-                await firestoreDb.collection('bans').doc(banId).set({
-                    target: player,
-                    type: 'username',
-                    reason: 'Spieler-Sperre',
-                    createdAt: new Date().toISOString()
-                }, { merge: true });
-            }
-        }
-
-        // 3. Ensure tickets collection in Firestore
-        if (globalSupportTickets.length === 0) {
-            const sampleTicket = {
-                id: 'TICK-WELCOME',
-                user: 'System',
-                contact: 'schachlivesupport.jailer914@slmail.me',
-                clientIP: '127.0.0.1',
-                email: 'schachlivesupport.jailer914@slmail.me',
-                text: 'Willkommen beim SchachLive Support-System! Alle Tickets und Entbannungsanträge werden hier synchronisiert.',
-                banReason: 'System-Information',
-                status: 'Beantwortet',
-                createdAt: new Date().toLocaleString('de-DE'),
-                timestamp: Date.now(),
-                reply: 'Support-System betriebsbereit.'
-            };
-            globalSupportTickets.push(sampleTicket);
-            saveTicketsToFile();
-            await firestoreDb.collection('tickets').doc('TICK-WELCOME').set(sampleTicket, { merge: true });
-        } else {
-            for (const ticket of globalSupportTickets) {
-                if (ticket.id) {
-                    await firestoreDb.collection('tickets').doc(ticket.id).set(ticket, { merge: true });
-                }
-            }
-        }
-
-        // 4. Ensure initial messages and games collections exist
-        await firestoreDb.collection('messages').doc('welcome_msg').set({
-            username: 'System',
-            content: 'Willkommen in der SchachLive Community Lobby!',
-            lobby: 'global',
-            timestamp: new Date().toISOString()
-        }, { merge: true });
-
-        console.log("✅ Firestore Synchronisation erfolgreich abgeschlossen! (players, bans, leaderboard, tickets, games, messages sind aktiv)");
+        console.log("✅ Firestore Synchronisationsprüfung bereit.");
     } catch (e) {
         console.error("Fehler bei syncAllToFirestore:", e.message);
     }
@@ -2944,15 +2862,17 @@ async function loadData() {
             console.log("Fehler beim Laden: Bans");
         }
     }
+
+    // Load fresh data directly from Firestore (overwriting local with remote deletions)
     await loadFirestoreProfiles();
     await loadFirestoreBans();
     await loadFirestoreTickets();
     await syncAllToFirestore();
 
     // Auto-clean Admin Accounts from Ban lists
-    const ADMIN_NAMES = ['max.schule13@gmail.com'];
+    const ADMIN_NAMES = ['max.schule13@gmail.com', 'Max'];
     ADMIN_NAMES.forEach(adm => {
-        bannedPlayers.delete(adm);
+        bannedPlayers.delete(adm.toLowerCase());
         if (userDB && userDB[adm]) {
             userDB[adm].is_banned = false;
             userDB[adm].ip_ban = false;
@@ -2970,6 +2890,15 @@ async function loadData() {
 }
 loadData();
 
+// Periodic automatic background sync from Firestore every 20 seconds
+setInterval(async () => {
+    try {
+        await loadFirestoreProfiles();
+        await loadFirestoreBans();
+        await loadFirestoreTickets();
+    } catch (e) {}
+}, 20000);
+
 async function loadBannedIPs() {
     try {
         if (firestoreDb) {
@@ -2983,6 +2912,26 @@ async function loadBannedIPs() {
 }
 
 loadBannedIPs();
+
+// REST endpoint to trigger manual immediate sync from Firestore
+app.get(['/api/sync-firebase', '/api/admin/sync-firestore'], async (req, res) => {
+    try {
+        await loadFirestoreProfiles();
+        await loadFirestoreBans();
+        await loadFirestoreTickets();
+        broadcastAdminUsersUpdate();
+        broadcastTicketsUpdate();
+        return res.json({ 
+            success: true, 
+            message: 'Firebase Firestore Daten erfolgreich synchronisiert!',
+            playerCount: Object.keys(userDB).length,
+            bannedIPCount: bannedIPs.size,
+            bannedPlayerCount: bannedPlayers.size
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
 
 async function saveAll(specificPlayerName = null) {
     try {

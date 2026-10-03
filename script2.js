@@ -89,11 +89,13 @@ window.acceptAGB = function() {
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, updateProfile, signOut, GoogleAuthProvider, signInWithPopup } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-analytics.js";
 
 let firebaseConfig = null;
 let fbApp = null;
 let fbAuth = null;
 let fbDb = null;
+let fbAnalytics = null;
 
 const defaultFirebaseConfig = {
     apiKey: "AIzaSyA3KVyicVW1wqLjhNmJf3g9hJUAaovhDv0",
@@ -127,6 +129,13 @@ async function initFirebase() {
         } else {
             fbDb = getFirestore(fbApp);
         }
+
+        try {
+            if (await isSupported()) {
+                fbAnalytics = getAnalytics(fbApp);
+                window.fbAnalytics = fbAnalytics;
+            }
+        } catch(e) {}
 
         window.fbApp = fbApp;
         window.fbAuth = fbAuth;

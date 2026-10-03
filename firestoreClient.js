@@ -10,7 +10,15 @@ function getFirebaseConfig() {
     } catch (e) {
         console.warn('Fehler beim Lesen der firebase-applet-config.json:', e.message);
     }
-    return null;
+    return {
+        apiKey: "AIzaSyA3KVyicVW1wqLjhNmJf3g9hJUAaovhDv0",
+        authDomain: "schachlive.firebaseapp.com",
+        projectId: "schachlive",
+        storageBucket: "schachlive.firebasestorage.app",
+        messagingSenderId: "729285821168",
+        appId: "1:729285821168:web:6d3fc2d942c8b8d101b835",
+        measurementId: "G-184X8Q73WV"
+    };
 }
 
 // Convert native JS values to Firestore REST field format
