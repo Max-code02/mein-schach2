@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions for secure authentication and authorization
+    // 🔒 Hilfsfunktionen zur Authentifizierung & Berechtigungsprüfung
     function isSignedIn() {
       return request.auth != null;
     }
@@ -13,52 +13,90 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && (
-        (request.auth.token.email != null && request.auth.token.email.lower() == 'max.schule13@gmail.com') ||
+        (request.auth.token.email != null && request.auth.token.email.lower() == 'max.schule13@gmail.com' && request.auth.token.email_verified == true) ||
         (request.auth.token.admin == true)
       );
     }
 
-    // 1. Spieler-Profile (Statistiken, Elo, XP, Themes)
+    // 1. Spieler-Profile (Elo, Level, Avatar, XP, Themes)
     match /players/{playerId} {
-      allow read, write: if true;
+      // Öffentliches Lesen für Ranglisten und Spielersuche
+      allow read: if true;
+
+      // 🔴 Schutz vor: Cheat-Stats & unautorisierter fremder Profilerstellung
+      // Flexibel für Google-Sign-In & E-Mail-Registrierung
+      allow create: if (isOwner(playerId) || isAdmin())
+                    && (!('role' in request.resource.data) || request.resource.data.role == 'user' || isAdmin())
+                    && (!('is_banned' in request.resource.data) || request.resource.data.is_banned == false || isAdmin())
+                    && (!('elo' in request.resource.data) || request.resource.data.elo <= 1200 || isAdmin())
+                    && (!('wins' in request.resource.data) || request.resource.data.wins == 0 || isAdmin())
+                    && (!('losses' in request.resource.data) || request.resource.data.losses == 0 || isAdmin())
+                    && (!('xp' in request.resource.data) || request.resource.data.xp == 0 || isAdmin())
+                    && (!('level' in request.resource.data) || request.resource.data.level <= 1 || isAdmin());
+
+      // 🔴 Schutz vor: Rollen-Manipulation, unberechtigten Entbannungen & Cheaten
+      // Spieler dürfen nur kosmetische/eigene Felder ändern; Ranking- & Sicherheitsfelder nur Admin
+      allow update: if isAdmin() || (
+        isOwner(playerId) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'role', 'is_banned', 'ban_reason', 'ip_ban', 
+          'elo', 'wins', 'losses', 'xp', 'level', 'coins',
+          'email', 'ip_address'
+        ])
+      );
+
+      // Löschen nur für Admins
+      allow delete: if isAdmin();
     }
 
     // 2. Private Benutzerdaten (z.B. E-Mail, Einstellungen, Sicherheitsdaten)
     match /users_private/{userId} {
-      allow read, write: if isOwner(userId) || isAdmin() || true;
+      allow read, write: if isOwner(userId) || isAdmin();
     }
 
-    // 3. Globale Rangliste / Leaderboard (Server- und Spieler-Statistiken)
+    // 3. Globale Rangliste / Leaderboard
     match /leaderboard/{entryDocId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin() || (isOwner(entryDocId) && request.resource.data.username is string);
     }
 
-    // 4. Bann-Listen (Gesperrte Benutzer & IPs)
+    // 4. Bann-Listen (Gesperrte Spieler & IP-Sperren)
     match /bans/{banId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     // 5. Spielhistorie & Snapshots (Partie-Aufzeichnungen)
     match /games/{gameId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
     }
 
     // 6. Chat-Nachrichten
     match /messages/{messageId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.content is string && request.resource.data.content.size() <= 1000;
+      allow update, delete: if isAdmin();
     }
 
     // 7. Support-Tickets & Entbannungsanträge
     match /tickets/{ticketId} {
-      allow read, write: if true;
+      allow read: if isAdmin() || (isSignedIn() && (
+        ('uid' in resource.data && resource.data.uid == request.auth.uid) ||
+        ('userId' in resource.data && resource.data.userId == request.auth.uid)
+      ));
+      allow create: if request.resource.data.text is string && request.resource.data.text.size() <= 2000;
+      allow update, delete: if isAdmin();
     }
 
-    // 8. System Status & Health Monitoring
+    // 8. System Status & Verbindungs-Monitoring
     match /system/{docId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // Strenger globaler Fallback: Alle nicht explizit erlaubten Zugriffe verweigern
+    // 🚫 Strenger Fallback: Alle nicht explizit erlaubten Pfade sperren
     match /{document=**} {
       allow read, write: if false;
     }

@@ -40,7 +40,58 @@ const crypto = require('crypto');
 const { renderAdminLoginPage, renderAdminDashboard } = require('./adminDashboard');
 let bannedIPs = new Set();
 let bannedPlayers = new Set();
-const ADMIN_PASSWORDS_LIST = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi', '222'];
+
+function getClientIP(req) {
+    if (!req) return '127.0.0.1';
+    const remote = req.socket?.remoteAddress || req.connection?.remoteAddress || '';
+    const cleanIP = String(remote).replace(/^::ffff:/, '').trim();
+    return cleanIP || '127.0.0.1';
+}
+
+function verifyAdminPassword(passCandidate) {
+    if (!passCandidate || typeof passCandidate !== 'string') return false;
+    const adminSecret = process.env.ADMIN_PASSWORD;
+    if (!adminSecret || adminSecret.length < 6) return false;
+    try {
+        const candidateBuf = Buffer.from(String(passCandidate).trim());
+        const secretBuf = Buffer.from(adminSecret.trim());
+        if (candidateBuf.length !== secretBuf.length) return false;
+        return crypto.timingSafeEqual(candidateBuf, secretBuf);
+    } catch (e) {
+        return false;
+    }
+}
+
+function hashPassword(password) {
+    if (!password || typeof password !== 'string') return '';
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+    return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, storedHash) {
+    if (!password || !storedHash || typeof password !== 'string' || typeof storedHash !== 'string') return false;
+    const parts = storedHash.split(':');
+    if (parts.length === 2) {
+        const [salt, key] = parts;
+        try {
+            const keyBuffer = Buffer.from(key, 'hex');
+            const derivedKey = crypto.scryptSync(password, salt, 64);
+            return crypto.timingSafeEqual(keyBuffer, derivedKey);
+        } catch (e) {
+            return false;
+        }
+    }
+    // Backward compatibility for legacy plaintext passwords: constant-time comparison
+    try {
+        const a = Buffer.from(password);
+        const b = Buffer.from(storedHash);
+        if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+            return true;
+        }
+    } catch (e) {}
+    return false;
+}
 
 function isLoopbackOrLocalIP(ip) {
     if (!ip) return true;
@@ -507,47 +558,48 @@ function renderBannedPage(clientIP, reason) {
 
 // Emergency Unban & Security Middleware
 app.use((req, res, next) => {
-    const rawIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
-    const clientIP = String(rawIP).split(',')[0].replace(/^::ffff:/, '').trim();
+    const clientIP = getClientIP(req);
 
-    // Check emergency unban triggers via secure unban endpoint
-    const reqPass = req.query.unban || req.query.pass || req.headers['x-admin-key'];
-    const isAdminPass = reqPass && ADMIN_PASSWORDS_LIST.some(p => p.toLowerCase() === String(reqPass).toLowerCase().trim());
-    const isLocalOrDev = isLoopbackOrLocalIP(clientIP) || isLoopbackOrLocalIP(rawIP);
+    // Dedicated secure emergency unban endpoint: requires genuine admin password
+    if (req.path === '/unban-self' || req.path === '/api/unban-self') {
+        const reqPass = req.query.unban || req.query.pass || req.headers['x-admin-key'] || req.headers['x-admin-pass'];
+        const isAdminAuthorized = reqPass && verifyAdminPassword(String(reqPass).trim());
 
-    if (isAdminPass || (isLocalOrDev && (req.path === '/unban-self' || req.path === '/api/unban-self'))) {
-        bannedIPs.delete(clientIP);
-        bannedIPs.delete(rawIP);
+        if (!isAdminAuthorized) {
+            return res.status(403).json({
+                success: false,
+                message: 'Zugriff verweigert: Gültiges Administrator-Passwort erforderlich.'
+            });
+        }
+
         bannedIPs.clear();
         bannedPlayers.clear();
-        console.log(`🔓 Notfall-Entsperrung ausgeführt für IP: ${clientIP}`);
+        console.log(`🔓 Notfall-Entsperrung durch verifizierten Administrator ausgeführt.`);
 
-        if (req.path === '/unban-self' || req.path === '/api/unban-self') {
-            return res.status(200).send(`
-                <!DOCTYPE html>
-                <html lang="de">
-                <head>
-                    <meta charset="UTF-8">
-                    <title>IP Entsperrt - Schach</title>
-                    <style>
-                        body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; text-align: center; padding: 60px 20px; }
-                        .card { background: #1e293b; max-width: 520px; margin: 0 auto; padding: 40px; border-radius: 20px; border: 1px solid #10b981; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
-                        h1 { color: #34d399; margin-top: 0; font-size: 28px; }
-                        p { font-size: 16px; color: #cbd5e1; line-height: 1.6; }
-                        .btn { display: inline-block; margin-top: 25px; padding: 14px 28px; background: #10b981; color: #ffffff; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 16px; transition: background 0.2s; }
-                        .btn:hover { background: #059669; }
-                    </style>
-                </head>
-                <body>
-                    <div class="card">
-                        <h1>✅ Admin/Entwickler erfolgreich entsperrt!</h1>
-                        <p>Deine IP (<strong>${clientIP}</strong>) und alle aktiven Sperren wurden zurückgesetzt.</p>
-                        <a href="/" class="btn">🎮 Zurück zur Schach-Anwendung</a>
-                    </div>
-                </body>
-                </html>
-            `);
-        }
+        return res.status(200).send(`
+            <!DOCTYPE html>
+            <html lang="de">
+            <head>
+                <meta charset="UTF-8">
+                <title>IP Entsperrt - Schach</title>
+                <style>
+                    body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; text-align: center; padding: 60px 20px; }
+                    .card { background: #1e293b; max-width: 520px; margin: 0 auto; padding: 40px; border-radius: 20px; border: 1px solid #10b981; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
+                    h1 { color: #34d399; margin-top: 0; font-size: 28px; }
+                    p { font-size: 16px; color: #cbd5e1; line-height: 1.6; }
+                    .btn { display: inline-block; margin-top: 25px; padding: 14px 28px; background: #10b981; color: #ffffff; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 16px; transition: background 0.2s; }
+                    .btn:hover { background: #059669; }
+                </style>
+            </head>
+            <body>
+                <div class="card">
+                    <h1>✅ Admin erfolgreich authentifiziert!</h1>
+                    <p>Alle aktiven Sperren wurden sicher zurückgesetzt.</p>
+                    <a href="/" class="btn">🎮 Zurück zur Schach-Anwendung</a>
+                </div>
+            </body>
+            </html>
+        `);
     }
 
     if (req.headers['x-forwarded-proto'] !== 'https' && process.env.NODE_ENV === 'production') {
@@ -567,8 +619,7 @@ app.use((req, res, next) => {
 
 // Dedicated server-side banned page endpoint
 app.get('/banned', (req, res) => {
-    const rawIP = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
-    const clientIP = String(rawIP).split(',')[0].replace(/^::ffff:/, '').trim();
+    const clientIP = getClientIP(req);
     const reason = req.query.reason || 'Zugriff verweigert / Sperrung durch Administration';
     res.status(403).send(renderBannedPage(clientIP, reason));
 });
@@ -593,9 +644,9 @@ async function verifyAdminAuth(req) {
         }
     }
 
-    // 2. Check password via query or custom header or body
+    // 2. Check password via query or custom header or body using constant-time check
     const passCandidate = req.query.pass || req.headers['x-admin-pass'] || req.headers['x-admin-key'] || req.body?.password;
-    if (passCandidate && ADMIN_PASSWORDS_LIST.includes(String(passCandidate).trim())) {
+    if (passCandidate && verifyAdminPassword(String(passCandidate).trim())) {
         return { authorized: true, adminName: 'Max (Master-Admin)', email: 'max.schule13@gmail.com', method: 'password' };
     }
 
@@ -622,7 +673,7 @@ async function verifyAdminAuth(req) {
             if (admin && admin.auth) {
                 const decodedToken = await admin.auth().verifyIdToken(token);
                 if (decodedToken) {
-                    const isOwnerEmail = decodedToken.email && decodedToken.email.toLowerCase() === 'max.schule13@gmail.com';
+                    const isOwnerEmail = decodedToken.email && decodedToken.email.toLowerCase() === 'max.schule13@gmail.com' && decodedToken.email_verified === true;
                     let isDbAdmin = false;
                     if (firestoreDb && decodedToken.uid) {
                         try {
@@ -735,7 +786,7 @@ app.post('/admin/api/login', async (req, res) => {
     let adminName = 'Admin';
     let email = '';
 
-    if (password && ADMIN_PASSWORDS_LIST.includes(String(password).trim())) {
+    if (password && verifyAdminPassword(String(password).trim())) {
         authorized = true;
         adminName = 'Max (Master-Admin)';
         email = 'max.schule13@gmail.com';
@@ -743,7 +794,7 @@ app.post('/admin/api/login', async (req, res) => {
         try {
             const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
             if (decodedToken) {
-                const isOwnerEmail = decodedToken.email && decodedToken.email.toLowerCase() === 'max.schule13@gmail.com';
+                const isOwnerEmail = decodedToken.email && decodedToken.email.toLowerCase() === 'max.schule13@gmail.com' && decodedToken.email_verified === true;
                 let isDbAdmin = false;
                 if (firestoreDb && decodedToken.uid) {
                     try {
@@ -811,11 +862,29 @@ app.get('/admin/api/data', async (req, res) => {
     res.json({ success: true, ...data });
 });
 
-// Serve Static Frontend Files & Root Route (1. Root-Route / & 2. Statische Dateien)
-app.use(express.static(__dirname, { maxAge: 0 }));
+// 🛡️ SECURE STATIC FILE SERVING (Never expose server.js, backups, .env, or database files)
+const ALLOWED_STATIC_FILES = new Set([
+    'index.html', 'handy.html', 'stats.html', 'chat.html', 'datenschutz.html', 'impressum.html', 
+    'AGB.html', 'sitemap.html', 'sitemap.xml', 'robots.txt', 'manifest.json', 'sw.js',
+    'script.js', 'script2.js', 'script_chat.js', 'style.css',
+    'icon.png', 'icon.jpg', 'schach-vorschau.jpg',
+    'stockfishWorker.js', 'engineWorker.js', 'puzzleEngine.js', 'openingTrainer.js', 
+    'openingBook.js', 'pgnEngine.js', 'evalEngine.js', 'bettingEngine.js', 
+    'eloSystem.js', 'leaderboards.js', 'video-engine.js', 'soundEngine.js', 'emojis.js'
+]);
+
 if (fs.existsSync(path.join(__dirname, 'public'))) {
     app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0 }));
 }
+
+app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    const reqPath = req.path.replace(/^\/+/, '');
+    if (ALLOWED_STATIC_FILES.has(reqPath)) {
+        return res.sendFile(path.join(__dirname, reqPath));
+    }
+    next();
+});
 
 app.get('/', (req, res) => {
     if (fs.existsSync(path.join(__dirname, 'index.html'))) {
@@ -850,37 +919,33 @@ app.get(['/stats', '/stats.html', '/rangliste', '/leaderboard'], (req, res) => {
 // REST Endpoints for Auth and Analysis
 app.post('/api/login', async (req, res) => {
     const { username, password } = req.body || {};
-    if (!username || !password) {
+    if (!username || typeof username !== 'string' || !password || typeof password !== 'string') {
         return res.status(400).json({ success: false, error: "Name und Passwort erforderlich!" });
     }
 
-    let user = userDB[username];
-
-    if (!user) {
-        try {
-            if (data && data.length > 0) {
-                user = data[0];
-                userDB[username] = user;
-            }
-        } catch (e) {}
-    }
+    const cleanUsername = username.trim();
+    let user = userDB[cleanUsername];
 
     // Try fetching from Firestore if missing locally (fallback)
     if (!user && firestoreDb) {
         try {
-            const doc = await firestoreDb.collection('players').doc(username).get();
+            const doc = await firestoreDb.collection('players').doc(cleanUsername).get();
             if (doc.exists) {
                 user = doc.data();
-                userDB[username] = user;
+                userDB[cleanUsername] = user;
             }
         } catch (e) {}
     }
 
-    const clientIP = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
-    const uLower = username.trim().toLowerCase();
+    if (!user) {
+        return res.status(401).json({ success: false, error: "Benutzerkonto existiert nicht. Bitte registriere dich zuerst!" });
+    }
+
+    const clientIP = getClientIP(req);
+    const uLower = cleanUsername.toLowerCase();
 
     // Ban check (unless admin)
-    if (!isUserAdmin(username) && (bannedPlayers.has(uLower) || bannedIPs.has(clientIP) || (user && (user.is_banned || user.ip_ban)))) {
+    if (!isUserAdmin(cleanUsername) && (bannedPlayers.has(uLower) || bannedIPs.has(clientIP) || (user && (user.is_banned || user.ip_ban)))) {
         const banReason = (user && user.ban_reason) || "Account gesperrt von der Administration";
         return res.status(403).json({
             success: false,
@@ -891,49 +956,78 @@ app.post('/api/login', async (req, res) => {
         });
     }
 
-    if (user && user.password && user.password !== password) {
+    // Strict password verification & account takeover protection
+    if (!user.password) {
+        return res.status(401).json({
+            success: false,
+            error: "Dieses Konto besitzt kein Passwort oder wird über ein Google/Firebase-Konto geschützt."
+        });
+    }
+
+    if (!verifyPassword(password, user.password)) {
         return res.status(401).json({ success: false, error: "Falsches Passwort!" });
     }
 
-    if (!userDB[username]) {
-        userDB[username] = { username, password, elo: 1200, wins: 0, level: 1, xp: 0, role: 'Gast' };
-    } else {
-        userDB[username].password = password;
-        userDB[username].last_login = new Date().toISOString();
+    // Auto-migrate legacy plaintext password to secure hash
+    if (!user.password.includes(':')) {
+        user.password = hashPassword(password);
     }
+    user.last_login = new Date().toISOString();
 
-    saveAll(username);
-    res.json({ success: true, name: username, elo: userDB[username].elo || 1200, wins: userDB[username].wins || 0, level: userDB[username].level || 1, xp: userDB[username].xp || 0, role: userDB[username].role || 'Gast' });
+    saveAll(cleanUsername);
+    res.json({
+        success: true,
+        name: cleanUsername,
+        elo: user.elo || 1200,
+        wins: user.wins || 0,
+        level: user.level || 1,
+        xp: user.xp || 0,
+        role: user.role || 'Gast'
+    });
 });
 
 app.post('/api/register', async (req, res) => {
     const { username, password } = req.body || {};
-    if (!username || !password) {
+    if (!username || typeof username !== 'string' || !password || typeof password !== 'string') {
         return res.status(400).json({ success: false, error: "Name und Passwort erforderlich!" });
     }
+
+    const cleanUsername = username.trim();
+    if (cleanUsername.length < 3 || cleanUsername.length > 30) {
+        return res.status(400).json({ success: false, error: "Der Name muss zwischen 3 und 30 Zeichen lang sein." });
+    }
+
+    if (password.length < 4) {
+        return res.status(400).json({ success: false, error: "Das Passwort muss mindestens 4 Zeichen lang sein." });
+    }
     
-    try {
-                if (data && data.length > 0 && data[0].password && data[0].password !== password) {
-            return res.status(400).json({ success: false, error: "Name bereits vergeben!" });
-        }
-    } catch (e) {}
+    if (userDB[cleanUsername]) {
+        return res.status(409).json({ success: false, error: "Name bereits vergeben!" });
+    }
 
     if (firestoreDb) {
         try {
-            const doc = await firestoreDb.collection('players').doc(username).get();
-            if (doc.exists && doc.data().password && doc.data().password !== password) {
-                return res.status(400).json({ success: false, error: "Name bereits vergeben!" });
+            const doc = await firestoreDb.collection('players').doc(cleanUsername).get();
+            if (doc.exists) {
+                return res.status(409).json({ success: false, error: "Name bereits vergeben!" });
             }
         } catch (e) {}
     }
 
-    if (userDB[username] && userDB[username].password && userDB[username].password !== password) {
-        return res.status(400).json({ success: false, error: "Name bereits vergeben!" });
-    }
+    userDB[cleanUsername] = {
+        username: cleanUsername,
+        password: hashPassword(password),
+        elo: 1200,
+        wins: 0,
+        losses: 0,
+        level: 1,
+        xp: 0,
+        role: 'Gast',
+        created_at: new Date().toISOString()
+    };
 
-    userDB[username] = { username, password, elo: 1200, wins: 0, level: 1, xp: 0, role: 'Gast', created_at: new Date().toISOString() };
-    saveAll(username);
-    res.json({ success: true, name: username });
+    saveAll(cleanUsername);
+    res.json({ success: true, name: cleanUsername });
 });
 
 function sanitizeLeaderboardEntry(data, docId) {
@@ -1303,31 +1397,63 @@ app.post('/api/admin/ban-user', async (req, res) => {
     });
 });
 
+const ticketRateLimits = new Map(); // ip -> [timestamps]
+
 app.post('/api/support-ticket', (req, res) => {
+    const detectedIP = getClientIP(req);
+    const now = Date.now();
+    const windowMs = 10 * 60 * 1000;
+    let ipHistory = ticketRateLimits.get(detectedIP) || [];
+    ipHistory = ipHistory.filter(t => now - t < windowMs);
+
+    if (ipHistory.length >= 5) {
+        return res.status(429).json({
+            success: false,
+            message: 'Zu viele Support-Anfragen. Bitte warte einige Minuten, bevor du ein neues Ticket erstellst.'
+        });
+    }
+
     const { user, contact, text, banReason } = req.body || {};
-    if (!text) {
+    if (!text || typeof text !== 'string' || !text.trim()) {
         return res.status(400).json({ success: false, message: 'Nachricht ist erforderlich.' });
     }
-    const detectedIP = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || '';
+
+    const cleanText = text.trim();
+    if (cleanText.length > 2000) {
+        return res.status(400).json({ success: false, message: 'Die Nachricht ist zu lang (maximal 2000 Zeichen erlaubt).' });
+    }
+
+    ipHistory.push(now);
+    ticketRateLimits.set(detectedIP, ipHistory);
+
+    const cleanUser = String(user || contact || 'Gesperrter Spieler').trim().slice(0, 100);
+    const cleanContact = String(contact || user || 'Unbekannt').trim().slice(0, 100);
+    const cleanBanReason = String(banReason || 'Admin-Gesperrt').trim().slice(0, 200);
+
     const ticketId = 'TICK-' + Date.now().toString(36).toUpperCase();
     const newTicket = {
         id: ticketId,
-        user: user || contact || 'Gesperrter Spieler',
-        contact: contact || user || 'Unbekannt',
+        user: cleanUser,
+        contact: cleanContact,
         clientIP: detectedIP,
         email: 'schachlivesupport.jailer914@slmail.me',
-        text: text,
-        banReason: banReason || 'Admin-Gesperrt',
+        text: cleanText,
+        banReason: cleanBanReason,
         status: 'Offen',
         createdAt: new Date().toLocaleString('de-DE'),
         timestamp: Date.now(),
         reply: ''
     };
+
     globalSupportTickets.unshift(newTicket);
+    if (globalSupportTickets.length > 500) {
+        globalSupportTickets.length = 500;
+    }
+
     saveTicketsToFile();
     saveTicketToFirestore(newTicket);
     broadcastTicketsUpdate();
-    console.log(`📩 Support-Ticket [${ticketId}] von ${user || contact} (IP: ${detectedIP}) erfasst.`);
+    console.log(`📩 Support-Ticket [${ticketId}] von ${cleanUser} (IP: ${detectedIP}) erfasst.`);
     res.json({
         success: true,
         ticketId: ticketId,
@@ -1336,11 +1462,19 @@ app.post('/api/support-ticket', (req, res) => {
     });
 });
 
-app.get('/api/admin/tickets', (req, res) => {
+app.get('/api/admin/tickets', async (req, res) => {
+    const auth = await verifyAdminAuth(req);
+    if (!auth.authorized) {
+        return res.status(403).json({ success: false, message: 'Zugriff verweigert' });
+    }
     res.json({ success: true, tickets: globalSupportTickets, supportEmail: 'schachlivesupport.jailer914@slmail.me' });
 });
 
 app.post('/api/admin/unban-ticket', async (req, res) => {
+    const auth = await verifyAdminAuth(req);
+    if (!auth.authorized) {
+        return res.status(403).json({ success: false, message: 'Zugriff verweigert' });
+    }
     const { ticketId, reply } = req.body || {};
     const ticket = globalSupportTickets.find(t => t.id === ticketId);
     if (!ticket) {
@@ -2694,7 +2828,9 @@ async function syncAllToFirestore() {
         }
 
         for (const [uname, u] of Object.entries(userDB)) {
-            await firestoreDb.collection('players').doc(uname).set(u, { merge: true });
+            const safeProfile = { ...u };
+            delete safeProfile.password;
+            await firestoreDb.collection('players').doc(uname).set(safeProfile, { merge: true });
             await firestoreDb.collection('leaderboard').doc(uname).set({
                 username: uname,
                 name: uname,
@@ -2790,6 +2926,11 @@ async function loadData() {
         try {
             const data = fs.readFileSync(USER_FILE, 'utf8');
             userDB = JSON.parse(data);
+            for (const uname in userDB) {
+                if (userDB[uname] && userDB[uname].password && !userDB[uname].password.includes(':')) {
+                    userDB[uname].password = hashPassword(userDB[uname].password);
+                }
+            }
         } catch (e) {
             console.log("Fehler beim Laden: UserDB");
         }
@@ -2809,7 +2950,7 @@ async function loadData() {
     await syncAllToFirestore();
 
     // Auto-clean Admin Accounts from Ban lists
-    const ADMIN_NAMES = ['max', '222', 'admin', 'max.schule13@gmail.com', 'owner', 'eigentümer'];
+    const ADMIN_NAMES = ['max.schule13@gmail.com'];
     ADMIN_NAMES.forEach(adm => {
         bannedPlayers.delete(adm);
         if (userDB && userDB[adm]) {
@@ -2946,8 +3087,7 @@ const MAX_CONCURRENT_WS_PER_IP = 10;
 const MAX_HANDSHAKES_PER_MINUTE = 35;
 
 wss.on('connection', function(ws, req) {
-    const rawDetectedIP = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || '127.0.0.1';
-    const detectedIP = String(rawDetectedIP).replace(/^::ffff:/, '').trim();
+    const detectedIP = getClientIP(req);
     ws.clientIP = detectedIP;
 
     if (!isLoopbackOrLocalIP(detectedIP)) {
@@ -3085,34 +3225,10 @@ wss.on('connection', function(ws, req) {
             const isSafe = validateSecurity(data, ws, bannedIPs, triggerUltraBanLocal);
             if (!isSafe) return;
 
-            const currentName = (ws.playerName || "").trim();
-            const ADMIN_NAMES = ['Max', '222'];
-
-            if (data.type !== 'login_attempt' && data.type !== 'login' && data.type !== 'join') { 
-                if (data.playerName === 'Max' && ws.playerName !== 'Max') {
-                    if (ws.isAdmin || ws.is_owner || ws.role === 'admin') {
-                        ws.playerName = 'Max';
-                    } else if (data.password && ADMIN_PASSWORDS_LIST.includes(data.password)) {
-                        ws.isAdmin = true;
-                        ws.is_owner = true;
-                        ws.role = 'admin';
-                        ws.playerName = 'Max';
-                    } else {
-                        console.log(`⚠️ Identitäts-Hinweis für: ${ws.playerName}`);
-                        ws.send(JSON.stringify({ 
-                            type: 'chat', 
-                            text: '⚠️ Hinweis: Der Name "Max" ist für die Administration reserviert. Bitte nutze einen eigenen Spielernamen oder authentifiziere dich als Admin.', 
-                            system: true 
-                        }));
-                    }
-                }
-            }
-
             const textStr = (data.text || "").trim();
-            const containsAdminPw = typeof data.text === 'string' && ADMIN_PASSWORDS_LIST.some(pw => data.text.includes(pw));
             const isCmd = typeof data.text === 'string' && (textStr.startsWith('/') || textStr.startsWith('!') || textStr.startsWith('?'));
 
-            if (data.type === 'chat' && (isCmd || containsAdminPw)) {
+            if (data.type === 'chat' && isCmd) {
                 const isHandled = await handleAdminCommand(ws, data.text, {
                     wss, 
                     db: firestoreDb, 
@@ -3134,7 +3250,6 @@ wss.on('connection', function(ws, req) {
                         system: true 
                     }));
                 }
-                // CRITICAL SECURITY RULE: Commands and messages containing admin passwords MUST NEVER be broadcast!
                 return;
             }
 
@@ -3251,12 +3366,12 @@ wss.on('connection', function(ws, req) {
                 // B. Verified user previously assigned role 'admin' in userDB
                 if (isFirebaseVerified && verifiedUid) {
                     const existingU = Object.values(userDB).find(u => u && u.uid === verifiedUid);
-                    if (existingU && existingU.role === 'admin') {
+                    if (existingU && existingU.role === 'admin' && (existingU.email?.toLowerCase() === 'max.schule13@gmail.com' || existingU.is_owner)) {
                         isActualAdmin = true;
                     }
                 }
-                // C. Traditional password check with admin password for name 'Max'
-                if (!isFirebaseVerified && password && ADMIN_PASSWORDS_LIST.includes(password) && (pLower === 'max' || pLower === 'admin')) {
+                // C. Dedicated admin password check
+                if (!isFirebaseVerified && password && verifyAdminPassword(password) && (pLower === 'max' || pLower === 'admin')) {
                     isActualAdmin = true;
                 }
 
@@ -3290,9 +3405,12 @@ wss.on('connection', function(ws, req) {
                             }));
                         }
                     } else {
-                        // Legacy password account: password must be provided and match
-                        if (!password || user.password !== password) {
+                        // Password account: password must be provided and match securely
+                        if (!password || !user.password || !verifyPassword(password, user.password)) {
                             return ws.send(JSON.stringify({ type: 'login_error', text: 'Falsches Passwort für diesen Spielernamen!' }));
+                        }
+                        if (!user.password.includes(':')) {
+                            user.password = hashPassword(password);
                         }
                     }
                     user.last_login = new Date();
@@ -3310,7 +3428,7 @@ wss.on('connection', function(ws, req) {
                         uid: isFirebaseVerified ? (verifiedUid || '') : '',
                         email: verifiedEmail || "",
                         role: isActualAdmin ? 'admin' : 'user',
-                        password: isFirebaseVerified ? '' : (password || ''),
+                        password: isFirebaseVerified ? '' : hashPassword(password),
                         elo: 1200,
                         wins: 0,
                         losses: 0,
@@ -3821,10 +3939,9 @@ wss.on('connection', function(ws, req) {
 
                 if (!content) return;
 
-                const containsPw = ADMIN_PASSWORDS_LIST.some(pw => content.includes(pw));
                 const isCmdType = content.startsWith('/') || content.startsWith('!') || content.startsWith('?');
                 
-                if (containsPw || isCmdType) {
+                if (isCmdType) {
                     const isHandled = await handleAdminCommand(ws, content, {
                         wss, db: firestoreDb, banPlayer: triggerUltraBan, unbanPlayer: unbanPlayerHelper,
                         bannedIPs, bannedPlayers, profiles: userDB, addSpectator, removeSpectator, roomStates: activeRoomStates

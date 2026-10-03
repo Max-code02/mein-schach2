@@ -3615,24 +3615,52 @@ function getSecureSalat(text) {
     return CryptoJS.SHA256(text).toString();
 }
 
+function sanitizeVideoUrl(rawUrl) {
+    if (!rawUrl || typeof rawUrl !== 'string') return '';
+    const trimmed = rawUrl.trim();
+    if (trimmed.startsWith('https://') || trimmed.startsWith('http://') || trimmed.startsWith('/videos/')) {
+        return trimmed.replace(/[<>"'\s]/g, '');
+    }
+    return '';
+}
+
 function addVideoToFeed(video) {
     const feed = document.getElementById('videoFeed');
-    if (!feed) {
-        console.error("Fehler: Element 'videoFeed' fehlt im HTML!");
+    if (!feed || !video) {
+        if (!feed) console.error("Fehler: Element 'videoFeed' fehlt im HTML!");
         return;
     }
 
     const entry = document.createElement('div');
     entry.className = 'video-entry animate-pop-in';
-    entry.innerHTML = `
-        <div class="video-info">
-            <strong>🎬 ${video.playerName || 'Künstliche Intelligenz'}</strong><br>
-            <small>${video.prompt}</small>
-        </div>
-        <button onclick="playVideo('${video.url}')" class="view-video-btn">
-            ▶ Video ansehen
-        </button>
-    `;
+
+    const infoDiv = document.createElement('div');
+    infoDiv.className = 'video-info';
+
+    const strong = document.createElement('strong');
+    strong.textContent = `🎬 ${video.playerName || 'Künstliche Intelligenz'}`;
+
+    const br = document.createElement('br');
+    const small = document.createElement('small');
+    small.textContent = String(video.prompt || '');
+
+    infoDiv.appendChild(strong);
+    infoDiv.appendChild(br);
+    infoDiv.appendChild(small);
+
+    const btn = document.createElement('button');
+    btn.className = 'view-video-btn';
+    btn.textContent = '▶ Video ansehen';
+
+    const safeUrl = sanitizeVideoUrl(video.url);
+    if (safeUrl) {
+        btn.addEventListener('click', () => playVideo(safeUrl));
+    } else {
+        btn.disabled = true;
+    }
+
+    entry.appendChild(infoDiv);
+    entry.appendChild(btn);
     feed.prepend(entry);
 }
 

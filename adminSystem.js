@@ -1,9 +1,9 @@
-// adminSystem.js - EXCLUSIVE ADMIN PANEL & COMMAND ENGINE (POWER-VERSION)
+// adminSystem.js - EXCLUSIVE ADMIN PANEL & COMMAND ENGINE (SECURE VERSION)
 const fs = require('fs');
 const os = require('os');
 
-const ADMINS = ['Max', 'max', '222', 'Admin', 'admin', 'max.schule13@gmail.com'];
-const ADMIN_PASSWORDS = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Aemina111', 'aemina111', 'Maxi', 'maxi', '222', 'Max', 'max', 'Admin', 'admin'];
+const ADMINS = ['max.schule13@gmail.com'];
+const ADMIN_PASSWORDS = [];
 
 function parseArgsWithQuotes(text) {
     const regex = /"([^"]+)"|'([^']+)'|(\S+)/g;
@@ -85,34 +85,7 @@ async function handleAdminCommand(ws, text, context) {
     const rawTokens = parseArgsWithQuotes(rawInput);
     if (rawTokens.length === 0) return true;
 
-    let hasAdminPass = false;
-    let hasHelperPass = false;
-    const cleanTokens = [];
-
-    // Separate command/arguments from password tokens cleanly without string corruption
-    for (const token of rawTokens) {
-        const tokenLower = token.toLowerCase();
-        const isPw = ADMIN_PASSWORDS.some(pw => pw.toLowerCase() === tokenLower);
-        const isHelperPw = ['maxi'].includes(tokenLower);
-        if (isPw || (ws.password && ADMIN_PASSWORDS.some(pw => pw.toLowerCase() === ws.password.toLowerCase()))) {
-            hasAdminPass = true;
-        } else if (isHelperPw || (ws.password && ws.password.toLowerCase() === 'maxi')) {
-            hasHelperPass = true;
-        } else {
-            cleanTokens.push(token);
-        }
-    }
-
-    if (hasAdminPass) {
-        ws.isAdmin = true;
-        ws.is_owner = true;
-        ws.role = 'admin';
-    }
-    if (hasHelperPass) {
-        ws.isHelper = true;
-        if (!ws.role || ws.role === 'Gast' || ws.role === 'user') ws.role = 'moderator';
-    }
-
+    const cleanTokens = [...rawTokens];
     if (cleanTokens.length === 0) return true;
 
     const firstChar = rawInput.charAt(0);
@@ -131,7 +104,7 @@ async function handleAdminCommand(ws, text, context) {
     ];
     const HELPER_COMMANDS = ['kick', 'mute', 'unmute', 'warn', 'info', 'list', 'online', 'players'];
 
-    // Check user identities & roles
+    // Check user identities & roles strictly
     const currentName = (ws.playerName || '').toLowerCase();
     const currentEmail = (ws.userEmail || '').toLowerCase();
 
@@ -146,19 +119,16 @@ async function handleAdminCommand(ws, text, context) {
             myProfile = profiles[ws.playerName];
         }
         if (myProfile) {
-            if (myProfile.role === 'admin') hasAdminRole = true;
+            if (myProfile.role === 'admin' && (myProfile.email?.toLowerCase() === 'max.schule13@gmail.com' || myProfile.is_owner)) hasAdminRole = true;
             if (myProfile.role === 'helper' || myProfile.role === 'moderator') hasHelperRole = true;
         }
     }
 
     const isAdminUser = ws.isAdmin === true ||
-                        ADMINS.some(a => a.toLowerCase() === currentName) ||
-                        currentName === 'max' ||
-                        currentEmail === 'max.schule13@gmail.com' ||
-                        hasAdminPass ||
+                        (currentEmail === 'max.schule13@gmail.com' && ws.isFirebaseVerified === true) ||
                         hasAdminRole;
 
-    const isHelperUser = isAdminUser || ws.isHelper === true || hasHelperPass || hasHelperRole;
+    const isHelperUser = isAdminUser || ws.isHelper === true || hasHelperRole;
 
     // Authorization Guard
     if (!PUBLIC_COMMANDS.includes(cmd)) {
