@@ -264,10 +264,21 @@ window.initFeatures = function(socket, myName) {
     const loadHistoryBtn = document.getElementById('loadHistoryBtn');
     
     if (loadHistoryBtn) {
-        loadHistoryBtn.onclick = () => {
+        loadHistoryBtn.onclick = async () => {
+            loadHistoryBtn.innerText = 'Lade...';
+            try {
+                const res = await fetch('/api/games');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.success && Array.isArray(data.games) && data.games.length > 0) {
+                        window.updateMatchHistory(data.games);
+                        return;
+                    }
+                }
+            } catch(e) {}
+
             if (socket.readyState === WebSocket.OPEN) {
-                if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'get_match_history' }));
-                loadHistoryBtn.innerText = 'Lade...';
+                socket.send(JSON.stringify({ type: 'get_match_history' }));
             }
         };
     }

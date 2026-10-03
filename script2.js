@@ -1398,11 +1398,99 @@ function processVoiceMoveCommand(rawText) {
 }
 
 
-window.viewPlayerProfile = function(name) {
-    document.getElementById('player-profile-modal').style.display = 'flex';
-    document.getElementById('ppm-name').textContent = name;
-    document.getElementById('ppm-history').innerHTML = '<div style="color:#888; font-style:italic;">Lädt...</div>';
+// ==========================================
+// 🚀 SEAMLESS BACKGROUND REST API INTEGRATION
+// ==========================================
+async function preloadApiData() {
+    try {
+        // 1. Leaderboard background prefetch & sync
+        fetch('/api/leaderboard')
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if (data && data.success && Array.isArray(data.list) && data.list.length > 0) {
+                    const listEl = document.getElementById('leaderboard-list');
+                    if (listEl && (!listEl.children || listEl.children.length === 0 || listEl.innerText.includes('Lädt'))) {
+                        window.currentLeaderboardUsers = data.list;
+                        if (typeof window.renderModalLeaderboard === 'function') {
+                            window.renderModalLeaderboard(data.list);
+                        }
+                    }
+                }
+            })
+            .catch(() => {});
+
+        // 2. Platform stats background warm-up
+        fetch('/api/stats')
+            .then(res => res.ok ? res.json() : null)
+            .then(stats => {
+                if (stats && stats.success) {
+                    window.__serverStats = stats;
+                }
+            })
+            .catch(() => {});
+
+        // 3. Daily puzzles background pre-caching
+        fetch('/api/puzzles')
+            .then(res => res.ok ? res.json() : null)
+            .then(puzzleData => {
+                if (puzzleData && puzzleData.success && Array.isArray(puzzleData.puzzles)) {
+                    window.__dailyPuzzles = puzzleData.puzzles;
+                }
+            })
+            .catch(() => {});
+    } catch(e) {}
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', preloadApiData);
+} else {
+    preloadApiData();
+}
+
+window.viewPlayerProfile = async function(name) {
+    const modal = document.getElementById('player-profile-modal');
+    if (modal) modal.style.display = 'flex';
+    const nameEl = document.getElementById('ppm-name');
+    if (nameEl) nameEl.textContent = name;
+    const historyEl = document.getElementById('ppm-history');
+    if (historyEl) historyEl.innerHTML = '<div style="color:#888; font-style:italic;">Lädt Spieler-Statistiken...</div>';
+
+    // 1. Seamless REST API Call to /api/player/:username
+    try {
+        const res = await fetch(`/api/player/${encodeURIComponent(name)}`);
+        if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.player) {
+                const p = data.player;
+                const eloEl = document.getElementById('ppm-elo');
+                const levelEl = document.getElementById('ppm-level');
+                const roleEl = document.getElementById('ppm-role');
+
+                if (eloEl) eloEl.textContent = `Elo: ${p.elo || 1200}`;
+                if (levelEl) levelEl.textContent = `Level: ${p.level || 1} (XP: ${p.xp || 0})`;
+                if (roleEl) roleEl.textContent = p.role === 'admin' ? '👑 Admin' : (p.role === 'moderator' ? '🛡️ Moderator' : 'Gast');
+
+                if (historyEl) {
+                    const winrate = p.winrate || '0%';
+                    historyEl.innerHTML = `
+                        <div style="background: rgba(255,255,255,0.04); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 6px;">
+                            <div style="display: flex; justify-content: space-between; font-size: 0.95em;">
+                                <span>🏆 Siege: <strong style="color: #2ecc71;">${p.wins || 0}</strong></span>
+                                <span>💀 Niederlagen: <strong style="color: #e74c3c;">${p.losses || 0}</strong></span>
+                                <span>📊 Siegquote: <strong style="color: #f1c40f;">${winrate}</strong></span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.85em; color: #aaa; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px;">
+                                <span>💰 Vorhersage-Coins: <strong style="color: #f39c12;">${p.coins || 1000}</strong></span>
+                                <span>${p.is_online ? '<span style="color: #2ecc71;">🟢 Online</span>' : '<span style="color: #888;">⚪ Offline</span>'}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        }
+    } catch(e) {}
     
+    // 2. WebSocket Fallback
     if (window.socket && window.socket.readyState === WebSocket.OPEN) {
         window.socket.send(JSON.stringify({
             type: 'get_player_profile',
