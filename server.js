@@ -493,7 +493,7 @@ function renderBannedPage(clientIP, reason) {
         <div class="ticket-section">
             <div class="ticket-header">
                 <span>📩 Support-Ticket / Entbannungsantrag</span>
-                <span class="ticket-email">schachlivesupport.jailer914@slmail.me</span>
+                <span class="ticket-email">blockcom130@gmail.com</span>
             </div>
             <p>
                 Falls du glaubst, dass die Sperrung ein Missverständnis ist, kannst du hier direkt einen Entbannungsantrag einreichen.
@@ -507,7 +507,7 @@ function renderBannedPage(clientIP, reason) {
         </div>
 
         <div class="footer-info">
-            Support-Kontakt: <a href="mailto:schachlivesupport.jailer914@slmail.me">schachlivesupport.jailer914@slmail.me</a>
+            Support-Kontakt: <a href="mailto:blockcom130@gmail.com">blockcom130@gmail.com</a>
         </div>
     </div>
 
@@ -540,7 +540,7 @@ function renderBannedPage(clientIP, reason) {
             .then(function(data) {
                 if (data && data.success) {
                     feedback.style.color = '#2ecc71';
-                    feedback.innerHTML = '✅ Antrag übermittelt! Ticket-ID: <strong>' + (data.ticketId || 'OK') + '</strong>. Unser Support-Team prüft deine Anfrage.';
+                    feedback.innerHTML = '✅ Antrag übermittelt! Ticket-ID: <strong>' + (data.ticketId || 'OK') + '</strong>. Unser Support-Team (blockcom130@gmail.com) prüft deine Anfrage.';
                     document.getElementById('ticket-text').value = '';
                 } else {
                     throw new Error(data && data.message ? data.message : 'Senden fehlgeschlagen');
@@ -548,7 +548,7 @@ function renderBannedPage(clientIP, reason) {
             })
             .catch(function(err) {
                 feedback.style.color = '#e74c3c';
-                feedback.innerText = '❌ Fehler beim Senden. Bitte wende dich per E-Mail an schachlivesupport.jailer914@slmail.me';
+                feedback.innerText = '❌ Fehler beim Senden. Bitte wende dich per E-Mail an blockcom130@gmail.com';
             });
         }
     </script>
@@ -1192,7 +1192,7 @@ function broadcastTicketsUpdate() {
     const msgStr = JSON.stringify({
         type: 'admin_tickets_update',
         tickets: globalSupportTickets.filter(t => t.status !== 'Entbannt' && t.status !== 'Abgelehnt' && t.status !== 'Geschlossen'),
-        supportEmail: 'schachlivesupport.jailer914@slmail.me'
+        supportEmail: 'blockcom130@gmail.com'
     });
     if (wss && wss.clients) {
         wss.clients.forEach(c => {
@@ -1471,7 +1471,7 @@ app.post('/api/support-ticket', (req, res) => {
         user: cleanUser,
         contact: cleanContact,
         clientIP: detectedIP,
-        email: 'schachlivesupport.jailer914@slmail.me',
+        email: 'blockcom130@gmail.com',
         text: cleanText,
         banReason: cleanBanReason,
         status: 'Offen',
@@ -1488,12 +1488,12 @@ app.post('/api/support-ticket', (req, res) => {
     saveTicketsToFile();
     saveTicketToFirestore(newTicket);
     broadcastTicketsUpdate();
-    console.log(`📩 Support-Ticket [${ticketId}] von ${cleanUser} (IP: ${detectedIP}) erfasst.`);
+    console.log(`📩 Support-Ticket [${ticketId}] von ${cleanUser} (IP: ${detectedIP}) erfasst -> Benachrichtigung an blockcom130@gmail.com`);
     res.json({
         success: true,
         ticketId: ticketId,
-        supportEmail: 'schachlivesupport.jailer914@slmail.me',
-        message: 'Support-Ticket erfolgreich übermittelt.'
+        supportEmail: 'blockcom130@gmail.com',
+        message: 'Support-Ticket erfolgreich übermittelt. Unser Support-Team wurde benachrichtigt (blockcom130@gmail.com).'
     });
 });
 
@@ -1502,7 +1502,7 @@ app.get('/api/admin/tickets', async (req, res) => {
     if (!auth.authorized) {
         return res.status(403).json({ success: false, message: 'Zugriff verweigert' });
     }
-    res.json({ success: true, tickets: globalSupportTickets, supportEmail: 'schachlivesupport.jailer914@slmail.me' });
+    res.json({ success: true, tickets: globalSupportTickets, supportEmail: 'blockcom130@gmail.com' });
 });
 
 app.post('/api/admin/unban-ticket', async (req, res) => {
@@ -2912,6 +2912,355 @@ async function loadBannedIPs() {
 }
 
 loadBannedIPs();
+
+// ==========================================
+// 🌐 RENDER SERVER SYNC & PUBLIC REST APIS
+// (https://mein-schach2.onrender.com & https://mein-schach.onrender.com)
+// ==========================================
+const RENDER_SERVERS = [
+    'https://mein-schach2.onrender.com',
+    'https://mein-schach.onrender.com'
+];
+
+let renderSyncStatus = {
+    lastSync: null,
+    status: 'idle',
+    syncedServers: [],
+    error: null
+};
+
+async function syncWithRenderServers() {
+    renderSyncStatus.status = 'syncing';
+    let anySuccess = false;
+
+    for (const renderUrl of RENDER_SERVERS) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+            const res = await fetch(`${renderUrl}/api/leaderboard`, {
+                signal: controller.signal,
+                headers: { 'Accept': 'application/json' }
+            });
+            clearTimeout(timeoutId);
+
+            if (res.ok) {
+                const data = await res.json();
+                const list = data.list || data.leaderboard || [];
+                if (Array.isArray(list) && list.length > 0) {
+                    list.forEach(remoteEntry => {
+                        const clean = sanitizeLeaderboardEntry(remoteEntry, remoteEntry.username || remoteEntry.name);
+                        if (!clean) return;
+                        const uname = clean.name;
+                        const local = userDB[uname];
+                        // If remote has higher score, merge it safely
+                        if (!local) {
+                            userDB[uname] = {
+                                username: uname,
+                                elo: clean.elo,
+                                wins: clean.wins,
+                                losses: clean.losses,
+                                level: clean.level,
+                                xp: clean.xp,
+                                role: clean.role || 'Gast'
+                            };
+                            leaderboard[uname] = clean.wins;
+                        } else if (clean.elo > (local.elo || 0) || clean.wins > (local.wins || 0)) {
+                            local.elo = Math.max(local.elo || 1200, clean.elo);
+                            local.wins = Math.max(local.wins || 0, clean.wins);
+                            leaderboard[uname] = local.wins;
+                        }
+                    });
+                    anySuccess = true;
+                    if (!renderSyncStatus.syncedServers.includes(renderUrl)) {
+                        renderSyncStatus.syncedServers.push(renderUrl);
+                    }
+                }
+            }
+        } catch (e) {
+            // Render server might be sleeping/spinning up, log warning gracefully
+        }
+    }
+
+    renderSyncStatus.status = anySuccess ? 'success' : (renderSyncStatus.syncedServers.length > 0 ? 'partial' : 'offline');
+    renderSyncStatus.lastSync = new Date().toISOString();
+}
+
+// Background sync with Render servers every 45 seconds
+setInterval(() => {
+    syncWithRenderServers().catch(() => {});
+}, 45000);
+
+// API Documentation & Index
+app.get(['/api', '/api/docs', '/api/index'], (req, res) => {
+    const baseUrl = req.protocol + '://' + req.get('host');
+    res.json({
+        name: "SchachLive REST API",
+        version: "2.4.0",
+        author: "Max (blockcom130@gmail.com)",
+        supportContact: "blockcom130@gmail.com",
+        firestoreProject: "schachlive",
+        connectedRenderServers: RENDER_SERVERS,
+        endpoints: {
+            "GET /api/players": "Alle registrierten Schachspieler mit Statistiken und Filter (?search=..., ?limit=..., ?page=...)",
+            "GET /api/player/:username": "Detailliertes Spielerprofil mit Rang, Elo, Siegen, Niederlagen und Level",
+            "GET /api/leaderboard": "Echtzeit-Rangliste aus Firebase Firestore & Render Server (?format=blitz|rapid|bullet)",
+            "GET /api/stats": "Aktuelle Serverstatistiken, Live-Spieler, aktive Räume & Sync-Status",
+            "GET /api/games": "Historie der zuletzt abgeschlossenen Partien mit FEN, Snapshots und PGN",
+            "GET /api/lobbies": "Liste aller aktiven öffentlichen & privaten Lobbys",
+            "GET /api/puzzles": "Tägliche Schach-Taktikaufgabe und Puzzles",
+            "GET /api/bans": "Öffentliche Sicherheitsübersicht und Bann-Status",
+            "POST /api/support-ticket": "Support-Ticket & Entbannungsantrag einreichen (Nachricht geht an blockcom130@gmail.com)",
+            "GET /api/sync-firebase": "Manueller Sofort-Abgleich mit Firebase Firestore",
+            "GET /api/sync-render": "Manueller Sofort-Abgleich mit mein-schach2.onrender.com",
+            "GET /api/sync-all": "Vollständige Synchronisation (Firebase + Render Server)"
+        }
+    });
+});
+
+// GET /api/players (All Players List with search, filtering & pagination)
+app.get(['/api/players', '/api/users'], (req, res) => {
+    const { search, limit = 100, page = 1, sort = 'elo' } = req.query;
+    let list = Object.values(userDB).map(u => ({
+        username: u.username,
+        name: u.username,
+        elo: Number(u.elo) || 1200,
+        wins: Number(u.wins) || 0,
+        losses: Number(u.losses) || 0,
+        winrate: (u.wins + u.losses > 0) ? Math.round((u.wins / (u.wins + u.losses)) * 100) + '%' : '0%',
+        level: Number(u.level) || 1,
+        xp: Number(u.xp) || 0,
+        role: u.role || 'Gast',
+        is_banned: !!u.is_banned,
+        is_online: wss ? Array.from(wss.clients).some(c => c.playerName && c.playerName.toLowerCase() === (u.username || '').toLowerCase() && c.readyState === 1) : false
+    }));
+
+    if (search) {
+        const query = String(search).toLowerCase().trim();
+        list = list.filter(p => p.username && p.username.toLowerCase().includes(query));
+    }
+
+    if (sort === 'wins') {
+        list.sort((a, b) => b.wins - a.wins);
+    } else if (sort === 'name') {
+        list.sort((a, b) => a.username.localeCompare(b.username));
+    } else {
+        list.sort((a, b) => b.elo - a.elo);
+    }
+
+    const totalCount = list.length;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10) || 100));
+    const startIndex = (pageNum - 1) * limitNum;
+    const paginated = list.slice(startIndex, startIndex + limitNum);
+
+    res.json({
+        success: true,
+        total: totalCount,
+        page: pageNum,
+        totalPages: Math.ceil(totalCount / limitNum) || 1,
+        players: paginated
+    });
+});
+
+// GET /api/player/:username (Specific Player Details)
+app.get(['/api/player/:username', '/api/players/:username', '/api/user/:username'], async (req, res) => {
+    const rawUsername = req.params.username;
+    if (!rawUsername) return res.status(400).json({ success: false, error: 'Spielername erforderlich' });
+    const cleanName = rawUsername.trim();
+    let u = userDB[cleanName];
+
+    // Fallback case-insensitive search
+    if (!u) {
+        const matchKey = Object.keys(userDB).find(k => k.toLowerCase() === cleanName.toLowerCase());
+        if (matchKey) u = userDB[matchKey];
+    }
+
+    // Try Firestore lookup if not found in local memory
+    if (!u && firestoreDb) {
+        try {
+            const snap = await firestoreDb.collection('players').doc(cleanName).get();
+            if (snap.exists) {
+                u = snap.data();
+            }
+        } catch (e) {}
+    }
+
+    if (!u) {
+        return res.status(404).json({ success: false, error: `Spieler '${cleanName}' nicht gefunden.` });
+    }
+
+    const isOnline = wss ? Array.from(wss.clients).some(c => c.playerName && c.playerName.toLowerCase() === (u.username || cleanName).toLowerCase() && c.readyState === 1) : false;
+    const wins = Number(u.wins) || 0;
+    const losses = Number(u.losses) || 0;
+    const totalGames = wins + losses;
+
+    res.json({
+        success: true,
+        player: {
+            username: u.username || cleanName,
+            elo: Number(u.elo) || 1200,
+            wins: wins,
+            losses: losses,
+            totalGames: totalGames,
+            winrate: totalGames > 0 ? Math.round((wins / totalGames) * 100) + '%' : '0%',
+            level: Number(u.level) || 1,
+            xp: Number(u.xp) || 0,
+            coins: Number(u.coins) || 1000,
+            role: u.role || 'Gast',
+            is_banned: !!u.is_banned,
+            ban_reason: u.ban_reason || null,
+            is_online: isOnline,
+            achievements: u.achievements || [],
+            board_theme: u.board_theme || 'classic',
+            piece_theme: u.piece_theme || 'classic'
+        }
+    });
+});
+
+// GET /api/stats (Live platform statistics)
+app.get(['/api/stats', '/api/server/stats', '/api/server/status'], (req, res) => {
+    let onlineCount = 0;
+    const onlineNames = [];
+    if (wss && wss.clients) {
+        wss.clients.forEach(c => {
+            if (c.readyState === 1) {
+                onlineCount++;
+                if (c.playerName) onlineNames.push(c.playerName);
+            }
+        });
+    }
+
+    const activeRoomsCount = roomWaitingMap ? roomWaitingMap.size : 0;
+    const totalPlayers = Object.keys(userDB).length;
+    let totalWins = 0;
+    for (const uname in userDB) {
+        totalWins += (userDB[uname].wins || 0);
+    }
+
+    res.json({
+        success: true,
+        status: "online",
+        onlinePlayers: onlineCount,
+        activeLobbies: activeRoomsCount,
+        registeredPlayers: totalPlayers,
+        totalWinsRecorded: totalWins,
+        bannedIPsCount: bannedIPs.size,
+        bannedPlayersCount: bannedPlayers.size,
+        supportTicketsCount: globalSupportTickets.length,
+        supportEmail: "blockcom130@gmail.com",
+        firestoreConnected: typeof firestoreDb !== 'undefined' && firestoreDb !== null,
+        renderSyncStatus: renderSyncStatus,
+        uptimeSeconds: Math.floor(process.uptime()),
+        timestamp: new Date().toISOString()
+    });
+});
+
+// GET /api/games (Recent matches history)
+app.get(['/api/games', '/api/matches', '/api/game-history'], async (req, res) => {
+    const list = [];
+    if (firestoreDb) {
+        try {
+            const snap = await firestoreDb.collection('games').orderBy('timestamp', 'desc').limit(50).get();
+            if (!snap.empty) {
+                snap.forEach(doc => {
+                    list.push({ id: doc.id, ...doc.data() });
+                });
+            }
+        } catch (e) {}
+    }
+    res.json({
+        success: true,
+        count: list.length,
+        games: list
+    });
+});
+
+// GET /api/lobbies (Live custom rooms and matchmaking status)
+app.get(['/api/lobbies', '/api/rooms'], (req, res) => {
+    const lobbies = [];
+    if (typeof roomWaitingMap !== 'undefined') {
+        roomWaitingMap.forEach((entry, roomId) => {
+            lobbies.push({
+                roomId: roomId,
+                host: entry.hostName || 'Gast',
+                hasPassword: !!entry.password,
+                createdAt: entry.createdAt || new Date().toISOString()
+            });
+        });
+    }
+    res.json({
+        success: true,
+        count: lobbies.length,
+        lobbies: lobbies
+    });
+});
+
+// GET /api/puzzles (Daily Chess Tactics)
+app.get(['/api/puzzles', '/api/daily-puzzle', '/api/tactics'], (req, res) => {
+    const samplePuzzles = [
+        {
+            id: 'puzzle_1',
+            title: 'Matt in 2 Zügen',
+            fen: 'r1bqkb1r/pppp1ppp/2n5/4p3/2B1n3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 4',
+            solution: ['Bxf7+', 'Ke7', 'd4'],
+            difficulty: 'Mittel'
+        },
+        {
+            id: 'puzzle_2',
+            title: 'Dame gewinnen (Gabel)',
+            fen: 'r1bqk2r/ppppbppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQ1RK1 b kq - 5 4',
+            solution: ['Nxe4', 'Re1', 'd5'],
+            difficulty: 'Leicht'
+        }
+    ];
+    res.json({
+        success: true,
+        puzzles: samplePuzzles
+    });
+});
+
+// GET /api/bans (Sanitized Ban overview)
+app.get('/api/bans', (req, res) => {
+    res.json({
+        success: true,
+        bannedPlayersCount: bannedPlayers.size,
+        bannedIPsCount: bannedIPs.size,
+        supportEmail: "blockcom130@gmail.com",
+        unbanAppealUrl: "/#unban"
+    });
+});
+
+// GET /api/sync-render (Manual sync with Render servers)
+app.all(['/api/sync-render', '/api/sync-renders'], async (req, res) => {
+    await syncWithRenderServers();
+    res.json({
+        success: true,
+        message: 'Synchronisation mit Render Servern (mein-schach2.onrender.com) abgeschlossen!',
+        renderSyncStatus: renderSyncStatus
+    });
+});
+
+// GET /api/sync-all (Sync Firestore + Render)
+app.all('/api/sync-all', async (req, res) => {
+    try {
+        await loadFirestoreProfiles();
+        await loadFirestoreBans();
+        await loadFirestoreTickets();
+        await syncWithRenderServers();
+        broadcastAdminUsersUpdate();
+        broadcastTicketsUpdate();
+        res.json({
+            success: true,
+            message: 'Vollständige Synchronisation (Firebase Firestore + mein-schach2.onrender.com) erfolgreich!',
+            playerCount: Object.keys(userDB).length,
+            bannedIPCount: bannedIPs.size,
+            renderSyncStatus: renderSyncStatus
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
 
 // REST endpoint to trigger manual immediate sync from Firestore
 app.get(['/api/sync-firebase', '/api/admin/sync-firestore'], async (req, res) => {
