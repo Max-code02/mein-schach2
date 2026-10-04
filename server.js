@@ -212,27 +212,12 @@ app.get('/download-contact/:playerName', (req, res) => {
 // DB setup
 
 // Google Firebase Firestore & Google Gemini AI Setup
-const admin = require('firebase-admin');
+const { firestoreClient, admin } = require('./firestoreClient');
 const { GoogleGenAI } = require('@google/genai');
-const { firestoreClient } = require('./firestoreClient');
 
-let firestoreDb = firestoreClient;
+const firestoreDb = firestoreClient;
 global.firestoreDb = firestoreDb;
-console.log("🔥 Google Firestore (Firebase) Web-Client verknüpft für SchachLive!");
-
-try {
-    const configPath = path.join(__dirname, 'firebase-applet-config.json');
-    if (fs.existsSync(configPath)) {
-        const fbConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        if (fbConfig.projectId && (!admin.apps || !admin.apps.length)) {
-            admin.initializeApp({
-                projectId: fbConfig.projectId
-            });
-        }
-    }
-} catch (err) {
-    console.warn("Firebase Admin Init Info:", err.message);
-}
+console.log('🔥 Firebase Admin Firestore verbunden.');
 
 let aiClient = null;
 if (process.env.GEMINI_API_KEY) {

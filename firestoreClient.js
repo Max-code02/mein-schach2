@@ -1,438 +1,137 @@
+const admin = require('firebase-admin');
 const fs = require('fs');
 const path = require('path');
 
-function getFirebaseConfig() {
+let initialized = false;
+
+function formatPrivateKey(key) {
+    if (!key || typeof key !== 'string') return key;
+    let formatted = key.replace(/\\n/g, '\n');
+    formatted = formatted.trim();
+    if (!formatted.endsWith('\n')) {
+        formatted += '\n';
+    }
+    return formatted;
+}
+
+/**
+ * Initialisiert das Firebase Admin SDK sicher.
+ */
+function initializeFirebaseAdmin() {
+    if (initialized && admin.apps && admin.apps.length > 0) {
+        return;
+    }
+
+    let defaultProjectId = 'schachlive';
     try {
         const configPath = path.join(__dirname, 'firebase-applet-config.json');
         if (fs.existsSync(configPath)) {
-            return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            const fbConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            if (fbConfig.projectId) defaultProjectId = fbConfig.projectId;
         }
-    } catch (e) {
-        console.warn('Fehler beim Lesen der firebase-applet-config.json:', e.message);
-    }
-    return {
-        apiKey: "AIzaSyA3KVyicVW1wqLjhNmJf3g9hJUAaovhDv0",
-        authDomain: "schachlive.firebaseapp.com",
-        projectId: "schachlive",
-        storageBucket: "schachlive.firebasestorage.app",
-        messagingSenderId: "729285821168",
-        appId: "1:729285821168:web:6d3fc2d942c8b8d101b835",
-        measurementId: "G-184X8Q73WV"
-    };
-}
+    } catch (e) {}
 
-// Convert native JS values to Firestore REST field format
-function toFirestoreValue(val, seen = new WeakSet()) {
-    if (val === null || val === undefined) {
-        return { nullValue: null };
-    }
-    if (typeof val === 'boolean') {
-        return { booleanValue: val };
-    }
-    if (typeof val === 'number') {
-        if (Number.isInteger(val)) {
-            return { integerValue: String(val) };
-        }
-        return { doubleValue: val };
-    }
-    if (typeof val === 'string') {
-        return { stringValue: val };
-    }
-    if (Array.isArray(val)) {
-        if (seen.has(val)) return { arrayValue: { values: [] } };
-        seen.add(val);
-        return {
-            arrayValue: {
-                values: val.map(item => toFirestoreValue(item, seen))
-            }
-        };
-    }
-    if (typeof val === 'object') {
-        if (seen.has(val)) return { nullValue: null };
-        seen.add(val);
-        const fields = {};
-        for (const [k, v] of Object.entries(val)) {
-            if (v !== undefined) {
-                fields[k] = toFirestoreValue(v, seen);
-            }
-        }
-        return { mapValue: { fields } };
-    }
-    return { stringValue: String(val) };
-}
-
-// Convert Firestore REST field format to native JS values
-function fromFirestoreValue(valObj) {
-    if (!valObj) return null;
-    if ('stringValue' in valObj) return valObj.stringValue;
-    if ('integerValue' in valObj) return parseInt(valObj.integerValue, 10);
-    if ('doubleValue' in valObj) return parseFloat(valObj.doubleValue);
-    if ('booleanValue' in valObj) return valObj.booleanValue;
-    if ('nullValue' in valObj) return null;
-    if ('timestampValue' in valObj) return valObj.timestampValue;
-    if ('arrayValue' in valObj) {
-        const values = valObj.arrayValue.values || [];
-        return values.map(fromFirestoreValue);
-    }
-    if ('mapValue' in valObj) {
-        const res = {};
-        const fields = valObj.mapValue.fields || {};
-        for (const [k, v] of Object.entries(fields)) {
-            res[k] = fromFirestoreValue(v);
-        }
-        return res;
-    }
-    return null;
-}
-
-function fromFirestoreDoc(doc) {
-    if (!doc) return null;
-    const res = {};
-    if (doc.fields) {
-        for (const [k, v] of Object.entries(doc.fields)) {
-            res[k] = fromFirestoreValue(v);
-        }
-    }
-    if (doc.name) {
-        const parts = doc.name.split('/');
-        res.id = parts[parts.length - 1];
-    }
-    return res;
-}
-
-class FirestoreDocRef {
-    constructor(collectionPath, docId, client) {
-        this.collectionPath = collectionPath;
-        this.docId = docId;
-        this.client = client;
-    }
-
-    async update(data) {
-        return this.set(data, { merge: true });
-    }
-
-    async get() {
-        const url = `${this.client.baseUrl}/${this.collectionPath}/${encodeURIComponent(this.docId)}?key=${this.client.apiKey}`;
+    // --------------------------------------------------------
+    // Variante 1: Service Account aus Environment Variable
+    // --------------------------------------------------------
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
         try {
-            const res = await fetch(url);
-            if (!res.ok) {
-                if (res.status === 404) {
-                    return {
-                        exists: false,
-                        id: this.docId,
-                        data: () => null
-                    };
-                }
-                const errText = await res.text();
-                throw new Error(`Firestore GET failed (${res.status}): ${errText}`);
-            }
-            const data = await res.json();
-            const parsed = fromFirestoreDoc(data);
-            return {
-                exists: true,
-                id: this.docId,
-                data: () => parsed
-            };
-        } catch (err) {
-            return {
-                exists: false,
-                id: this.docId,
-                data: () => null,
-                error: err.message
-            };
-        }
-    }
-
-    async set(data, options = {}) {
-        const fields = {};
-        for (const [k, v] of Object.entries(data)) {
-            if (v !== undefined) {
-                fields[k] = toFirestoreValue(v);
-            }
-        }
-
-        // Check if merge or replace
-        let url = `${this.client.baseUrl}/${this.collectionPath}/${encodeURIComponent(this.docId)}?key=${this.client.apiKey}`;
-        if (options && options.merge) {
-            const fieldMasks = Object.keys(data).map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&');
-            if (fieldMasks) {
-                url += `&${fieldMasks}`;
-            }
-        }
-
-        const res = await fetch(url, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields })
-        });
-
-        if (!res.ok) {
-            const errText = await res.text();
-            throw new Error(`Firestore SET failed (${res.status}): ${errText}`);
-        }
-        const respData = await res.json();
-        return fromFirestoreDoc(respData);
-    }
-
-    async delete() {
-        const url = `${this.client.baseUrl}/${this.collectionPath}/${encodeURIComponent(this.docId)}?key=${this.client.apiKey}`;
-        const res = await fetch(url, { method: 'DELETE' });
-        return res.ok;
-    }
-}
-
-class FirestoreQuery {
-    constructor(collectionPath, client) {
-        this.collectionPath = collectionPath;
-        this.client = client;
-        this.whereFilters = [];
-        this.orderRules = [];
-        this.limitCount = null;
-    }
-
-    where(field, op, val) {
-        const q = new FirestoreQuery(this.collectionPath, this.client);
-        q.whereFilters = [...this.whereFilters, { field, op, val }];
-        q.orderRules = [...this.orderRules];
-        q.limitCount = this.limitCount;
-        return q;
-    }
-
-    orderBy(field, direction = 'asc') {
-        const q = new FirestoreQuery(this.collectionPath, this.client);
-        q.whereFilters = [...this.whereFilters];
-        q.orderRules = [...this.orderRules, { field, direction: direction.toLowerCase() }];
-        q.limitCount = this.limitCount;
-        return q;
-    }
-
-    limit(n) {
-        const q = new FirestoreQuery(this.collectionPath, this.client);
-        q.whereFilters = [...this.whereFilters];
-        q.orderRules = [...this.orderRules];
-        q.limitCount = n;
-        return q;
-    }
-
-    async get() {
-        // If simple collection query with no where / order / limit, use listDocuments
-        if (this.whereFilters.length === 0 && this.orderRules.length === 0 && !this.limitCount) {
-            const url = `${this.client.baseUrl}/${this.collectionPath}?pageSize=300&key=${this.client.apiKey}`;
+            let raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+            let serviceAccount;
             try {
-                const res = await fetch(url);
-                if (!res.ok) {
-                    return { empty: true, size: 0, forEach: () => {}, docs: [] };
-                }
-                const data = await res.json();
-                const documents = data.documents || [];
-                const docs = documents.map(d => {
-                    const parsed = fromFirestoreDoc(d);
-                    return {
-                        id: parsed ? parsed.id : '',
-                        data: () => parsed
-                    };
-                });
-                return {
-                    empty: docs.length === 0,
-                    size: docs.length,
-                    docs: docs,
-                    forEach: (cb) => docs.forEach(cb)
-                };
-            } catch (e) {
-                return { empty: true, size: 0, forEach: () => {}, docs: [] };
-            }
-        }
-
-        // Use runQuery for complex where/order/limit queries
-        const runQueryUrl = `https://firestore.googleapis.com/v1/projects/${this.client.projectId}/databases/(default)/documents:runQuery?key=${this.client.apiKey}`;
-        const structuredQuery = {
-            from: [{ collectionId: this.collectionPath }]
-        };
-
-        if (this.whereFilters.length > 0) {
-            const filters = this.whereFilters.map(f => {
-                let opCode = 'EQUAL';
-                if (f.op === '==' || f.op === '=') opCode = 'EQUAL';
-                else if (f.op === '>') opCode = 'GREATER_THAN';
-                else if (f.op === '>=') opCode = 'GREATER_THAN_OR_EQUAL';
-                else if (f.op === '<') opCode = 'LESS_THAN';
-                else if (f.op === '<=') opCode = 'LESS_THAN_OR_EQUAL';
-
-                return {
-                    fieldFilter: {
-                        field: { fieldPath: f.field },
-                        op: opCode,
-                        value: toFirestoreValue(f.val)
-                    }
-                };
-            });
-
-            if (filters.length === 1) {
-                structuredQuery.where = filters[0];
-            } else {
-                structuredQuery.where = {
-                    compositeFilter: {
-                        op: 'AND',
-                        filters: filters
-                    }
-                };
-            }
-        }
-
-        if (this.orderRules.length > 0) {
-            structuredQuery.orderBy = this.orderRules.map(r => ({
-                field: { fieldPath: r.field },
-                direction: r.direction === 'desc' ? 'DESCENDING' : 'ASCENDING'
-            }));
-        }
-
-        if (this.limitCount) {
-            structuredQuery.limit = this.limitCount;
-        }
-
-        try {
-            const res = await fetch(runQueryUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ structuredQuery })
-            });
-
-            if (!res.ok) {
-                // Fallback to basic list and memory filter if index is missing or structuredQuery fails
-                return this.fallbackFilter();
+                serviceAccount = JSON.parse(raw);
+            } catch (pErr) {
+                try {
+                    serviceAccount = JSON.parse(Buffer.from(raw, 'base64').toString('utf8'));
+                } catch (b64Err) {}
             }
 
-            const results = await res.json();
-            const docs = [];
-            for (const r of results) {
-                if (r.document) {
-                    const parsed = fromFirestoreDoc(r.document);
-                    docs.push({
-                        id: parsed ? parsed.id : '',
-                        data: () => parsed
+            if (serviceAccount && typeof serviceAccount === 'object') {
+                if (serviceAccount.private_key && !serviceAccount.private_key.includes('...')) {
+                    serviceAccount.private_key = formatPrivateKey(serviceAccount.private_key);
+                    admin.initializeApp({
+                        credential: admin.credential.cert(serviceAccount),
+                        projectId: serviceAccount.project_id || defaultProjectId
                     });
+                    initialized = true;
+                    console.log('🔥 Firebase Admin SDK: Service Account via FIREBASE_SERVICE_ACCOUNT_JSON erfolgreich geladen.');
+                    return;
+                } else if (serviceAccount.private_key && serviceAccount.private_key.includes('...')) {
+                    console.warn('ℹ️ FIREBASE_SERVICE_ACCOUNT_JSON enthält unvollständigen Platzhalter (...). Nutze Datei-Fallback.');
                 }
             }
-            return {
-                empty: docs.length === 0,
-                size: docs.length,
-                docs: docs,
-                forEach: (cb) => docs.forEach(cb)
-            };
-        } catch (e) {
-            return this.fallbackFilter();
+        } catch (envErr) {
+            console.warn('⚠️ Fehler beim Laden von FIREBASE_SERVICE_ACCOUNT_JSON:', envErr.message);
         }
     }
 
-    async fallbackFilter() {
-        const url = `${this.client.baseUrl}/${this.collectionPath}?pageSize=300&key=${this.client.apiKey}`;
+    // --------------------------------------------------------
+    // Variante 2: Lokale Service-Account-Datei (serviceAccountKey.json)
+    // --------------------------------------------------------
+    const serviceAccountPath = path.join(__dirname, 'serviceAccountKey.json');
+    if (fs.existsSync(serviceAccountPath)) {
         try {
-            const res = await fetch(url);
-            if (!res.ok) return { empty: true, size: 0, forEach: () => {}, docs: [] };
-            const data = await res.json();
-            const documents = data.documents || [];
-            let items = documents.map(d => fromFirestoreDoc(d)).filter(Boolean);
-
-            // Apply where filters in memory
-            for (const f of this.whereFilters) {
-                items = items.filter(it => {
-                    if (f.op === '==' || f.op === '=') return it[f.field] === f.val;
-                    if (f.op === '>') return it[f.field] > f.val;
-                    if (f.op === '>=') return it[f.field] >= f.val;
-                    if (f.op === '<') return it[f.field] < f.val;
-                    if (f.op === '<=') return it[f.field] <= f.val;
-                    return true;
-                });
+            const saContent = fs.readFileSync(serviceAccountPath, 'utf8');
+            const serviceAccount = JSON.parse(saContent);
+            if (serviceAccount.private_key) {
+                serviceAccount.private_key = formatPrivateKey(serviceAccount.private_key);
             }
-
-            // Apply order
-            for (const r of this.orderRules) {
-                items.sort((a, b) => {
-                    const valA = a[r.field];
-                    const valB = b[r.field];
-                    if (valA < valB) return r.direction === 'desc' ? 1 : -1;
-                    if (valA > valB) return r.direction === 'desc' ? -1 : 1;
-                    return 0;
-                });
-            }
-
-            if (this.limitCount && items.length > this.limitCount) {
-                items = items.slice(0, this.limitCount);
-            }
-
-            const docs = items.map(parsed => ({
-                id: parsed.id,
-                data: () => parsed
-            }));
-
-            return {
-                empty: docs.length === 0,
-                size: docs.length,
-                docs: docs,
-                forEach: (cb) => docs.forEach(cb)
-            };
-        } catch (err) {
-            return { empty: true, size: 0, forEach: () => {}, docs: [] };
-        }
-    }
-}
-
-class FirestoreCollectionRef extends FirestoreQuery {
-    constructor(collectionPath, client) {
-        super(collectionPath, client);
-    }
-
-    doc(docId) {
-        return new FirestoreDocRef(this.collectionPath, docId, this.client);
-    }
-
-    async add(data) {
-        const url = `${this.client.baseUrl}/${this.collectionPath}?key=${this.client.apiKey}`;
-        const fields = {};
-        for (const [k, v] of Object.entries(data)) {
-            if (v !== undefined) {
-                fields[k] = toFirestoreValue(v);
-            }
-        }
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields })
-        });
-        if (!res.ok) {
-            const errText = await res.text();
-            throw new Error(`Firestore ADD failed (${res.status}): ${errText}`);
-        }
-        const respData = await res.json();
-        const parsed = fromFirestoreDoc(respData);
-        return {
-            id: parsed ? parsed.id : '',
-            data: () => parsed
-        };
-    }
-}
-
-class FirestoreRESTClient {
-    constructor() {
-        const config = getFirebaseConfig();
-        if (!config || !config.projectId) {
-            this.initialized = false;
+            admin.initializeApp({
+                credential: admin.credential.cert(serviceAccount),
+                projectId: serviceAccount.project_id || defaultProjectId
+            });
+            initialized = true;
+            console.log('🔥 Firebase Admin SDK: Lokale Datei serviceAccountKey.json erfolgreich geladen.');
             return;
+        } catch (fileErr) {
+            console.warn('⚠️ Fehler beim Laden von serviceAccountKey.json:', fileErr.message);
         }
-        this.projectId = config.projectId;
-        this.apiKey = config.apiKey;
-        this.baseUrl = `https://firestore.googleapis.com/v1/projects/${this.projectId}/databases/(default)/documents`;
-        this.initialized = true;
     }
 
-    collection(collectionPath) {
-        return new FirestoreCollectionRef(collectionPath, this);
+    // --------------------------------------------------------
+    // Variante 3: Application Default Credentials (GCP / Cloud Run)
+    // --------------------------------------------------------
+    try {
+        admin.initializeApp({
+            credential: admin.credential.applicationDefault(),
+            projectId: defaultProjectId
+        });
+        initialized = true;
+        console.log('🔥 Firebase Admin SDK: Application Default Credentials aktiviert.');
+        return;
+    } catch (adcErr) {
+        // Fallback: Initialisiere mit Projekt-ID, falls noch keine App existiert
+        if (!admin.apps || admin.apps.length === 0) {
+            admin.initializeApp({
+                projectId: defaultProjectId
+            });
+            initialized = true;
+            console.log('ℹ️ Firebase Admin SDK mit Default-Projekt initialisiert:', defaultProjectId);
+        }
     }
 }
 
-const firestoreClient = new FirestoreRESTClient();
+// Ensure initialization happens immediately
+try {
+    initializeFirebaseAdmin();
+} catch (initErr) {
+    console.warn("Firebase Init Notice:", initErr.message);
+    if (!admin.apps || admin.apps.length === 0) {
+        admin.initializeApp({ projectId: 'schachlive' });
+    }
+}
+
+let firestoreClient;
+try {
+    firestoreClient = admin.firestore();
+    firestoreClient.settings({
+        ignoreUndefinedProperties: true
+    });
+} catch (fsErr) {
+    console.error("❌ Firestore Client Setup Error:", fsErr.message);
+}
 
 module.exports = {
     firestoreClient,
-    FirestoreRESTClient
+    admin
 };

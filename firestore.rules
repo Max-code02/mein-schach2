@@ -1,69 +1,172 @@
 rules_version = '2';
+
 service cloud.firestore {
-  match /databases/{database}/documents {
+match /databases/{database}/documents {
 
-    // 🔒 1. Authentifizierungs- & Admin-Prüfungsfunktionen
-    function isSignedIn() {
-      return request.auth != null;
-    }
+// ------------------------------------------------------------
+// AUTH
+// ------------------------------------------------------------
 
-    function isMasterAdmin() {
-      return isSignedIn() && (
-        (request.auth.token.email != null && request.auth.token.email.lower() == 'max.schule13@gmail.com') ||
-        (request.auth.token.admin == true)
-      );
-    }
+function isSignedIn() {
+  return request.auth != null;
+}
 
-    // 🔒 2. Spieler-Profile (/players/{playerId})
-    match /players/{playerId} {
-      allow read: if true;
+function isMasterAdmin() {
+  return isSignedIn()
+    && (
+      (request.auth.token.email != null && request.auth.token.email.lower() == 'max.schule13@gmail.com')
+      || request.auth.token.admin == true
+    );
+}
 
-      // 🛡️ Client darf NIEMALS 'is_owner: true' im Dokument ablegen! Nur der MasterAdmin darf dies.
-      allow create, update: if (!('is_owner' in request.resource.data) || request.resource.data.is_owner == false || isMasterAdmin());
+// ------------------------------------------------------------
+// PLAYERS
+// ------------------------------------------------------------
 
-      allow delete: if true;
-    }
+match /players/{playerId} {
 
-    // 🔒 3. Private Benutzerdaten (/users_private/{userId})
-    match /users_private/{userId} {
-      allow read, write: if true;
-    }
+  // Spielerprofile dürfen gelesen werden.
+  allow read: if true;
 
-    // 🔒 4. Globale Rangliste (/leaderboard/{entryDocId})
-    match /leaderboard/{entryDocId} {
-      allow read: if true;
+  // Ein normaler Nutzer darf nur sein eigenes Profil anlegen.
+  // Kritische Rechte/Felder dürfen dabei niemals gesetzt werden.
+  allow create: if isSignedIn()
+    && request.auth.uid == playerId
+    && (
+      !('role' in request.resource.data)
+      || request.resource.data.role == 'user'
+      || request.resource.data.role == 'Gast'
+    )
+    && (
+      !('is_owner' in request.resource.data)
+      || request.resource.data.is_owner == false
+    )
+    && (
+      !('is_banned' in request.resource.data)
+      || request.resource.data.is_banned == false
+    )
+    && !('ip_ban' in request.resource.data)
+    && !('ban_reason' in request.resource.data);
 
-      // 🛡️ Auch in der Rangliste darf niemand 'is_owner: true' fälschen!
-      allow write: if (!('is_owner' in request.resource.data) || request.resource.data.is_owner == false || isMasterAdmin());
-    }
+  // Normale Nutzer dürfen ausschließlich harmlose Profildaten ändern.
+  // Stats, Rollen, Bans usw. bleiben serverseitig.
+  allow update: if isMasterAdmin()
+    || (
+      isSignedIn()
+      && request.auth.uid == playerId
+      && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'avatar',
+        'selectedTheme',
+        'board_theme',
+        'piece_theme'
+      ])
+    );
 
-    // 🔒 5. Bann-Listen & IP-Sperren (/bans/{banId})
-    match /bans/{banId} {
-      allow read, write: if true;
-    }
+  // Ein Nutzer darf sein eigenes Profil nicht löschen.
+  // Nur der Server/Admin darf löschen.
+  allow delete: if isMasterAdmin();
+}
 
-    // 🔒 6. Partien & Snapshots (/games/{gameId})
-    match /games/{gameId} {
-      allow read, write: if true;
-    }
+// ------------------------------------------------------------
+// LEADERBOARD
+// ------------------------------------------------------------
 
-    // 🔒 7. Chat-Nachrichten (/messages/{messageId})
-    match /messages/{messageId} {
-      allow read, write: if true;
-    }
+match /leaderboard/{entryDocId} {
 
-    // 🔒 8. Support-Tickets & Entbannungsanträge (/tickets/{ticketId})
-    match /tickets/{ticketId} {
-      allow read, write: if true;
-    }
+  // Rangliste darf öffentlich gelesen werden.
+  allow read: if true;
 
-    // 🔒 9. System-Status & Verbindungsüberwachung (/system/{docId})
-    match /system/{docId} {
-      allow read, write: if true;
-    }
+  // Schreiben ausschließlich über Server/Admin.
+  allow write: if isMasterAdmin();
+}
 
-    match /{document=**} {
-      allow read, write: if true;
-    }
-  }
+// ------------------------------------------------------------
+// PRIVATE USER DATA
+// ------------------------------------------------------------
+
+match /users_private/{userId} {
+
+  allow read, write: if isSignedIn()
+    && request.auth.uid == userId;
+}
+
+// ------------------------------------------------------------
+// BANS
+// ------------------------------------------------------------
+
+match /bans/{banId} {
+
+  // Bann-Daten sind nicht öffentlich bzw. nur Admin.
+  allow read, write: if isMasterAdmin();
+}
+
+// ------------------------------------------------------------
+// GAMES
+// ------------------------------------------------------------
+
+match /games/{gameId} {
+
+  // Partien dürfen gelesen werden.
+  // Neue/ändernde Daten kommen vom Server.
+  allow read: if isSignedIn();
+  allow write: if isMasterAdmin();
+}
+
+// ------------------------------------------------------------
+// MESSAGES
+// ------------------------------------------------------------
+
+match /messages/{messageId} {
+
+  allow read: if true;
+  allow write: if isMasterAdmin();
+}
+
+// ------------------------------------------------------------
+// TICKETS
+// ------------------------------------------------------------
+
+match /tickets/{ticketId} {
+
+  // Nutzer dürfen nur eigene Tickets lesen/anlegen, Admin darf alle lesen.
+  allow read: if isMasterAdmin() || (
+    isSignedIn() && (
+      ('userId' in resource.data && resource.data.userId == request.auth.uid) ||
+      ('uid' in resource.data && resource.data.uid == request.auth.uid)
+    )
+  );
+
+  allow create: if isSignedIn() && (
+    ('userId' in request.resource.data && request.resource.data.userId == request.auth.uid) ||
+    ('uid' in request.resource.data && request.resource.data.uid == request.auth.uid)
+  );
+
+  // Bestehende Tickets dürfen nur vom Besitzer geändert werden.
+  allow update: if isMasterAdmin() || (
+    isSignedIn() && (
+      ('userId' in resource.data && resource.data.userId == request.auth.uid) ||
+      ('uid' in resource.data && resource.data.uid == request.auth.uid)
+    )
+  );
+
+  allow delete: if isMasterAdmin();
+}
+
+// ------------------------------------------------------------
+// SYSTEM
+// ------------------------------------------------------------
+
+match /system/{docId} {
+
+  allow read: if true;
+  allow write: if isMasterAdmin();
+}
+
+// ------------------------------------------------------------
+// DEFAULT DENY
+// ------------------------------------------------------------
+// Alles, was oben nicht ausdrücklich erlaubt wurde,
+// ist automatisch verboten.
+
+}
 }
