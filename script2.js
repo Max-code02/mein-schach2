@@ -430,6 +430,19 @@ async function initFirebase() {
                                 level: 1,
                                 xp: 0
                             }, { merge: true });
+
+                            setDoc(doc(fbDb, 'leaderboard', pName), {
+                                username: pName,
+                                name: pName,
+                                uid: user.uid,
+                                role: 'user',
+                                elo: 1200,
+                                wins: 0,
+                                losses: 0,
+                                level: 1,
+                                xp: 0,
+                                updatedAt: new Date().toISOString()
+                            }, { merge: true }).catch(() => {});
                         }
                     });
                     
@@ -587,6 +600,19 @@ window.submitAuthEmailLogin = async function() {
                 level: 1,
                 xp: 0
             }, { merge: true });
+
+            await setDoc(doc(fbDb, 'leaderboard', pName), {
+                username: pName,
+                name: pName,
+                uid: user.uid,
+                role: 'user',
+                elo: 1200,
+                wins: 0,
+                losses: 0,
+                level: 1,
+                xp: 0,
+                updatedAt: new Date().toISOString()
+            }, { merge: true }).catch(() => {});
         }
 
         localStorage.setItem('playerName', pName);

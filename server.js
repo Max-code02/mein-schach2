@@ -866,7 +866,7 @@ app.get('/admin/api/data', async (req, res) => {
 const ALLOWED_STATIC_FILES = new Set([
     'index.html', 'handy.html', 'stats.html', 'chat.html', 'datenschutz.html', 'impressum.html', 
     'AGB.html', 'sitemap.html', 'sitemap.xml', 'robots.txt', 'manifest.json', 'sw.js',
-    'script.js', 'script2.js', 'script_chat.js', 'style.css',
+    'script.js', 'script2.js', 'script_chat.js', 'style.css', 'features.js', 'firebase-applet-config.json',
     'icon.png', 'icon.jpg', 'schach-vorschau.jpg',
     'stockfishWorker.js', 'engineWorker.js', 'puzzleEngine.js', 'openingTrainer.js', 
     'openingBook.js', 'pgnEngine.js', 'evalEngine.js', 'bettingEngine.js', 
@@ -2844,6 +2844,52 @@ async function syncAllToFirestore() {
             }, { merge: true });
         } catch(e) {}
 
+        // 🔥 Explicitly populate and establish 'leaderboard' collection in Firestore!
+        try {
+            const playersSnap = await firestoreDb.collection('players').get();
+            const sourceMap = new Map();
+
+            // 1. Gather existing players from Firestore
+            if (!playersSnap.empty) {
+                playersSnap.forEach(doc => {
+                    const clean = sanitizeLeaderboardEntry(doc.data(), doc.id);
+                    if (clean && clean.name) {
+                        sourceMap.set(clean.name.toLowerCase(), clean);
+                    }
+                });
+            }
+
+            // 2. Complement with local userDB entries
+            for (const [name, u] of Object.entries(userDB)) {
+                const clean = sanitizeLeaderboardEntry(u, name);
+                if (clean && clean.name && !sourceMap.has(clean.name.toLowerCase())) {
+                    sourceMap.set(clean.name.toLowerCase(), clean);
+                }
+            }
+
+            // 3. Write each player document to 'leaderboard' collection
+            let count = 0;
+            for (const clean of sourceMap.values()) {
+                const lbDoc = {
+                    username: clean.name,
+                    name: clean.name,
+                    elo: Number(clean.elo) || 1200,
+                    wins: Number(clean.wins) || 0,
+                    losses: Number(clean.losses) || 0,
+                    level: Number(clean.level) || 1,
+                    xp: Number(clean.xp) || 0,
+                    role: clean.role || 'user',
+                    updatedAt: new Date().toISOString()
+                };
+                await firestoreDb.collection('leaderboard').doc(clean.name).set(lbDoc, { merge: true })
+                    .catch(err => console.warn(`Leaderboard init doc write [${clean.name}]:`, err.message));
+                count++;
+            }
+            console.log(`🔥 'leaderboard' Collection in Firestore synchronisiert (${count} Einträge erstellt/aktualisiert).`);
+        } catch (lbErr) {
+            console.warn("Leaderboard seeding notice:", lbErr.message);
+        }
+
         console.log("✅ Firestore Synchronisationsprüfung bereit.");
     } catch (e) {
         console.error("Fehler bei syncAllToFirestore:", e.message);
@@ -3275,6 +3321,7 @@ app.all('/api/sync-all', async (req, res) => {
 // REST endpoint to trigger manual immediate sync from Firestore
 app.get(['/api/sync-firebase', '/api/admin/sync-firestore'], async (req, res) => {
     try {
+        await syncAllToFirestore();
         await loadFirestoreProfiles();
         await loadFirestoreBans();
         await loadFirestoreTickets();
@@ -3282,7 +3329,7 @@ app.get(['/api/sync-firebase', '/api/admin/sync-firestore'], async (req, res) =>
         broadcastTicketsUpdate();
         return res.json({ 
             success: true, 
-            message: 'Firebase Firestore Daten erfolgreich synchronisiert!',
+            message: 'Firebase Firestore Daten & Leaderboard erfolgreich synchronisiert!',
             playerCount: Object.keys(userDB).length,
             bannedIPCount: bannedIPs.size,
             bannedPlayerCount: bannedPlayers.size
