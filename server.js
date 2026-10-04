@@ -1074,31 +1074,32 @@ function sanitizeLeaderboardEntry(data, docId) {
 }
 
 app.get('/api/leaderboard', async (req, res) => {
+    const userMap = new Map();
     try {
-        const userMap = new Map();
         if (typeof firestoreDb !== 'undefined' && firestoreDb) {
-            let snapshot = await firestoreDb.collection('leaderboard').get();
-            if (snapshot.empty) {
-                snapshot = await firestoreDb.collection('players').get();
+            try {
+                let snapshot = await firestoreDb.collection('leaderboard').get();
+                if (snapshot && snapshot.empty) {
+                    snapshot = await firestoreDb.collection('players').get();
+                }
+                if (snapshot && !snapshot.empty) {
+                    snapshot.forEach(doc => {
+                        const clean = sanitizeLeaderboardEntry(doc.data(), doc.id);
+                        if (!clean) return;
+                        const key = clean.name.toLowerCase();
+                        const existing = userMap.get(key);
+                        if (!existing || clean.elo > existing.elo || (clean.elo === existing.elo && clean.wins > existing.wins)) {
+                            userMap.set(key, clean);
+                        }
+                    });
+                }
+            } catch (dbErr) {
+                console.warn("Firestore Leaderboard Fetch Notice (using local userDB):", dbErr.message);
             }
-            if (!snapshot.empty) {
-                snapshot.forEach(doc => {
-                    const clean = sanitizeLeaderboardEntry(doc.data(), doc.id);
-                    if (!clean) return;
-                    const key = clean.name.toLowerCase();
-                    const existing = userMap.get(key);
-                    if (!existing || clean.elo > existing.elo || (clean.elo === existing.elo && clean.wins > existing.wins)) {
-                        userMap.set(key, clean);
-                    }
-                });
-            }
-            const list = Array.from(userMap.values());
-            list.sort((a, b) => (b.elo !== a.elo ? b.elo - a.elo : b.wins - a.wins));
-            return res.json({ success: true, list: list.slice(0, 100) });
         }
 
-        // Fallback only if Firestore is completely unavailable
-        for (const [name, u] of Object.entries(userDB)) {
+        // Fill in / fallback with local userDB
+        for (const [name, u] of Object.entries(userDB || {})) {
             const clean = sanitizeLeaderboardEntry(u, name);
             if (!clean) continue;
             const key = clean.name.toLowerCase();
@@ -1112,8 +1113,8 @@ app.get('/api/leaderboard', async (req, res) => {
         list.sort((a, b) => (b.elo !== a.elo ? b.elo - a.elo : b.wins - a.wins));
         return res.json({ success: true, list: list.slice(0, 100) });
     } catch (err) {
-        console.error("Firestore Leaderboard Fetch Error:", err.message);
-        return res.status(500).json({ success: false, error: err.message });
+        console.error("Leaderboard Error:", err.message);
+        return res.json({ success: true, list: [] });
     }
 });
 
@@ -3752,25 +3753,39 @@ wss.on('connection', function(ws, req) {
                 if (user) {
                     // 🔒 Strict UID & Identity Verification
                     if (user.uid) {
-                        // Account is linked to Firebase: MUST have valid token matching this exact UID
-                        if (!isFirebaseVerified || verifiedUid !== user.uid) {
+                        // Account is linked to Firebase:
+                        // If user is verified admin (max.schule13@gmail.com) or verified email matches, link to verified UID
+                        if (isActualAdmin && isFirebaseVerified && verifiedUid) {
+                            user.uid = verifiedUid;
+                        } else if (isFirebaseVerified && verifiedUid && user.email && verifiedEmail && user.email.toLowerCase() === verifiedEmail.toLowerCase()) {
+                            user.uid = verifiedUid;
+                        } else if (!isFirebaseVerified || verifiedUid !== user.uid) {
                             return ws.send(JSON.stringify({ 
                                 type: 'login_error', 
                                 text: 'Dieser Account ist mit Firebase geschützt. Bitte melde dich über dein verifiziertes Firebase/Google-Konto an!' 
                             }));
                         }
                     } else {
-                        // Password account: password must be provided and match securely
-                        if (!password || !user.password || !verifyPassword(password, user.password)) {
-                            return ws.send(JSON.stringify({ type: 'login_error', text: 'Falsches Passwort für diesen Spielernamen!' }));
-                        }
-                        if (!user.password.includes(':')) {
-                            user.password = hashPassword(password);
+                        // If logging in via verified Firebase, bind account to this verified UID
+                        if (isFirebaseVerified && verifiedUid) {
+                            user.uid = verifiedUid;
+                        } else {
+                            // Password account: password must be provided and match securely
+                            if (!password || !user.password || !verifyPassword(password, user.password)) {
+                                return ws.send(JSON.stringify({ type: 'login_error', text: 'Falsches Passwort für diesen Spielernamen!' }));
+                            }
+                            if (!user.password.includes(':')) {
+                                user.password = hashPassword(password);
+                            }
                         }
                     }
                     user.last_login = new Date();
                     if (isFirebaseVerified && verifiedUid) user.uid = verifiedUid;
                     if (verifiedEmail) user.email = verifiedEmail;
+                    if (isActualAdmin) {
+                        user.role = 'admin';
+                        user.is_owner = true;
+                    }
                     user.username = playerName;
                     if (user.coins === undefined) user.coins = 1000;
                 } else {
@@ -5381,7 +5396,7 @@ wss.on('connection', function(ws, req) {
             if (data.type === 'rejoin_room') {
                 const targetRoom = data.room;
                 const pName = data.playerName || ws.playerName;
-                /* replaced const */
+                const roomState = activeRoomStates.get(targetRoom);
 
                 if (roomState && !roomState.gameOver) {
                     ws.room = targetRoom;
