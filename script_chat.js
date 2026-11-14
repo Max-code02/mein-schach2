@@ -8,7 +8,22 @@ const isGitHubPages = typeof window !== 'undefined' && window.location.hostname.
 const wsProtocol = (typeof window !== 'undefined' && (window.location.protocol === 'https:' || isGitHubPages)) ? 'wss:' : 'ws:';
 const wsHost = isGitHubPages ? RENDER_SERVER : (typeof window !== 'undefined' ? window.location.host : RENDER_SERVER);
 const socket = new WebSocket(`${wsProtocol}//${wsHost}`);
-const adminPass = "Admina111"; 
+
+function escapeChatHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function escapeRegExp(str) {
+    return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const ALLOWED_REACTIONS = new Set(['👍', '🔥', '❤️', '😂']);
 
 // 1. ELEMENTE AUS DER HTML HOLEN
 const chatMessages = document.getElementById("chat-messages");
@@ -16,8 +31,9 @@ const chatInput = document.getElementById("chat-input");
 const sendBtn = document.getElementById("send-btn");
 const userBadge = document.getElementById("user-badge");
 
-// 2. NUTZER-IDENTITÄT
-let myName = localStorage.getItem("chat_username") || "Max";
+// 2. NUTZER-IDENTITÄT (Sicherer Gast-Standard)
+let myName = localStorage.getItem("chat_username") || localStorage.getItem("playerName") || ("Gast_" + Math.floor(1000 + Math.random() * 9000));
+myName = String(myName).replace(/[^a-zA-Z0-9_.\- äöüÄÖÜß]/g, '').trim().slice(0, 30) || ("Gast_" + Math.floor(1000 + Math.random() * 9000));
 localStorage.setItem("chat_username", myName);
 
 // Sound Feedback
@@ -40,8 +56,7 @@ function playMentionSound() {
 
 // 3. VERBINDUNGSMANAGER
 socket.onopen = () => {
-    console.log("Master-Server verbunden!");
-    if(userBadge) userBadge.innerText = `👤 ${myName}`;
+    if (userBadge) userBadge.innerText = `👤 ${myName}`;
     socket.send(JSON.stringify({ type: 'join', room: 'global', name: myName }));
 };
 
@@ -49,8 +64,8 @@ socket.onmessage = (e) => {
     try {
         const data = JSON.parse(e.data);
         if (data.type === 'chat') {
-            let cleanText = (data.text || "").replace(adminPass, "").trim();
-            
+            const cleanText = String(data.text || "").trim();
+
             // Check for @Mention
             const isMentioned = myName && cleanText.toLowerCase().includes(`@${myName.toLowerCase()}`);
             if (isMentioned) playMentionSound();
@@ -58,12 +73,12 @@ socket.onmessage = (e) => {
             if (data.name !== myName) {
                 addMessage(data.name || "SYSTEM", cleanText, data.system ? 'system' : 'other', data.id, isMentioned);
             }
-        } 
+        }
         else if (data.type === 'chat_reaction') {
             handleIncomingReaction(data.msgId, data.emoji, data.sender);
         }
         else if (data.type === 'system_alert') {
-            alert("🚨 SERVER-MELDUNG: " + data.message);
+            console.warn("Server-Meldung:", data.message);
         }
     } catch (err) {
         console.error("Fehler beim Verarbeiten:", err);
@@ -72,8 +87,9 @@ socket.onmessage = (e) => {
 
 // 4. DIE HAUPTFUNKTION ZUM SENDEN
 function send() {
+    if (!chatInput) return;
     const val = chatInput.value.trim();
-    if (!val) return;
+    if (!val || val.length > 450) return;
 
     if (val.toLowerCase() === "/clear") {
         if (chatMessages) chatMessages.innerHTML = "";
@@ -92,35 +108,30 @@ function send() {
             id: msgId
         }));
 
-        let cleanDisplay = val;
-        const pws = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'admina1', 'Maxi'];
-        pws.forEach(pw => { cleanDisplay = cleanDisplay.replaceAll(pw, '').trim(); });
-        
-        addMessage(myName, cleanDisplay, 'me', msgId, false);
-        
+        addMessage(myName, val, 'me', msgId, false);
+
         chatInput.value = "";
         chatInput.focus();
-    } else {
-        alert("Keine Verbindung zum Server!");
     }
 }
 
 /**
- * Text-Formatierung (**fett**, *kursiv*, ~durchgestrichen~)
+ * Text-Formatierung (**fett**, *kursiv*, ~durchgestrichen~) nach strengem HTML-Escaping
  */
 function formatChatMessage(text) {
     if (!text) return "";
-    let safeText = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    let safeText = escapeChatHtml(text);
 
-    // Markdown-style formatting
+    // Markdown-style formatting on escaped string
     safeText = safeText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     safeText = safeText.replace(/\*(.*?)\*/g, '<em>$1</em>');
     safeText = safeText.replace(/~(.*?)~/g, '<del>$1</del>');
 
-    // Mention Highlight
+    // Mention Highlight (RegExp-sicher + HTML-escaped)
     if (myName) {
-        const mentionRegex = new RegExp(`@${myName}`, 'gi');
-        safeText = safeText.replace(mentionRegex, `<span style="background: rgba(234, 179, 8, 0.3); color: #fef08a; padding: 2px 6px; border-radius: 4px; font-weight: bold;">@${myName}</span>`);
+        const safeName = escapeChatHtml(myName);
+        const mentionRegex = new RegExp(`@${escapeRegExp(safeName)}`, 'gi');
+        safeText = safeText.replace(mentionRegex, `<span style="background: rgba(234, 179, 8, 0.3); color: #fef08a; padding: 2px 6px; border-radius: 4px; font-weight: bold;">@${safeName}</span>`);
     }
 
     return safeText;
@@ -130,9 +141,12 @@ function formatChatMessage(text) {
 function addMessage(name, text, type, msgId = null, isMentioned = false) {
     if (!chatMessages) return;
     const div = document.createElement("div");
-    const id = msgId || ("msg_" + Date.now());
-    div.id = id;
-    div.className = `msg msg-${type} ${isMentioned ? 'mention-highlight' : ''}`;
+    const rawId = String(msgId || ("msg_" + Date.now()));
+    const safeId = rawId.replace(/[^a-zA-Z0-9_-]/g, '') || ("msg_" + Date.now());
+    const safeType = ['me', 'other', 'system'].includes(type) ? type : 'other';
+
+    div.id = safeId;
+    div.className = `msg msg-${safeType} ${isMentioned ? 'mention-highlight' : ''}`;
     if (isMentioned) {
         div.style.borderLeft = "4px solid #eab308";
         div.style.backgroundColor = "rgba(234, 179, 8, 0.1)";
@@ -141,52 +155,69 @@ function addMessage(name, text, type, msgId = null, isMentioned = false) {
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const formattedText = formatChatMessage(text);
 
-    if (type === 'system') {
-        div.innerText = text;
+    if (safeType === 'system') {
+        div.textContent = String(text || '');
     } else {
+        const safeSender = safeType === 'me' ? 'DU' : escapeChatHtml(name || 'Gast');
         div.innerHTML = `
-            <span class="name-tag">${type === 'me' ? 'DU' : name}</span>
+            <span class="name-tag">${safeSender}</span>
             <div class="text">${formattedText}</div>
-            <div class="reaction-bar" id="reactions-${id}" style="display: flex; gap: 4px; margin-top: 4px; font-size: 0.85rem;"></div>
+            <div class="reaction-bar" id="reactions-${safeId}" style="display: flex; gap: 4px; margin-top: 4px; font-size: 0.85rem;"></div>
             <div class="quick-reactions" style="margin-top: 2px; font-size: 0.75rem; opacity: 0.7; cursor: pointer;">
-                <span onclick="sendReaction('${id}', '👍')">👍</span>
-                <span onclick="sendReaction('${id}', '🔥')">🔥</span>
-                <span onclick="sendReaction('${id}', '❤️')">❤️</span>
-                <span onclick="sendReaction('${id}', '😂')">😂</span>
+                <span data-react-id="${safeId}" data-react-emoji="👍">👍</span>
+                <span data-react-id="${safeId}" data-react-emoji="🔥">🔥</span>
+                <span data-react-id="${safeId}" data-react-emoji="❤️">❤️</span>
+                <span data-react-id="${safeId}" data-react-emoji="😂">😂</span>
             </div>
-            <span class="time-tag">${timeStr}</span>
+            <span class="time-tag">${escapeChatHtml(timeStr)}</span>
         `;
+        div.querySelectorAll('[data-react-emoji]').forEach(el => {
+            el.addEventListener('click', () => {
+                sendReaction(el.getAttribute('data-react-id'), el.getAttribute('data-react-emoji'));
+            });
+        });
     }
     chatMessages.appendChild(div);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 function sendReaction(msgId, emoji) {
+    if (!ALLOWED_REACTIONS.has(emoji)) return;
+    const safeId = String(msgId || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!safeId) return;
     if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({
             type: 'chat_reaction',
-            msgId: msgId,
+            msgId: safeId,
             emoji: emoji,
             sender: myName
         }));
-        handleIncomingReaction(msgId, emoji, myName);
+        handleIncomingReaction(safeId, emoji, myName);
     }
 }
 
-function handleIncomingReaction(msgId, emoji, sender) {
-    const reactionBar = document.getElementById(`reactions-${msgId}`);
+function handleIncomingReaction(msgId, emoji) {
+    if (!ALLOWED_REACTIONS.has(emoji)) return;
+    const safeId = String(msgId || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!safeId) return;
+    const reactionBar = document.getElementById(`reactions-${safeId}`);
     if (reactionBar) {
         let badge = reactionBar.querySelector(`[data-emoji="${emoji}"]`);
         if (!badge) {
             badge = document.createElement("span");
             badge.setAttribute("data-emoji", emoji);
             badge.style.cssText = "background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 12px;";
-            badge.innerHTML = `${emoji} <span class="count">1</span>`;
+            const emojiSpan = document.createTextNode(emoji + " ");
+            const countSpan = document.createElement("span");
+            countSpan.className = "count";
+            countSpan.textContent = "1";
+            badge.appendChild(emojiSpan);
+            badge.appendChild(countSpan);
             reactionBar.appendChild(badge);
         } else {
             const countEl = badge.querySelector(".count");
             if (countEl) {
-                countEl.innerText = parseInt(countEl.innerText) + 1;
+                countEl.textContent = String((parseInt(countEl.textContent, 10) || 0) + 1);
             }
         }
     }

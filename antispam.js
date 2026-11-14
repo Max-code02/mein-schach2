@@ -15,7 +15,7 @@ const CONFIG = {
     CAPS_LOCK_LIMIT: 0.75,      // Max percentage of uppercase characters
     CMD_LIMIT: 4,               // Max /commands in 10 seconds
     
-    ADMIN_IPS: ['127.0.0.1', '::1'],
+    ADMIN_IPS: [],
     
     BANNED_WORDS: [
         // Politisch / Hassrede / Extremismus
@@ -50,7 +50,7 @@ setInterval(() => {
             userStatus.delete(ip);
         }
     }
-}, 15 * 60 * 1000);
+}, 15 * 60 * 1000).unref();
 
 /**
  * Calculates string similarity ratio (0.0 to 1.0)
@@ -84,9 +84,9 @@ function hasExcessiveRepetition(text) {
 function isSpamming(ws, messageText = "") {
     if (!ws) return false;
 
-    // Admin Immunity Check
+    // Admin Immunity Check (nur serverseitig verifizierte Admins)
     const ip = ws.clientIP || (ws._socket ? ws._socket.remoteAddress : "unknown");
-    if (CONFIG.ADMIN_IPS.includes(ip) || ws.isAdmin) return false;
+    if (ws.isAdmin === true || ws.is_owner === true || ws.role === 'admin') return false;
 
     const now = Date.now();
 
@@ -166,15 +166,13 @@ function isSpamming(ws, messageText = "") {
         }
     }
 
-    // 5. WORD FILTER (Blacklist) - Exclude Admin passwords or special system commands
+    // 5. WORD FILTER (Blacklist) - Gilt fuer alle Nachrichten inkl. Befehle
     const trimmedMsg = messageText.trim();
     const isCmd = trimmedMsg.startsWith('/') || trimmedMsg.startsWith('!') || trimmedMsg.startsWith('?');
-    const hasAdminPass = ['Admina111', 'admina111', 'Admin111', 'admin111', 'Admina1', 'Maxi'].some(pw => messageText.includes(pw));
 
-    if (!isCmd && !hasAdminPass) {
-        const lowerMsg = messageText.toLowerCase();
-        const hasBannedWord = CONFIG.BANNED_WORDS.some(word => lowerMsg.includes(word));
-        if (hasBannedWord) {
+    const lowerMsg = messageText.toLowerCase();
+    const hasBannedWord = CONFIG.BANNED_WORDS.some(word => lowerMsg.includes(word));
+    if (hasBannedWord) {
             data.warnings++;
             console.warn(`[ANTISPAM WARNING] IP: ${ip} | Warning #${data.warnings}`);
 
@@ -197,7 +195,6 @@ function isSpamming(ws, messageText = "") {
                 }
             }
             return true;
-        }
     }
 
     // 6. COMMAND SPAM CHECK

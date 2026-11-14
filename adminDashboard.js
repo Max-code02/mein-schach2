@@ -23,6 +23,7 @@ function renderAdminLoginPage(errorMessage = '') {
 <html lang="de">
 <head>
     <meta charset="UTF-8">
+    <meta name="strix-verification" content="strix-verify-d42958f109fb3690dfb44210a3c9038e">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Schach-Server – Administrator-Portal</title>
     <style>
@@ -289,7 +290,11 @@ function renderAdminLoginPage(errorMessage = '') {
                 }
             } catch (err) {
                 console.error("Auth Error:", err);
-                statusBox.innerHTML = '<span style="color: #e74c3c;">❌ Anmeldung fehlgeschlagen: ' + (err.message || 'Unbekannter Fehler') + '</span>';
+                const errSpan = document.createElement('span');
+                errSpan.style.color = '#e74c3c';
+                errSpan.textContent = '❌ Anmeldung fehlgeschlagen: ' + (err.message || 'Unbekannter Fehler');
+                statusBox.innerHTML = '';
+                statusBox.appendChild(errSpan);
                 googleBtn.disabled = false;
             }
         });
@@ -320,7 +325,11 @@ function renderAdminLoginPage(errorMessage = '') {
                     statusBox.innerHTML = '<span style="color: #2ecc71;">✅ Master-Login erfolgreich! Leite weiter...</span>';
                     window.location.href = '/admin';
                 } else {
-                    statusBox.innerHTML = '<span style="color: #e74c3c;">⛔ ' + (data.message || 'Falsches Passwort!') + '</span>';
+                    const errSpan = document.createElement('span');
+                    errSpan.style.color = '#e74c3c';
+                    errSpan.textContent = '⛔ ' + (data.message || 'Falsches Passwort!');
+                    statusBox.innerHTML = '';
+                    statusBox.appendChild(errSpan);
                     submitBtn.disabled = false;
                 }
             } catch (err) {
@@ -337,15 +346,23 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
     const safeAdminName = String(adminInfo.adminName || 'Admin').replace(/[<>&"']/g, '');
     const safeAdminEmail = String(adminInfo.email || '').replace(/[<>&"']/g, '');
 
-    const usersJson = JSON.stringify(users || []);
-    const ticketsJson = JSON.stringify(tickets || []);
-    const bannedIPsJson = JSON.stringify(bannedIPsList || []);
-    const bannedPlayersJson = JSON.stringify(bannedPlayersList || []);
+    const safeJsonEmbed = (val) => JSON.stringify(val)
+        .replace(/</g, '\\u003c')
+        .replace(/>/g, '\\u003e')
+        .replace(/&/g, '\\u0026')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+
+    const usersJson = safeJsonEmbed(users || []);
+    const ticketsJson = safeJsonEmbed(tickets || []);
+    const bannedIPsJson = safeJsonEmbed(bannedIPsList || []);
+    const bannedPlayersJson = safeJsonEmbed(bannedPlayersList || []);
 
     return `<!DOCTYPE html>
 <html lang="de">
 <head>
     <meta charset="UTF-8">
+    <meta name="strix-verification" content="strix-verify-d42958f109fb3690dfb44210a3c9038e">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Schach-Server – Administrator-Zentrale</title>
     <style>
@@ -909,6 +926,7 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
                 const isAdmin = u.role === 'admin';
                 const isOnline = !!u.is_online;
                 const safeName = String(u.username || u.id || '').replace(/[<>&"']/g, '');
+                const safeRole = String(u.role || 'user').replace(/[<>&"']/g, '');
                 const safeIP = String(u.ip_address || 'Unbekannt').replace(/[<>&"']/g, '');
                 const encName = encodeURIComponent(u.username || u.id || '');
 
@@ -925,10 +943,10 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
                             }
                         </td>
                         <td>
-                            <span class="badge-status \${isAdmin ? 'badge-admin' : 'badge-offline'}">\${u.role || 'user'}</span>
+                            <span class="badge-status \${isAdmin ? 'badge-admin' : 'badge-offline'}">\${safeRole}</span>
                         </td>
-                        <td>\${u.elo || 1200}</td>
-                        <td>\${u.wins || 0} / \${u.losses || 0}</td>
+                        <td>\${Number(u.elo) || 1200}</td>
+                        <td>\${Number(u.wins) || 0} / \${Number(u.losses) || 0}</td>
                         <td><code>\${safeIP}</code></td>
                         <td>
                             <div style="display: flex; gap: 6px; flex-wrap: wrap;">
@@ -1004,7 +1022,7 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
                         <td style="color: var(--danger);">\${safeReason}</td>
                         <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="\${safeText}">\${safeText}</td>
                         <td>
-                            <span class="badge-status \${isPending ? 'badge-banned' : 'badge-online'}">\${t.status}</span>
+                            <span class="badge-status \${isPending ? 'badge-banned' : 'badge-online'}">\${String(t.status || 'Offen').replace(/[<>&"']/g, '')}</span>
                         </td>
                         <td>
                             \${isPending ? \`

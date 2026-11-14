@@ -1,125 +1,169 @@
 {
   "entities": {
-    "Player": {
-      "title": "Player",
-      "description": "User profile and statistics",
+    "Admin": {
+      "title": "Admin",
+      "description": "Server-managed administrator allowlist entry",
       "type": "object",
       "properties": {
-        "username": { "type": "string" },
-        "uid": { "type": "string" },
-        "role": { "type": "string" },
+        "uid": { "type": "string", "maxLength": 128 },
+        "grantedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid"]
+    },
+    "Player": {
+      "title": "Player",
+      "description": "Private player profile and server-managed statistics",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string", "minLength": 2, "maxLength": 30, "pattern": "^[a-zA-Z0-9_.\\- ]+$" },
+        "uid": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "enum": ["user", "moderator", "admin", "Gast"] },
         "is_banned": { "type": "boolean" },
-        "ban_reason": { "type": "string" },
-        "password": { "type": "string" },
+        "ban_reason": { "type": "string", "maxLength": 500 },
         "elo": { "type": "number" },
         "wins": { "type": "number" },
         "losses": { "type": "number" },
         "xp": { "type": "number" },
         "level": { "type": "number" },
-        "ip_address": { "type": "string" },
-        "created_at": { "type": "string" }
+        "coins": { "type": "number" },
+        "avatar": { "type": "string", "maxLength": 200 },
+        "selectedTheme": { "type": "string", "maxLength": 64 },
+        "board_theme": { "type": "string", "maxLength": 64 },
+        "piece_theme": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["username"]
+      "required": ["username", "uid", "role", "elo", "wins", "losses", "level", "xp"]
+    },
+    "PrivateUserData": {
+      "title": "PrivateUserData",
+      "description": "Strictly owner-only private preferences and saved games",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "preferences": { "type": "object" },
+        "savedGames": { "type": "array" },
+        "notes": { "type": "string", "maxLength": 2000 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "updatedAt"]
     },
     "Message": {
       "title": "Message",
-      "description": "Chat message",
+      "description": "Server-moderated chat message log",
       "type": "object",
       "properties": {
-        "username": { "type": "string" },
-        "content": { "type": "string" },
+        "username": { "type": "string", "maxLength": 40 },
+        "content": { "type": "string", "maxLength": 500 },
+        "lobby": { "type": "string", "maxLength": 64 },
         "timestamp": { "type": "string" }
       },
       "required": ["username", "content"]
     },
     "GameHistory": {
       "title": "GameHistory",
-      "description": "Historical logs of finished games with visual snapshots",
+      "description": "Server-recorded historical logs of finished games",
       "type": "object",
       "properties": {
-        "room_id": { "type": "string" },
-        "white_player": { "type": "string" },
-        "black_player": { "type": "string" },
-        "winner": { "type": "string" },
-        "reason": { "type": "string" },
-        "snapshot": { "type": "string" },
+        "room_id": { "type": "string", "maxLength": 64 },
+        "white_player": { "type": "string", "maxLength": 40 },
+        "black_player": { "type": "string", "maxLength": 40 },
+        "winner": { "type": "string", "maxLength": 40 },
+        "reason": { "type": "string", "maxLength": 100 },
+        "snapshot": { "type": "string", "maxLength": 10000 },
         "timestamp": { "type": "string" }
       },
       "required": ["white_player", "black_player"]
     },
     "Ban": {
       "title": "Ban",
-      "description": "Banned IP addresses and player accounts",
+      "description": "Admin-managed IP and account bans",
       "type": "object",
       "properties": {
-        "target": { "type": "string" },
-        "type": { "type": "string" },
-        "reason": { "type": "string" },
+        "target": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["ip", "user", "account"] },
+        "reason": { "type": "string", "maxLength": 500 },
         "createdAt": { "type": "string" }
       },
       "required": ["target", "type"]
     },
     "LeaderboardEntry": {
       "title": "LeaderboardEntry",
-      "description": "Rankings and highscore data for global and seasonal leaderboards",
+      "description": "Public sanitized ranking projection without PII",
       "type": "object",
       "properties": {
-        "username": { "type": "string" },
-        "name": { "type": "string" },
+        "username": { "type": "string", "maxLength": 30 },
+        "name": { "type": "string", "maxLength": 30 },
         "elo": { "type": "number" },
         "wins": { "type": "number" },
         "losses": { "type": "number" },
         "level": { "type": "number" },
         "xp": { "type": "number" },
-        "role": { "type": "string" },
+        "role": { "type": "string", "maxLength": 20 },
         "updatedAt": { "type": "string" }
       },
       "required": ["username"]
     },
     "Ticket": {
       "title": "Ticket",
-      "description": "Support tickets and unban appeals",
+      "description": "Support tickets and unban appeals with strict ownerUid ownership",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "user": { "type": "string" },
-        "contact": { "type": "string" },
-        "clientIP": { "type": "string" },
-        "email": { "type": "string" },
-        "text": { "type": "string" },
-        "banReason": { "type": "string" },
-        "status": { "type": "string" },
-        "createdAt": { "type": "string" },
-        "timestamp": { "type": "number" },
-        "reply": { "type": "string" }
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "user": { "type": "string", "maxLength": 40 },
+        "contact": { "type": "string", "maxLength": 100 },
+        "text": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "status": { "type": "string", "enum": ["Offen", "In Bearbeitung", "Entbannt", "Abgelehnt", "Geschlossen"] },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "text"]
+      "required": ["ownerUid", "text", "status", "createdAt"]
+    },
+    "SystemHealth": {
+      "title": "SystemHealth",
+      "description": "Server-managed system status document",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "maxLength": 32 },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["status"]
     }
   },
   "firestore": {
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Non-client-writable admin allowlist"
+    },
     "/leaderboard/{entryDocId}": {
       "schema": { "$ref": "#/entities/LeaderboardEntry" },
-      "description": "Leaderboard highscore entries collection"
+      "description": "Public sanitized leaderboard projection (no PII)"
     },
     "/players/{playerId}": {
       "schema": { "$ref": "#/entities/Player" },
-      "description": "Player collection"
+      "description": "Private player profiles (owner/admin read only)"
+    },
+    "/users_private/{userId}": {
+      "schema": { "$ref": "#/entities/PrivateUserData" },
+      "description": "Private owner-only user preferences and notes"
     },
     "/messages/{messageId}": {
       "schema": { "$ref": "#/entities/Message" },
-      "description": "Chat messages collection"
+      "description": "Admin/server-only chat message logs"
     },
     "/games/{gameId}": {
       "schema": { "$ref": "#/entities/GameHistory" },
-      "description": "Game history collection with visual snapshots"
+      "description": "Admin/server-only game history snapshots"
     },
     "/bans/{banId}": {
       "schema": { "$ref": "#/entities/Ban" },
-      "description": "Banned IPs and accounts"
+      "description": "Admin/server-only banned IPs and accounts"
     },
     "/tickets/{ticketId}": {
       "schema": { "$ref": "#/entities/Ticket" },
-      "description": "Support tickets and unban appeals"
+      "description": "Support tickets owned by single canonical ownerUid"
+    },
+    "/system/{docId}": {
+      "schema": { "$ref": "#/entities/SystemHealth" },
+      "description": "System health document (connection_health readable by signed-in users)"
     }
   }
 }

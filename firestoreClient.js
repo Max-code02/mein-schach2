@@ -66,30 +66,8 @@ function initializeFirebaseAdmin() {
     }
 
     // --------------------------------------------------------
-    // Variante 2: Lokale Service-Account-Datei (serviceAccountKey.json)
-    // --------------------------------------------------------
-    const serviceAccountPath = path.join(__dirname, 'serviceAccountKey.json');
-    if (fs.existsSync(serviceAccountPath)) {
-        try {
-            const saContent = fs.readFileSync(serviceAccountPath, 'utf8');
-            const serviceAccount = JSON.parse(saContent);
-            if (serviceAccount.private_key) {
-                serviceAccount.private_key = formatPrivateKey(serviceAccount.private_key);
-            }
-            admin.initializeApp({
-                credential: admin.credential.cert(serviceAccount),
-                projectId: serviceAccount.project_id || defaultProjectId
-            });
-            initialized = true;
-            console.log('🔥 Firebase Admin SDK: Lokale Datei serviceAccountKey.json erfolgreich geladen.');
-            return;
-        } catch (fileErr) {
-            console.warn('⚠️ Fehler beim Laden von serviceAccountKey.json:', fileErr.message);
-        }
-    }
-
-    // --------------------------------------------------------
-    // Variante 3: Application Default Credentials (GCP / Cloud Run)
+    // Variante 2: Application Default Credentials (GCP / Cloud Run)
+    // (Keine unsicheren Service-Account-JSON-Dateien im App-Verzeichnis laden)
     // --------------------------------------------------------
     try {
         admin.initializeApp({

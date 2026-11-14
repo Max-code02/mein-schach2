@@ -241,15 +241,13 @@ async function initFirebase() {
             }
         }
 
-        // Live Realtime Firestore Listeners for both collections
-        onSnapshot(collection(fbDb, 'players'), (usersSnap) => {
-            renderLeaderboardSnapshot(usersSnap);
-        });
-
+        // Live Realtime Firestore Listener ONLY for sanitized public leaderboard projection
         onSnapshot(collection(fbDb, 'leaderboard'), (lbSnap) => {
             if (lbSnap && !lbSnap.empty) {
                 renderLeaderboardSnapshot(lbSnap);
             }
+        }, (err) => {
+            console.info("Firestore leaderboard listener notice:", err.message);
         });
 
         // --- FIRESTORE VERBINDUNGS-MONITORING (TOAST-BANNER BEI UNTERBRECHUNG) ---
@@ -274,40 +272,6 @@ async function initFirebase() {
             }
         }
 
-        try {
-            const connHealthRef = doc(fbDb, 'system', 'connection_health');
-            onSnapshot(connHealthRef, { includeMetadataChanges: true }, (snapshot) => {
-                const isFromCache = snapshot.metadata ? snapshot.metadata.fromCache : false;
-                if (!firestoreConnInitialized) {
-                    firestoreConnInitialized = true;
-                    if (isFromCache) {
-                        wasFirestoreOffline = true;
-                        showFirestoreStatusToast(false);
-                    }
-                    return;
-                }
-
-                if (isFromCache && !wasFirestoreOffline) {
-                    wasFirestoreOffline = true;
-                    showFirestoreStatusToast(false);
-                } else if (!isFromCache && wasFirestoreOffline) {
-                    wasFirestoreOffline = false;
-                    showFirestoreStatusToast(true);
-                }
-            }, (err) => {
-                if (err.code === 'permission-denied') {
-                    console.info("Firestore connection check info:", err.message);
-                    return;
-                }
-                if (!wasFirestoreOffline) {
-                    wasFirestoreOffline = true;
-                    showFirestoreStatusToast(false);
-                }
-            });
-        } catch (connErr) {
-            console.warn("Firestore connection check setup error:", connErr);
-        }
-
         window.addEventListener('offline', () => {
             if (!wasFirestoreOffline) {
                 wasFirestoreOffline = true;
@@ -324,10 +288,21 @@ async function initFirebase() {
 
             let userUnsubscribe = null;
             let adminUnsubscribe = null;
+            let connHealthUnsubscribe = null;
+
+            function sanitizeStarterUsername(raw, uid) {
+                const reserved = new Set(['admin','administrator','superadmin','moderator','mod','helper','staff','team','system','root','server','support','official','owner','eigentümer','max','superuser','ghostplayer','bot','gast','gastspieler','anonym','anonymous','null','undefined','schachlive','prochess']);
+                let cleaned = String(raw || '').replace(/[^a-zA-Z0-9_.\- ]/g, '').trim().slice(0, 30);
+                if (cleaned.length < 2 || reserved.has(cleaned.toLowerCase())) {
+                    cleaned = "Spieler_" + String(uid || '00000').substring(0, 5);
+                }
+                return cleaned;
+            }
 
             onAuthStateChanged(fbAuth, async (user) => {
                 if (userUnsubscribe) userUnsubscribe();
                 if (adminUnsubscribe) adminUnsubscribe();
+                if (connHealthUnsubscribe) { connHealthUnsubscribe(); connHealthUnsubscribe = null; }
                 
                 if (user) {
                     const savedCustom = localStorage.getItem('customUsername');
@@ -343,6 +318,35 @@ async function initFirebase() {
                     } catch (tErr) {
                         console.warn("Could not get ID token:", tErr);
                     }
+
+                    // Authenticated Firestore connection-health listener
+                    try {
+                        const connHealthRef = doc(fbDb, 'system', 'connection_health');
+                        connHealthUnsubscribe = onSnapshot(connHealthRef, { includeMetadataChanges: true }, (snapshot) => {
+                            const isFromCache = snapshot.metadata ? snapshot.metadata.fromCache : false;
+                            if (!firestoreConnInitialized) {
+                                firestoreConnInitialized = true;
+                                if (isFromCache) {
+                                    wasFirestoreOffline = true;
+                                    showFirestoreStatusToast(false);
+                                }
+                                return;
+                            }
+                            if (isFromCache && !wasFirestoreOffline) {
+                                wasFirestoreOffline = true;
+                                showFirestoreStatusToast(false);
+                            } else if (!isFromCache && wasFirestoreOffline) {
+                                wasFirestoreOffline = false;
+                                showFirestoreStatusToast(true);
+                            }
+                        }, (err) => {
+                            if (err.code === 'permission-denied') return;
+                            if (!wasFirestoreOffline) {
+                                wasFirestoreOffline = true;
+                                showFirestoreStatusToast(false);
+                            }
+                        });
+                    } catch (connErr) {}
 
                     // Listen for real-time changes (e.g. role updates, elo changes)
                     userUnsubscribe = onSnapshot(userDoc, (snapshot) => {
@@ -420,8 +424,9 @@ async function initFirebase() {
                             }
                         } else {
                             // Erstelle initiales Profil: Neue Konten haben IMMER die Rolle 'user'
+                            const safeStarterName = sanitizeStarterUsername(pName, user.uid);
                             setDoc(userDoc, {
-                                username: pName,
+                                username: safeStarterName,
                                 uid: user.uid,
                                 role: 'user',
                                 elo: 1200,
@@ -429,21 +434,10 @@ async function initFirebase() {
                                 losses: 0,
                                 level: 1,
                                 xp: 0
-                            }, { merge: true });
-
-                            setDoc(doc(fbDb, 'leaderboard', pName), {
-                                username: pName,
-                                name: pName,
-                                uid: user.uid,
-                                role: 'user',
-                                elo: 1200,
-                                wins: 0,
-                                losses: 0,
-                                level: 1,
-                                xp: 0,
-                                updatedAt: new Date().toISOString()
-                            }, { merge: true }).catch(() => {});
+                            }).catch(() => {});
                         }
+                    }, (err) => {
+                        console.info("Firestore player profile listener notice:", err.message);
                     });
                     
                     localStorage.setItem('playerName', pName);
@@ -590,8 +584,9 @@ window.submitAuthEmailLogin = async function() {
         let pName = user.displayName || (docSnap.exists() && (docSnap.data().username || docSnap.data().name)) || emailPrefix || "Spieler_" + user.uid.substring(0, 5);
 
         if (!docSnap.exists()) {
+            const safeStarterName = String(pName || '').replace(/[^a-zA-Z0-9_.\- ]/g, '').trim().slice(0, 30) || ("Spieler_" + user.uid.substring(0, 5));
             await setDoc(userDoc, {
-                username: pName,
+                username: safeStarterName,
                 uid: user.uid,
                 role: 'user',
                 elo: 1200,
@@ -599,20 +594,7 @@ window.submitAuthEmailLogin = async function() {
                 losses: 0,
                 level: 1,
                 xp: 0
-            }, { merge: true });
-
-            await setDoc(doc(fbDb, 'leaderboard', pName), {
-                username: pName,
-                name: pName,
-                uid: user.uid,
-                role: 'user',
-                elo: 1200,
-                wins: 0,
-                losses: 0,
-                level: 1,
-                xp: 0,
-                updatedAt: new Date().toISOString()
-            }, { merge: true }).catch(() => {});
+            }).catch(() => {});
         }
 
         localStorage.setItem('playerName', pName);
@@ -650,7 +632,7 @@ window.submitAuthEmailLogin = async function() {
             } else if (error.code === 'auth/invalid-email') {
                 msg = "Ungültiges E-Mail Format.";
             }
-            status.innerHTML = "<span style='color: #e74c3c;'>❌ " + msg + "</span>";
+            status.innerHTML = "<span style='color: #e74c3c;'>❌ " + (typeof escapeHtml === 'function' ? escapeHtml(msg) : String(msg).replace(/[<>&"']/g, '')) + "</span>";
         }
     }
 };
@@ -689,8 +671,9 @@ window.submitAuthEmailRegister = async function() {
         const pName = user.displayName || (user.email ? user.email.split('@')[0] : "Spieler_" + user.uid.substring(0, 5));
 
         const userDoc = doc(fbDb, 'players', user.uid);
+        const safeStarterName = String(pName || '').replace(/[^a-zA-Z0-9_.\- ]/g, '').trim().slice(0, 30) || ("Spieler_" + user.uid.substring(0, 5));
         await setDoc(userDoc, {
-            username: pName,
+            username: safeStarterName,
             uid: user.uid,
             role: 'user',
             elo: 1200,
@@ -698,7 +681,7 @@ window.submitAuthEmailRegister = async function() {
             losses: 0,
             level: 1,
             xp: 0
-        }, { merge: true });
+        }).catch(() => {});
 
         localStorage.setItem('playerName', pName);
         localStorage.setItem('customUsername', pName);
@@ -737,7 +720,7 @@ window.submitAuthEmailRegister = async function() {
             } else if (error.code === 'auth/weak-password') {
                 msg = "Das Passwort ist zu schwach (min. 6 Zeichen).";
             }
-            status.innerHTML = "<span style='color: #e74c3c;'>❌ " + msg + "</span>";
+            status.innerHTML = "<span style='color: #e74c3c;'>❌ " + (typeof escapeHtml === 'function' ? escapeHtml(msg) : String(msg).replace(/[<>&"']/g, '')) + "</span>";
         }
     }
 };
@@ -764,8 +747,9 @@ window.submitAuthGoogle = async function() {
         let pName = user.displayName || (docSnap.exists() && (docSnap.data().username || docSnap.data().name)) || emailPrefix || "Spieler_" + user.uid.substring(0, 5);
 
         if (!docSnap.exists()) {
+            const safeStarterName = String(pName || '').replace(/[^a-zA-Z0-9_.\- ]/g, '').trim().slice(0, 30) || ("Spieler_" + user.uid.substring(0, 5));
             await setDoc(userDoc, {
-                username: pName,
+                username: safeStarterName,
                 uid: user.uid,
                 role: 'user',
                 elo: 1200,
@@ -773,7 +757,7 @@ window.submitAuthGoogle = async function() {
                 losses: 0,
                 level: 1,
                 xp: 0
-            }, { merge: true });
+            }).catch(() => {});
         }
         
         localStorage.setItem('playerName', pName);
@@ -806,13 +790,13 @@ window.submitAuthGoogle = async function() {
         console.error("Auth error:", error);
         if (status) {
             if (error.code === 'auth/unauthorized-domain' || (error.message && error.message.includes('auth/unauthorized-domain'))) {
-                const currentHost = window.location.hostname;
+                const currentHost = typeof escapeHtml === 'function' ? escapeHtml(window.location.hostname) : String(window.location.hostname).replace(/[<>&"']/g, '');
                 status.innerHTML = `
                     <div style="background: rgba(231, 76, 60, 0.15); border: 1px solid #e74c3c; padding: 12px; border-radius: 8px; margin-top: 10px; color: #ff6b6b; font-size: 0.85em; text-align: left; line-height: 1.4;">
                         <strong>⚠️ Domain nicht autorisiert in Firebase!</strong><br>
                         Die Adresse <code>${currentHost}</code> muss in der Firebase Console zugelassen werden.<br><br>
                         <strong>Lösung in der Console:</strong><br>
-                        1. Öffne <a href="https://console.firebase.google.com/" target="_blank" style="color: #3498db; text-decoration: underline;">Firebase Console</a> &gt; Authentication &gt; Settings &gt; Authorized Domains.<br>
+                        1. Öffne <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer" style="color: #3498db; text-decoration: underline;">Firebase Console</a> &gt; Authentication &gt; Settings &gt; Authorized Domains.<br>
                         2. Füge <code>${currentHost}</code> als Domain hinzu.<br><br>
                         <strong>Alternative:</strong> Spiele direkt ohne Google-Anmeldung als Gast:
                         <button onclick="playAsGuest()" style="margin-top: 8px; width: 100%; background: #2ecc71; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
@@ -821,7 +805,8 @@ window.submitAuthGoogle = async function() {
                     </div>
                 `;
             } else {
-                status.innerHTML = "<span style='color: #e74c3c;'>❌ " + (error.message || error) + "</span>";
+                const safeErr = typeof escapeHtml === 'function' ? escapeHtml(error.message || error) : String(error.message || error).replace(/[<>&"']/g, '');
+                status.innerHTML = "<span style='color: #e74c3c;'>❌ " + safeErr + "</span>";
             }
         }
     }
@@ -862,7 +847,11 @@ window.submitNameChange = async function() {
 
     try {
         const user = fbAuth.currentUser;
-        const userDoc = doc(fbDb, 'players', user.uid);
+        const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            status.innerHTML = "<span style='color: #e74c3c;'>❌ Keine aktive Server-Verbindung. Bitte kurz warten.</span>";
+            return;
+        }
 
         // 1. Firebase Auth Profile Update
         try {
@@ -870,28 +859,19 @@ window.submitNameChange = async function() {
         } catch(authErr) {
             console.warn("updateProfile displayName warning:", authErr);
         }
-        
-        // 2. Firestore Document Update
-        await setDoc(userDoc, {
-            username: normalized,
-            uid: user.uid
-        }, { merge: true });
-        
-        // 3. Local Storage Update
+
+        // 2. Local Storage Update
         localStorage.setItem('playerName', normalized);
         localStorage.setItem('customUsername', normalized);
 
-        // 4. WebSocket Server Update (Live-Synchronisation & DB-Persistierung)
-        const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({
-                type: 'change_username',
-                newUsername: normalized,
-                uid: user.uid,
-                oldUsername: ws.playerName
-            }));
-            ws.playerName = normalized;
-        }
+        // 3. WebSocket Server Update (Validierung, Eindeutigkeit & Firestore-Persistierung über Server)
+        ws.send(JSON.stringify({
+            type: 'change_username',
+            newUsername: normalized,
+            uid: user.uid,
+            oldUsername: ws.playerName
+        }));
+        ws.playerName = normalized;
 
         // 5. Update Profile UI
         const profileName = document.getElementById('profile-name');
@@ -907,7 +887,8 @@ window.submitNameChange = async function() {
         }, 1000);
     } catch (error) {
         console.error("Name change error:", error);
-        status.innerHTML = "<span style='color: #e74c3c;'>❌ " + error.message + "</span>";
+        const safeErr = typeof escapeHtml === 'function' ? escapeHtml(error.message || error) : String(error.message || error).replace(/[<>&"']/g, '');
+        status.innerHTML = "<span style='color: #e74c3c;'>❌ " + safeErr + "</span>";
     }
 };
 
@@ -980,7 +961,8 @@ function updateProfileDisplay(name, elo, wins, losses = 0, level = 1, xp = 0, ac
         if (logoutBtn) logoutBtn.style.display = 'block';
         if (navAuthBtn) navAuthBtn.style.display = 'none';
         if (navUserPill) navUserPill.style.display = 'flex';
-        if (navUserName) navUserName.innerHTML = `<span style="color: #f1c40f; font-weight: bold; text-shadow: 0 0 8px rgba(241,196,15,0.4);">👑 ${name || 'Admin'} (Admin)</span>`;
+        const safeNavAdmin = typeof escapeHtml === 'function' ? escapeHtml(name || 'Admin') : String(name || 'Admin').replace(/[<>&"']/g, '');
+        if (navUserName) navUserName.innerHTML = `<span style="color: #f1c40f; font-weight: bold; text-shadow: 0 0 8px rgba(241,196,15,0.4);">👑 ${safeNavAdmin} (Admin)</span>`;
         if (adminPanel) adminPanel.style.display = 'block';
     } else if (name && name !== 'Gastspieler') {
         if (authBtn) authBtn.style.display = 'none';
@@ -1018,12 +1000,14 @@ function showAchievementNotification(title, description) {
     
     const notif = document.createElement('div');
     notif.id = 'achievement-notification';
+    const safeTitle = typeof escapeHtml === 'function' ? escapeHtml(title) : String(title || '').replace(/[<>&"']/g, '');
+    const safeDesc = typeof escapeHtml === 'function' ? escapeHtml(description) : String(description || '').replace(/[<>&"']/g, '');
     notif.innerHTML = `
         <div style="font-size: 2em; animation: pulse 1s infinite;">🏆</div>
         <div>
             <div style="font-weight: bold; color: #f1c40f; font-size: 1.05em; margin-bottom: 2px;">Erfolg freigeschaltet!</div>
-            <div style="font-size: 0.95em; font-weight: 600; color: white;">${title}</div>
-            <div style="font-size: 0.8em; color: #aaa; margin-top: 1px;">${description}</div>
+            <div style="font-size: 0.95em; font-weight: 600; color: white;">${safeTitle}</div>
+            <div style="font-size: 0.8em; color: #aaa; margin-top: 1px;">${safeDesc}</div>
         </div>
     `;
     
@@ -1191,7 +1175,8 @@ window.addEventListener('load', () => {
                         }, 1000);
                     } else if (data.type === 'login_error') {
                         const status = document.getElementById('auth-status');
-                        if (status) status.innerHTML = "<span style='color: #e74c3c;'>❌ " + (data.text || "Fehler") + "</span>";
+                        const safeErr = typeof escapeHtml === 'function' ? escapeHtml(data.text || "Fehler") : String(data.text || "Fehler").replace(/[<>&"']/g, '');
+                        if (status) status.innerHTML = "<span style='color: #e74c3c;'>❌ " + safeErr + "</span>";
                         localStorage.removeItem('tempPasswordHash');
                         localStorage.removeItem('playerPasswordHash');
                     } else if (data.type === 'achievement_unlocked') {
@@ -1391,12 +1376,13 @@ function processVoiceMoveCommand(rawText) {
         const tc = toSq.charCodeAt(0) - 97;
         
         if (typeof window.canMoveLogic === 'function' && typeof window.isSafeMove === 'function' && typeof window.doMove === 'function') {
+            const safeRaw = typeof escapeHtml === 'function' ? escapeHtml(rawText) : String(rawText).replace(/[<>&"']/g, '');
             if (window.canMoveLogic(fr, fc, tr, tc) && window.isSafeMove(fr, fc, tr, tc)) {
                 window.doMove(fr, fc, tr, tc);
-                if (statusEl) statusEl.innerHTML = `<span style='color: #2ecc71;'>✅ Erkannt: "${rawText}" &rarr; <b>${fromSq} &rarr; ${toSq}</b> ausgeführt!</span>`;
+                if (statusEl) statusEl.innerHTML = `<span style='color: #2ecc71;'>✅ Erkannt: "${safeRaw}" &rarr; <b>${fromSq} &rarr; ${toSq}</b> ausgeführt!</span>`;
                 return;
             } else {
-                if (statusEl) statusEl.innerHTML = `<span style='color: #e74c3c;'>⚠️ Erkannt: "${rawText}" &rarr; Zug <b>${fromSq} &rarr; ${toSq}</b> ist unzulässig!</span>`;
+                if (statusEl) statusEl.innerHTML = `<span style='color: #e74c3c;'>⚠️ Erkannt: "${safeRaw}" &rarr; Zug <b>${fromSq} &rarr; ${toSq}</b> ist unzulässig!</span>`;
                 return;
             }
         }
@@ -1428,8 +1414,9 @@ function processVoiceMoveCommand(rawText) {
 
             if (candidates.length === 1) {
                 const move = candidates[0];
+                const safeRaw = typeof escapeHtml === 'function' ? escapeHtml(rawText) : String(rawText).replace(/[<>&"']/g, '');
                 window.doMove(move.fr, move.fc, tr, tc);
-                if (statusEl) statusEl.innerHTML = `<span style='color: #2ecc71;'>✅ Erkannt: "${rawText}" &rarr; <b>${move.fromSq} &rarr; ${targetSq}</b> ausgeführt!</span>`;
+                if (statusEl) statusEl.innerHTML = `<span style='color: #2ecc71;'>✅ Erkannt: "${safeRaw}" &rarr; <b>${move.fromSq} &rarr; ${targetSq}</b> ausgeführt!</span>`;
                 return;
             } else if (candidates.length > 1) {
                 if (statusEl) statusEl.innerHTML = `<span style='color: #f1c40f;'>⚠️ Mehrere Figuren können nach <b>${targetSq}</b> ziehen. Nenne Startfeld (z.B. '${candidates[0].fromSq} nach ${targetSq}').</span>`;
@@ -1439,7 +1426,8 @@ function processVoiceMoveCommand(rawText) {
     }
 
     if (statusEl) {
-        statusEl.innerHTML = `<span style='color: #e74c3c;'>❓ Nicht erkannt: "${rawText}". Sage z.B. <i>'e2 nach e4'</i> oder <i>'Springer c3'</i>.</span>`;
+        const safeRaw = typeof escapeHtml === 'function' ? escapeHtml(rawText) : String(rawText).replace(/[<>&"']/g, '');
+        statusEl.innerHTML = `<span style='color: #e74c3c;'>❓ Nicht erkannt: "${safeRaw}". Sage z.B. <i>'e2 nach e4'</i> oder <i>'Springer c3'</i>.</span>`;
     }
 }
 
@@ -1517,16 +1505,16 @@ window.viewPlayerProfile = async function(name) {
                 if (roleEl) roleEl.textContent = p.role === 'admin' ? '👑 Admin' : (p.role === 'moderator' ? '🛡️ Moderator' : 'Gast');
 
                 if (historyEl) {
-                    const winrate = p.winrate || '0%';
+                    const winrate = typeof escapeHtml === 'function' ? escapeHtml(p.winrate || '0%') : String(p.winrate || '0%').replace(/[<>&"']/g, '');
                     historyEl.innerHTML = `
                         <div style="background: rgba(255,255,255,0.04); padding: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 6px;">
                             <div style="display: flex; justify-content: space-between; font-size: 0.95em;">
-                                <span>🏆 Siege: <strong style="color: #2ecc71;">${p.wins || 0}</strong></span>
-                                <span>💀 Niederlagen: <strong style="color: #e74c3c;">${p.losses || 0}</strong></span>
+                                <span>🏆 Siege: <strong style="color: #2ecc71;">${Number(p.wins) || 0}</strong></span>
+                                <span>💀 Niederlagen: <strong style="color: #e74c3c;">${Number(p.losses) || 0}</strong></span>
                                 <span>📊 Siegquote: <strong style="color: #f1c40f;">${winrate}</strong></span>
                             </div>
                             <div style="display: flex; justify-content: space-between; font-size: 0.85em; color: #aaa; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px;">
-                                <span>💰 Vorhersage-Coins: <strong style="color: #f39c12;">${p.coins || 1000}</strong></span>
+                                <span>💰 Vorhersage-Coins: <strong style="color: #f39c12;">${Number(p.coins) || 1000}</strong></span>
                                 <span>${p.is_online ? '<span style="color: #2ecc71;">🟢 Online</span>' : '<span style="color: #888;">⚪ Offline</span>'}</span>
                             </div>
                         </div>

@@ -104,12 +104,35 @@ for (let i = 0; i < 7; i++) {
 }
 assertTest("Mute User After Exceeding Rate Limit", isBlocked === true);
 
+// Test 11: Legacy password no longer bypasses antispam word filter
+const bypassAttemptWs = createMockWS("10.0.0.100", "NormalUser");
+const blockedWithLegacyPass = isSpamming(bypassAttemptWs, "Admina111 hurensohn");
+assertTest("Block Banned Words Even With Legacy Password String", blockedWithLegacyPass === true);
+
+console.log("\n--- 4. ADMIN SPOOF & PRIVILEGE ESCALATION TESTS ---");
+
+// Test 12: Non-admin spoofing playerName = 'max' cannot bypass antihack checks
+const spoofMaxWs = createMockWS("10.0.0.101", "max", false);
+const resSpoofMax = validateSecurity({ type: 'chat', text: "<script>alert(1)</script>" }, spoofMaxWs, new Set(), null);
+assertTest("Do Not Exempt Unauthenticated playerName='max' From AntiHack", resSpoofMax === false);
+
+// Test 13: Disallow reserved/XSS usernames
+assertTest("Disallow 'Max' reserved name", isNameAllowed("Max") === false);
+assertTest("Disallow XSS username '<img src=x onerror=alert(1)>'", isNameAllowed("<img src=x onerror=alert(1)>") === false);
+
+// Test 14: Prefixing a banned word/phishing URL with '!' or '/' must not bypass antispam
+const prefixBypassWs = createMockWS("10.0.0.102", "PrefixBypass");
+assertTest("Block Banned Link With Command Prefix", isSpamming(prefixBypassWs, "!https://evil.example/phish") === true);
+
 console.log("\n=================================================");
 console.log(`📊 AUDIT SUMMARY: ${passed} Passed | ${failed} Failed`);
 console.log("=================================================");
 
 if (failed === 0) {
     console.log("🎉 ALL DEFENSIVE SECURITY CONTROLS ARE WORKING PERFECTLY!");
+    process.exit(0);
 } else {
     console.warn("⚠️ SOME SECURITY CONTROLS NEED ATTENTION.");
+    process.exit(1);
 }
+

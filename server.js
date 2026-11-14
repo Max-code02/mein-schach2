@@ -105,13 +105,204 @@ function isLoopbackOrLocalIP(ip) {
     }
     return false;
 }
+const FB_CONFIG_PATH = path.join(__dirname, 'firebase-applet-config.json');
+let FIREBASE_PROJECT_ID = 'schachlive';
+try {
+    if (fs.existsSync(FB_CONFIG_PATH)) {
+        const fbCfg = JSON.parse(fs.readFileSync(FB_CONFIG_PATH, 'utf8'));
+        if (fbCfg && fbCfg.projectId) FIREBASE_PROJECT_ID = String(fbCfg.projectId).trim();
+    }
+} catch (e) {}
+
+let cachedGoogleCerts = { certs: null, expiresAt: 0 };
+
+async function getGooglePublicCerts(forceRefresh = false) {
+    const now = Date.now();
+    if (!forceRefresh && cachedGoogleCerts.certs && now < cachedGoogleCerts.expiresAt) {
+        return cachedGoogleCerts.certs;
+    }
+    const resp = await axios.get(
+        'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com',
+        { timeout: 6000 }
+    );
+    const certs = resp.data || {};
+    let maxAge = 3600;
+    const cc = String(resp.headers['cache-control'] || '');
+    const m = cc.match(/max-age=(\d+)/i);
+    if (m) maxAge = Math.max(60, parseInt(m[1], 10));
+    cachedGoogleCerts = { certs, expiresAt: now + maxAge * 1000 };
+    return certs;
+}
+
+async function verifyFirebaseTokenSecurely(idToken) {
+    if (!idToken || typeof idToken !== 'string' || idToken.length > 8192) return null;
+
+    // 1. Prefer official Firebase Admin SDK when credentials exist
+    if (admin && admin.auth) {
+        try {
+            const decoded = await admin.auth().verifyIdToken(idToken, true);
+            if (decoded && decoded.uid) return decoded;
+        } catch (adminErr) {
+            // Fall through to cryptographic public-cert verification ONLY if Admin SDK lacks local SA credentials
+            const msg = String(adminErr && adminErr.message || '');
+            const isCredentialGap = /credential|default credentials|metadata|ENOTFOUND|Could not load/i.test(msg);
+            if (!isCredentialGap && /expired|revoked|signature|audience|issuer|malformed/i.test(msg)) {
+                return null;
+            }
+        }
+    }
+
+    // 2. Cryptographic RS256 verification against Google's official x509 certificates
+    const parts = idToken.split('.');
+    if (parts.length !== 3) return null;
+    try {
+        const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+        if (!header || header.alg !== 'RS256' || typeof header.kid !== 'string' || !header.kid) {
+            return null;
+        }
+
+        let certs = await getGooglePublicCerts(false);
+        let certPem = certs[header.kid];
+        if (!certPem) {
+            certs = await getGooglePublicCerts(true);
+            certPem = certs[header.kid];
+        }
+        if (!certPem) return null;
+
+        const verifier = crypto.createVerify('RSA-SHA256');
+        verifier.update(`${parts[0]}.${parts[1]}`);
+        verifier.end();
+        const sigBuf = Buffer.from(parts[2], 'base64url');
+        if (!verifier.verify(certPem, sigBuf)) {
+            return null;
+        }
+
+        const nowSec = Math.floor(Date.now() / 1000);
+        if (payload.aud !== FIREBASE_PROJECT_ID) return null;
+        if (payload.iss !== `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`) return null;
+        if (typeof payload.sub !== 'string' || payload.sub.length === 0 || payload.sub.length > 128) return null;
+        if (typeof payload.exp !== 'number' || payload.exp <= nowSec) return null;
+        if (typeof payload.iat !== 'number' || payload.iat > nowSec + 300) return null;
+        if (typeof payload.auth_time === 'number' && payload.auth_time > nowSec + 300) return null;
+
+        payload.uid = payload.sub;
+        payload.user_id = payload.sub;
+        return payload;
+    } catch (e) {
+        return null;
+    }
+}
+
+const httpRateBuckets = new Map();
+function createHttpRateLimiter({ maxRequests, windowMs, message }) {
+    return (req, res, next) => {
+        const ip = getClientIP(req);
+        const key = `${req.baseUrl || ''}:${req.path}:${ip}`;
+        const now = Date.now();
+        let timestamps = httpRateBuckets.get(key) || [];
+        timestamps = timestamps.filter(t => now - t < windowMs);
+        if (timestamps.length >= maxRequests) {
+            return res.status(429).json({ success: false, error: message || 'Zu viele Anfragen. Bitte warte kurz.', message: message || 'Zu viele Anfragen. Bitte warte kurz.' });
+        }
+        timestamps.push(now);
+        httpRateBuckets.set(key, timestamps);
+        if (httpRateBuckets.size > 5000) {
+            for (const [k, list] of httpRateBuckets.entries()) {
+                if (!list.length || now - list[list.length - 1] > windowMs) httpRateBuckets.delete(k);
+            }
+        }
+        next();
+    };
+}
+
+const authFailTracker = new Map();
+function isAuthLockedOut(ip) {
+    const rec = authFailTracker.get(ip);
+    if (!rec) return false;
+    if (rec.lockedUntil && Date.now() < rec.lockedUntil) return true;
+    if (rec.lockedUntil && Date.now() >= rec.lockedUntil) {
+        authFailTracker.delete(ip);
+    }
+    return false;
+}
+function recordAuthFailure(ip) {
+    const now = Date.now();
+    const rec = authFailTracker.get(ip) || { count: 0, firstAt: now, lockedUntil: 0 };
+    if (now - rec.firstAt > 15 * 60 * 1000) {
+        rec.count = 0;
+        rec.firstAt = now;
+    }
+    rec.count += 1;
+    if (rec.count >= 8) {
+        rec.lockedUntil = now + 15 * 60 * 1000;
+    }
+    authFailTracker.set(ip, rec);
+}
+function clearAuthFailures(ip) {
+    authFailTracker.delete(ip);
+}
+
 const userMessageLog = new Map();
 const SPAM_THRESHOLD = 5;
 const SPAM_INTERVAL = 3000;
 
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.disable('x-powered-by');
+
+app.use((req, res, next) => {
+    const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https';
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), geolocation=(), payment=(), usb=()');
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+    if (isHttps) {
+        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+    res.setHeader(
+        'Content-Security-Policy',
+        [
+            "default-src 'self'",
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://www.gstatic.com https://apis.google.com https://accounts.google.com",
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+            "font-src 'self' data: https://fonts.gstatic.com",
+            "img-src 'self' data: blob: https://upload.wikimedia.org https://www.gstatic.com https://*.googleusercontent.com",
+            "connect-src 'self' ws: wss: https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://mein-schach2.onrender.com https://mein-schach.onrender.com",
+            "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com",
+            "object-src 'none'",
+            "base-uri 'self'",
+            "form-action 'self'"
+        ].join('; ')
+    );
+    next();
+});
+
+const ALLOWED_CORS_ORIGINS = new Set([
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'https://max-code01.github.io',
+    'https://mein-schach2.onrender.com',
+    'https://mein-schach.onrender.com',
+    'https://schachlive.firebaseapp.com',
+    'https://schachlive.web.app'
+]);
+
+app.use(cors({
+    origin: function (origin, callback) {
+        if (!origin) return callback(null, true);
+        if (
+            ALLOWED_CORS_ORIGINS.has(origin) ||
+            /^https:\/\/[a-z0-9-]+\.(run\.app|onrender\.com|aistudio\.google\.com|web\.app|firebaseapp\.com)$/i.test(origin)
+        ) {
+            return callback(null, true);
+        }
+        return callback(null, false);
+    },
+    credentials: true
+}));
+app.use(express.json({ limit: '64kb' }));
+app.use('/api/', createHttpRateLimiter({ maxRequests: 150, windowMs: 60 * 1000, message: 'API Rate-Limit überschritten.' }));
 app.use('/videos', express.static(path.join(__dirname, 'videos')));
 
 // Import module helpers with fallback checks
@@ -192,20 +383,22 @@ try {
 
 // Download contact vCard route
 app.get('/download-contact/:playerName', (req, res) => {
-    const name = req.params.playerName;
+    const rawName = String(req.params.playerName || 'Spieler');
+    const safeDisplay = rawName.replace(/[\r\n;,:<>]/g, '').trim().slice(0, 40) || 'Spieler';
+    const safeFile = safeDisplay.replace(/[^a-zA-Z0-9_-]/g, '_') || 'spieler';
     const gameUrl = "https://max-code01.github.io/mein-schach"; 
     const vCardContent = [
         "BEGIN:VCARD",
         "VERSION:3.0",
-        `FN:Schach-Rivale: ${name}`,
-        `N:;${name};;;`,
+        `FN:Schach-Rivale: ${safeDisplay}`,
+        `N:;${safeDisplay};;;`,
         `URL:${gameUrl}`,
         "NOTE:Gefunden auf Max' Ultra-Schach. Fordere ihn heraus!",
         "END:VCARD"
     ].join("\n");
 
-    res.setHeader('Content-Type', 'text/vcard');
-    res.setHeader('Content-Disposition', `attachment; filename="${name}_rivale.vcf"`);
+    res.setHeader('Content-Type', 'text/vcard; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFile}_rivale.vcf"`);
     res.send(vCardContent);
 });
 
@@ -304,6 +497,7 @@ function renderBannedPage(clientIP, reason) {
 <html lang="de">
 <head>
     <meta charset="UTF-8">
+    <meta name="strix-verification" content="strix-verify-d42958f109fb3690dfb44210a3c9038e">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zugriff verweigert – Schach-Server</title>
     <style>
@@ -545,17 +739,25 @@ function renderBannedPage(clientIP, reason) {
 app.use((req, res, next) => {
     const clientIP = getClientIP(req);
 
-    // Dedicated secure emergency unban endpoint: requires genuine admin password
+    // Dedicated secure emergency unban endpoint: requires genuine admin password via Header or POST body (never URL query)
     if (req.path === '/unban-self' || req.path === '/api/unban-self') {
-        const reqPass = req.query.unban || req.query.pass || req.headers['x-admin-key'] || req.headers['x-admin-pass'];
+        if (isAuthLockedOut(clientIP)) {
+            return res.status(429).json({
+                success: false,
+                message: 'Zu viele Fehlversuche. Bitte warte 15 Minuten.'
+            });
+        }
+        const reqPass = req.headers['x-admin-key'] || req.headers['x-admin-pass'] || req.body?.password;
         const isAdminAuthorized = reqPass && verifyAdminPassword(String(reqPass).trim());
 
         if (!isAdminAuthorized) {
+            recordAuthFailure(clientIP);
             return res.status(403).json({
                 success: false,
-                message: 'Zugriff verweigert: Gültiges Administrator-Passwort erforderlich.'
+                message: 'Zugriff verweigert: Gültiges Administrator-Passwort im Header oder Body erforderlich.'
             });
         }
+        clearAuthFailures(clientIP);
 
         bannedIPs.clear();
         bannedPlayers.clear();
@@ -566,6 +768,7 @@ app.use((req, res, next) => {
             <html lang="de">
             <head>
                 <meta charset="UTF-8">
+                <meta name="strix-verification" content="strix-verify-d42958f109fb3690dfb44210a3c9038e">
                 <title>IP Entsperrt - Schach</title>
                 <style>
                     body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; text-align: center; padding: 60px 20px; }
@@ -629,21 +832,19 @@ async function verifyAdminAuth(req) {
         }
     }
 
-    // 2. Check password via query or custom header or body using constant-time check
-    const passCandidate = req.query.pass || req.headers['x-admin-pass'] || req.headers['x-admin-key'] || req.body?.password;
+    // 2. Check password via custom header or POST body using constant-time check (never URL query strings)
+    const passCandidate = req.headers['x-admin-pass'] || req.headers['x-admin-key'] || req.body?.password;
     if (passCandidate && verifyAdminPassword(String(passCandidate).trim())) {
         return { authorized: true, adminName: 'Max (Master-Admin)', email: 'max.schule13@gmail.com', method: 'password' };
     }
 
-    // 3. Check Authorization Bearer or token
+    // 3. Check Authorization Bearer or x-admin-token header
     const authHeader = req.headers.authorization || '';
     let token = '';
     if (authHeader.startsWith('Bearer ')) {
         token = authHeader.substring(7).trim();
     } else if (req.headers['x-admin-token']) {
-        token = req.headers['x-admin-token'].trim();
-    } else if (req.query.token) {
-        token = String(req.query.token).trim();
+        token = String(req.headers['x-admin-token']).trim();
     }
 
     if (token) {
@@ -655,26 +856,24 @@ async function verifyAdminAuth(req) {
         }
 
         try {
-            if (admin && admin.auth) {
-                const decodedToken = await admin.auth().verifyIdToken(token);
-                if (decodedToken) {
-                    const isOwnerEmail = decodedToken.email && decodedToken.email.toLowerCase() === 'max.schule13@gmail.com' && decodedToken.email_verified === true;
-                    let isDbAdmin = false;
-                    if (firestoreDb && decodedToken.uid) {
-                        try {
-                            const pSnap = await firestoreDb.collection('players').doc(decodedToken.uid).get();
-                            if (pSnap.exists && pSnap.data()?.role === 'admin') isDbAdmin = true;
-                        } catch(e) {}
-                    }
-                    if (isOwnerEmail || isDbAdmin) {
-                        return { 
-                            authorized: true, 
-                            adminName: decodedToken.name || decodedToken.email?.split('@')[0] || 'Admin', 
-                            email: decodedToken.email || '', 
-                            uid: decodedToken.uid, 
-                            method: 'firebase' 
-                        };
-                    }
+            const decodedToken = await verifyFirebaseTokenSecurely(token);
+            if (decodedToken) {
+                const isOwnerEmail = decodedToken.email && decodedToken.email.toLowerCase() === 'max.schule13@gmail.com' && decodedToken.email_verified === true;
+                let isDbAdmin = false;
+                if (firestoreDb && decodedToken.uid) {
+                    try {
+                        const pSnap = await firestoreDb.collection('players').doc(decodedToken.uid).get();
+                        if (pSnap.exists && pSnap.data()?.role === 'admin') isDbAdmin = true;
+                    } catch(e) {}
+                }
+                if (isOwnerEmail || isDbAdmin) {
+                    return { 
+                        authorized: true, 
+                        adminName: decodedToken.name || decodedToken.email?.split('@')[0] || 'Admin', 
+                        email: decodedToken.email || '', 
+                        uid: decodedToken.uid, 
+                        method: 'firebase' 
+                    };
                 }
             }
         } catch (e) {}
@@ -765,7 +964,15 @@ function collectAdminDashboardData() {
 }
 
 // 1. Admin Authentication API
-app.post('/admin/api/login', async (req, res) => {
+app.post('/admin/api/login', createHttpRateLimiter({ maxRequests: 15, windowMs: 5 * 60 * 1000, message: 'Zu viele Admin-Loginversuche.' }), async (req, res) => {
+    const clientIP = getClientIP(req);
+    if (isAuthLockedOut(clientIP)) {
+        return res.status(429).json({
+            success: false,
+            message: 'Zu viele fehlgeschlagene Anmeldeversuche. Bitte warte 15 Minuten.'
+        });
+    }
+
     const { password, firebaseToken } = req.body || {};
     let authorized = false;
     let adminName = 'Admin';
@@ -775,9 +982,9 @@ app.post('/admin/api/login', async (req, res) => {
         authorized = true;
         adminName = 'Max (Master-Admin)';
         email = 'max.schule13@gmail.com';
-    } else if (firebaseToken && admin && admin.auth) {
+    } else if (firebaseToken) {
         try {
-            const decodedToken = await admin.auth().verifyIdToken(firebaseToken);
+            const decodedToken = await verifyFirebaseTokenSecurely(firebaseToken);
             if (decodedToken) {
                 const isOwnerEmail = decodedToken.email && decodedToken.email.toLowerCase() === 'max.schule13@gmail.com' && decodedToken.email_verified === true;
                 let isDbAdmin = false;
@@ -799,12 +1006,14 @@ app.post('/admin/api/login', async (req, res) => {
     }
 
     if (!authorized) {
+        recordAuthFailure(clientIP);
         return res.status(403).json({
             success: false,
             message: 'Zugriff verweigert: Dein Konto besitzt keine Administratorrechte!'
         });
     }
 
+    clearAuthFailures(clientIP);
     const sessionToken = crypto.randomBytes(32).toString('hex');
     activeAdminSessions.set(sessionToken, {
         adminName,
@@ -812,7 +1021,8 @@ app.post('/admin/api/login', async (req, res) => {
         expiresAt: Date.now() + 24 * 60 * 60 * 1000
     });
 
-    res.setHeader('Set-Cookie', `admin_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`);
+    const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https';
+    res.setHeader('Set-Cookie', `admin_session=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400${isHttps ? '; Secure' : ''}`);
     return res.json({ success: true, redirect: '/admin' });
 });
 
@@ -823,7 +1033,8 @@ app.get(['/admin/logout', '/api/admin/logout'], (req, res) => {
     if (matchCookie) {
         activeAdminSessions.delete(matchCookie[1]);
     }
-    res.setHeader('Set-Cookie', 'admin_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+    const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https';
+    res.setHeader('Set-Cookie', `admin_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${isHttps ? '; Secure' : ''}`);
     res.redirect('/');
 });
 
@@ -902,7 +1113,14 @@ app.get(['/stats', '/stats.html', '/rangliste', '/leaderboard'], (req, res) => {
 });
 
 // REST Endpoints for Auth and Analysis
-app.post('/api/login', async (req, res) => {
+const RESERVED_USERNAMES = new Set(['max', 'admin', 'administrator', 'system', 'support', 'moderator', 'mod', 'root', 'owner', 'gast', 'anonym', 'anonymous', 'null', 'undefined']);
+
+app.post('/api/login', createHttpRateLimiter({ maxRequests: 25, windowMs: 5 * 60 * 1000, message: 'Zu viele Loginversuche.' }), async (req, res) => {
+    const clientIP = getClientIP(req);
+    if (isAuthLockedOut(clientIP)) {
+        return res.status(429).json({ success: false, error: "Zu viele Fehlversuche. Bitte warte 15 Minuten." });
+    }
+
     const { username, password } = req.body || {};
     if (!username || typeof username !== 'string' || !password || typeof password !== 'string') {
         return res.status(400).json({ success: false, error: "Name und Passwort erforderlich!" });
@@ -923,10 +1141,10 @@ app.post('/api/login', async (req, res) => {
     }
 
     if (!user) {
-        return res.status(401).json({ success: false, error: "Benutzerkonto existiert nicht. Bitte registriere dich zuerst!" });
+        recordAuthFailure(clientIP);
+        return res.status(401).json({ success: false, error: "Ungültige Anmeldedaten!" });
     }
 
-    const clientIP = getClientIP(req);
     const uLower = cleanUsername.toLowerCase();
 
     // Ban check (unless admin)
@@ -950,8 +1168,10 @@ app.post('/api/login', async (req, res) => {
     }
 
     if (!verifyPassword(password, user.password)) {
+        recordAuthFailure(clientIP);
         return res.status(401).json({ success: false, error: "Falsches Passwort!" });
     }
+    clearAuthFailures(clientIP);
 
     // Auto-migrate legacy plaintext password to secure hash
     if (!user.password.includes(':')) {
@@ -971,7 +1191,7 @@ app.post('/api/login', async (req, res) => {
     });
 });
 
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', createHttpRateLimiter({ maxRequests: 15, windowMs: 10 * 60 * 1000, message: 'Zu viele Registrierungsversuche.' }), async (req, res) => {
     const { username, password } = req.body || {};
     if (!username || typeof username !== 'string' || !password || typeof password !== 'string') {
         return res.status(400).json({ success: false, error: "Name und Passwort erforderlich!" });
@@ -982,11 +1202,17 @@ app.post('/api/register', async (req, res) => {
         return res.status(400).json({ success: false, error: "Der Name muss zwischen 3 und 30 Zeichen lang sein." });
     }
 
-    if (password.length < 4) {
-        return res.status(400).json({ success: false, error: "Das Passwort muss mindestens 4 Zeichen lang sein." });
+    if (RESERVED_USERNAMES.has(cleanUsername.toLowerCase()) || (typeof isNameAllowed === 'function' && !isNameAllowed(cleanUsername))) {
+        return res.status(400).json({ success: false, error: "Dieser Benutzername ist unzulässig oder für die Administration reserviert." });
+    }
+
+    if (password.length < 8 || password.length > 128) {
+        return res.status(400).json({ success: false, error: "Das Passwort muss zwischen 8 und 128 Zeichen lang sein." });
     }
     
-    if (userDB[cleanUsername]) {
+    const lowerClean = cleanUsername.toLowerCase();
+    const existingCaseInsensitive = Object.keys(userDB).some(k => k.toLowerCase() === lowerClean);
+    if (userDB[cleanUsername] || existingCaseInsensitive) {
         return res.status(409).json({ success: false, error: "Name bereits vergeben!" });
     }
 
@@ -1638,11 +1864,13 @@ app.post('/api/admin/backup', (req, res) => {
     }
 });
 
-app.post('/analyse', async (req, res) => {
+app.post('/analyse', createHttpRateLimiter({ maxRequests: 20, windowMs: 60 * 1000, message: 'Zu viele Analyse-Anfragen.' }), async (req, res) => {
     const data = req.body || {};
-    const spieler = data.spieler || "Unbekannt";
-    const fen = data.fen || "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    const zug = data.zug || "";
+    const spieler = String(data.spieler || "Unbekannt").replace(/["`\r\n]/g, '').trim().slice(0, 40) || "Unbekannt";
+    const rawFen = String(data.fen || "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").trim().slice(0, 100);
+    const fen = /^[rnbqkpRNBQKP1-8\/\s\-wba-h0-9]+$/.test(rawFen) ? rawFen : "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    const rawZug = String(data.zug || "").trim().slice(0, 15);
+    const zug = /^[a-zA-Z0-9+#=\-\s]{0,15}$/.test(rawZug) ? rawZug : "";
     const wins = userDB[spieler] ? userDB[spieler].wins || 0 : 0;
     const estimatedElo = 1200 + wins * 25;
 
@@ -1791,7 +2019,7 @@ setInterval(processElixirMatchmaking, 1000);
 
 
 const server = http.createServer(app); 
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ server, maxPayload: 32 * 1024 });
 
 // Persistence files
 const LB_FILE = './leaderboard.json';
@@ -2026,9 +2254,7 @@ let messageHistory = new Map();
 let lastSentMessage = new Map(); 
 let lastWinTime = new Map(); 
 let winStreakCount = new Map();
-let lastKnownIPs = {}; 
-const adminPass = "Admina111";
-const helperPass = "Maxi";
+let lastKnownIPs = {};
 
 const PIECE_URLS = {
     'K': 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg',
@@ -3151,7 +3377,6 @@ app.get(['/api/player/:username', '/api/players/:username', '/api/user/:username
             coins: Number(u.coins) || 1000,
             role: u.role || 'Gast',
             is_banned: !!u.is_banned,
-            ban_reason: u.ban_reason || null,
             is_online: isOnline,
             achievements: u.achievements || [],
             board_theme: u.board_theme || 'classic',
@@ -3273,8 +3498,12 @@ app.get('/api/bans', (req, res) => {
     });
 });
 
-// GET /api/sync-render (Manual sync with Render servers)
+// GET /api/sync-render (Admin-only sync with Render servers)
 app.all(['/api/sync-render', '/api/sync-renders'], async (req, res) => {
+    const auth = await verifyAdminAuth(req);
+    if (!auth.authorized) {
+        return res.status(403).json({ success: false, message: 'Zugriff verweigert: Administratorrechte erforderlich.' });
+    }
     await syncWithRenderServers();
     res.json({
         success: true,
@@ -3283,8 +3512,12 @@ app.all(['/api/sync-render', '/api/sync-renders'], async (req, res) => {
     });
 });
 
-// GET /api/sync-all (Sync Firestore + Render)
+// GET /api/sync-all (Admin-only Sync Firestore + Render)
 app.all('/api/sync-all', async (req, res) => {
+    const auth = await verifyAdminAuth(req);
+    if (!auth.authorized) {
+        return res.status(403).json({ success: false, message: 'Zugriff verweigert: Administratorrechte erforderlich.' });
+    }
     try {
         await loadFirestoreProfiles();
         await loadFirestoreBans();
@@ -3304,8 +3537,12 @@ app.all('/api/sync-all', async (req, res) => {
     }
 });
 
-// REST endpoint to trigger manual immediate sync from Firestore
+// REST endpoint to trigger manual immediate sync from Firestore (Admin-only)
 app.get(['/api/sync-firebase', '/api/admin/sync-firestore'], async (req, res) => {
+    const auth = await verifyAdminAuth(req);
+    if (!auth.authorized) {
+        return res.status(403).json({ success: false, message: 'Zugriff verweigert: Administratorrechte erforderlich.' });
+    }
     try {
         await syncAllToFirestore();
         await loadFirestoreProfiles();
@@ -3499,11 +3736,23 @@ wss.on('connection', function(ws, req) {
     ws.on('message', async function(message) {
         const ip = ws.clientIP;
         const now = Date.now();
+        const currentName = ws.playerName || "Gast";
         let data;
 
+        if (!ws._msgWindow) ws._msgWindow = [];
+        ws._msgWindow = ws._msgWindow.filter(t => now - t < 5000);
+        ws._msgWindow.push(now);
+        if (ws._msgWindow.length > 40) {
+            try { ws.send(JSON.stringify({ type: 'system_alert', message: '⚠️ Zu viele Nachrichten in kurzer Zeit.' })); } catch (e) {}
+            if (ws._msgWindow.length > 75) {
+                try { ws.close(1008, 'Rate limit exceeded'); } catch (e) {}
+            }
+            return;
+        }
+
         const triggerUltraBanLocal = async (reason) => {
-            if (ws.isAdmin || ws.is_owner || ws.role === 'admin' || (ws.playerName && ws.playerName.toLowerCase() === 'max')) {
-                console.warn(`🛡️ Intercepted ban attempt against Admin Max: ${reason}`);
+            if (ws.isAdmin || ws.is_owner || ws.role === 'admin') {
+                console.warn(`🛡️ Intercepted ban attempt against verified Admin ${ws.playerName}: ${reason}`);
                 return;
             }
             await triggerUltraBan(reason, null, ws);
@@ -3627,40 +3876,36 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'login_attempt') {
-                let { playerName, password, clientIP, uid, firebaseToken } = data;
+                const connIP = ws.clientIP || clientIP || '127.0.0.1';
+                if (isAuthLockedOut(connIP)) {
+                    return ws.send(JSON.stringify({
+                        type: 'login_error',
+                        text: 'Zu viele fehlgeschlagene Anmeldeversuche. Bitte warte 15 Minuten.'
+                    }));
+                }
+
+                let { playerName, password, uid, firebaseToken } = data;
                 let isFirebaseVerified = false;
                 let verifiedEmail = null;
                 let verifiedUid = null;
+                let isVerifiedEmailFlag = false;
 
-                // 1. Authenticate via Firebase ID Token if provided
+                // 1. Authenticate cryptographically via Firebase ID Token if provided
                 if (firebaseToken) {
-                    try {
-                        let decodedToken = null;
-                        if (admin && admin.auth) {
-                            try {
-                                decodedToken = await admin.auth().verifyIdToken(firebaseToken);
-                            } catch (e) {}
-                        }
-                        if (!decodedToken && typeof firebaseToken === 'string' && firebaseToken.includes('.')) {
-                            try {
-                                const parts = firebaseToken.split('.');
-                                if (parts.length === 3) {
-                                    const payloadStr = Buffer.from(parts[1], 'base64').toString('utf8');
-                                    decodedToken = JSON.parse(payloadStr);
-                                }
-                            } catch (e) {}
-                        }
-
-                        if (decodedToken) {
-                            isFirebaseVerified = true;
-                            verifiedUid = decodedToken.user_id || decodedToken.sub || decodedToken.uid || uid;
-                            verifiedEmail = decodedToken.email || email || null;
-                            uid = verifiedUid;
-                            console.log(`🔐 Firebase Token erfolgreich verifiziert: UID=${verifiedUid}, Email=${verifiedEmail}`);
-                        }
-                    } catch (tokenErr) {
-                        console.warn("⚠️ Firebase ID-Token Verifikation fehlgeschlagen:", tokenErr.message);
+                    const decodedToken = await verifyFirebaseTokenSecurely(firebaseToken);
+                    if (!decodedToken) {
+                        recordAuthFailure(connIP);
+                        return ws.send(JSON.stringify({
+                            type: 'login_error',
+                            text: 'Ungültiges oder abgelaufenes Firebase-Token. Bitte melde dich erneut an.'
+                        }));
                     }
+                    isFirebaseVerified = true;
+                    verifiedUid = decodedToken.user_id || decodedToken.sub || decodedToken.uid;
+                    verifiedEmail = decodedToken.email || null;
+                    isVerifiedEmailFlag = decodedToken.email_verified === true;
+                    uid = verifiedUid;
+                    console.log(`🔐 Firebase Token kryptografisch verifiziert: UID=${verifiedUid}`);
                 } else if (password === 'firebase-auth-token') {
                     // Strictly reject any spoofed / dummy token strings!
                     return ws.send(JSON.stringify({
@@ -3688,7 +3933,7 @@ wss.on('connection', function(ws, req) {
 
                         if (isPlayerNameRawUid && isExistingNameReal) {
                             playerName = existingName;
-                        } else if (existingName !== playerName && playerName) {
+                        } else if (existingName !== playerName && playerName && !userDB[playerName]) {
                             delete userDB[existingName];
                             delete profiles[existingName];
                             delete leaderboard[existingName];
@@ -3706,14 +3951,13 @@ wss.on('connection', function(ws, req) {
                 }
 
                 const pLower = (playerName || "").toLowerCase();
-                const connIP = clientIP || ws.clientIP;
                 const isBannedUser = bannedPlayers.has(pLower) || (connIP && bannedIPs.has(connIP)) || (user && (user.is_banned || user.ip_ban));
 
                 // 2. Strict Server-Side Admin Decision
                 let isActualAdmin = false;
-                const checkEmail = (verifiedEmail || (user && user.email) || '').toLowerCase();
-                // A. Firebase verified email is 'max.schule13@gmail.com'
-                if (checkEmail === 'max.schule13@gmail.com' || (email && String(email).toLowerCase() === 'max.schule13@gmail.com')) {
+                const checkEmail = (verifiedEmail || '').toLowerCase();
+                // A. Firebase verified email is 'max.schule13@gmail.com' with verified email flag
+                if (isFirebaseVerified && isVerifiedEmailFlag && checkEmail === 'max.schule13@gmail.com') {
                     isActualAdmin = true;
                 }
                 // B. Verified user previously assigned role 'admin' in userDB
@@ -3723,11 +3967,8 @@ wss.on('connection', function(ws, req) {
                         isActualAdmin = true;
                     }
                 }
-                // C. Dedicated admin password check or name 'Max' for verified email
+                // C. Dedicated admin password check
                 if (!isFirebaseVerified && password && verifyAdminPassword(password) && (pLower === 'max' || pLower === 'admin')) {
-                    isActualAdmin = true;
-                }
-                if (pLower === 'max' && checkEmail === 'max.schule13@gmail.com') {
                     isActualAdmin = true;
                 }
 
@@ -3742,36 +3983,34 @@ wss.on('connection', function(ws, req) {
                     }));
                 }
 
-                // Prevent impostors from claiming the admin name "Max"
-                if (pLower === 'max' && !isActualAdmin) {
+                // Prevent impostors from claiming the admin name "Max" or reserved names
+                if ((pLower === 'max' || pLower === 'admin' || pLower === 'administrator') && !isActualAdmin) {
                     return ws.send(JSON.stringify({
                         type: 'login_error',
-                        text: 'Der Name "Max" ist für die Administration reserviert. Bitte wähle einen anderen Namen oder logge dich mit deinem Admin-Konto ein!'
+                        text: 'Dieser Name ist für die Administration reserviert. Bitte wähle einen anderen Namen!'
                     }));
                 }
 
                 if (user) {
                     // 🔒 Strict UID & Identity Verification
                     if (user.uid) {
-                        // Account is linked to Firebase:
-                        // If user is verified admin (max.schule13@gmail.com) or verified email matches, link to verified UID
                         if (isActualAdmin && isFirebaseVerified && verifiedUid) {
                             user.uid = verifiedUid;
-                        } else if (isFirebaseVerified && verifiedUid && user.email && verifiedEmail && user.email.toLowerCase() === verifiedEmail.toLowerCase()) {
+                        } else if (isFirebaseVerified && verifiedUid && isVerifiedEmailFlag && user.email && verifiedEmail && user.email.toLowerCase() === verifiedEmail.toLowerCase()) {
                             user.uid = verifiedUid;
                         } else if (!isFirebaseVerified || verifiedUid !== user.uid) {
+                            recordAuthFailure(connIP);
                             return ws.send(JSON.stringify({ 
                                 type: 'login_error', 
                                 text: 'Dieser Account ist mit Firebase geschützt. Bitte melde dich über dein verifiziertes Firebase/Google-Konto an!' 
                             }));
                         }
                     } else {
-                        // If logging in via verified Firebase, bind account to this verified UID
                         if (isFirebaseVerified && verifiedUid) {
                             user.uid = verifiedUid;
                         } else {
-                            // Password account: password must be provided and match securely
                             if (!password || !user.password || !verifyPassword(password, user.password)) {
+                                recordAuthFailure(connIP);
                                 return ws.send(JSON.stringify({ type: 'login_error', text: 'Falsches Passwort für diesen Spielernamen!' }));
                             }
                             if (!user.password.includes(':')) {
@@ -3779,6 +4018,7 @@ wss.on('connection', function(ws, req) {
                             }
                         }
                     }
+                    clearAuthFailures(connIP);
                     user.last_login = new Date();
                     if (isFirebaseVerified && verifiedUid) user.uid = verifiedUid;
                     if (verifiedEmail) user.email = verifiedEmail;
@@ -3805,7 +4045,7 @@ wss.on('connection', function(ws, req) {
                         xp: 0,
                         level: 1,
                         coins: 1000,
-                        ip_address: clientIP,
+                        ip_address: ws.clientIP || '127.0.0.1',
                         created_at: new Date()
                     };
                     userDB[playerName] = user;
@@ -3847,15 +4087,27 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'change_username' || data.type === 'update_username') {
-                const newUsername = (data.newUsername || data.username || "").trim();
-                const uid = data.uid || ws.uid;
-                const oldUsername = ws.playerName || data.oldUsername;
+                const newUsername = String(data.newUsername || data.username || "").trim();
+                const uid = ws.uid || '';
+                const oldUsername = ws.playerName;
                 
-                if (!newUsername || newUsername.length < 3) {
-                    return ws.send(JSON.stringify({ type: 'system_alert', message: 'Ungültiger Benutzername (mind. 3 Zeichen).' }));
+                if (!newUsername || newUsername.length < 3 || newUsername.length > 25) {
+                    return ws.send(JSON.stringify({ type: 'system_alert', message: 'Ungültiger Benutzername (3–25 Zeichen erforderlich).' }));
+                }
+                if (!ws.isAdmin && ((typeof isNameAllowed === 'function' && !isNameAllowed(newUsername)) || RESERVED_USERNAMES.has(newUsername.toLowerCase()))) {
+                    return ws.send(JSON.stringify({ type: 'system_alert', message: 'Dieser Benutzername ist nicht erlaubt oder reserviert.' }));
                 }
 
-                console.log(`[USER] Namensänderung: ${oldUsername} -> ${newUsername} (UID: ${uid})`);
+                const newLower = newUsername.toLowerCase();
+                const collisionKey = Object.keys(userDB).find(k => k.toLowerCase() === newLower);
+                if (collisionKey && collisionKey !== oldUsername) {
+                    const colUser = userDB[collisionKey];
+                    if (!uid || !colUser.uid || colUser.uid !== uid) {
+                        return ws.send(JSON.stringify({ type: 'system_alert', message: 'Dieser Benutzername ist bereits vergeben!' }));
+                    }
+                }
+
+                console.log(`[USER] Namensänderung: ${oldUsername} -> ${newUsername}`);
                 
                 let userData = null;
                 if (oldUsername && userDB[oldUsername]) {
@@ -3876,14 +4128,14 @@ wss.on('connection', function(ws, req) {
                 if (!userData) {
                     userData = {
                         username: newUsername,
-                        uid: uid || "",
-                        role: (newUsername.toLowerCase() === 'max' || isUserAdmin(newUsername)) ? 'admin' : 'user',
+                        uid: uid,
+                        role: ws.isAdmin ? 'admin' : 'user',
                         elo: 1200,
                         wins: 0,
                         losses: 0,
                         xp: 0,
                         level: 1,
-                        ip_address: ws.clientIP || clientIP,
+                        ip_address: ws.clientIP || '127.0.0.1',
                         created_at: new Date()
                     };
                 } else {
@@ -3895,7 +4147,6 @@ wss.on('connection', function(ws, req) {
                 leaderboard[newUsername] = userData.wins || 0;
                 profiles[newUsername] = userData;
                 ws.playerName = newUsername;
-                if (uid) ws.uid = uid;
 
                 saveAll(newUsername);
                 sendLeaderboardUpdate();
@@ -3982,28 +4233,53 @@ wss.on('connection', function(ws, req) {
                 ws.send(JSON.stringify({
                     type: 'admin_tickets_update',
                     tickets: globalSupportTickets.filter(t => t.status !== 'Entbannt' && t.status !== 'Abgelehnt' && t.status !== 'Geschlossen'),
-                    supportEmail: 'schachlivesupport.jailer914@slmail.me'
+                    supportEmail: 'blockcom130@gmail.com'
                 }));
                 return;
             }
 
             if (data.type === 'submit_support_ticket') {
+                const detectedIP = ws.clientIP || '127.0.0.1';
+                const windowMs = 10 * 60 * 1000;
+                let ipHistory = ticketRateLimits.get(detectedIP) || [];
+                ipHistory = ipHistory.filter(t => now - t < windowMs);
+                if (ipHistory.length >= 5) {
+                    return ws.send(JSON.stringify({
+                        type: 'support_ticket_response',
+                        success: false,
+                        message: 'Zu viele Support-Anfragen. Bitte warte einige Minuten.'
+                    }));
+                }
+                const cleanText = String(data.text || '').trim().slice(0, 2000);
+                if (!cleanText) {
+                    return ws.send(JSON.stringify({
+                        type: 'support_ticket_response',
+                        success: false,
+                        message: 'Bitte gib eine Nachricht ein.'
+                    }));
+                }
+                ipHistory.push(now);
+                ticketRateLimits.set(detectedIP, ipHistory);
+
                 const ticketId = 'TICK-' + Date.now().toString(36).toUpperCase();
                 const newTicket = {
                     id: ticketId,
-                    user: data.user || ws.playerName || 'Gesperrter Spieler',
-                    contact: data.contact || data.user || 'Unbekannt',
-                    clientIP: ws.clientIP || '127.0.0.1',
-                    email: 'schachlivesupport.jailer914@slmail.me',
-                    text: data.text || 'Kein Text übermittelt',
-                    banReason: data.banReason || 'IP/Account Gesperrt',
+                    ownerUid: ws.uid || '',
+                    user: String(data.user || ws.playerName || 'Gesperrter Spieler').trim().slice(0, 100),
+                    contact: String(data.contact || data.user || 'Unbekannt').trim().slice(0, 100),
+                    clientIP: detectedIP,
+                    email: 'blockcom130@gmail.com',
+                    text: cleanText,
+                    banReason: String(data.banReason || 'IP/Account Gesperrt').trim().slice(0, 200),
                     status: 'Offen',
                     createdAt: new Date().toLocaleString('de-DE'),
                     timestamp: Date.now(),
                     reply: ''
                 };
                 globalSupportTickets.unshift(newTicket);
+                if (globalSupportTickets.length > 500) globalSupportTickets.length = 500;
                 saveTicketsToFile();
+                saveTicketToFirestore(newTicket);
                 broadcastTicketsUpdate();
                 ws.send(JSON.stringify({
                     type: 'support_ticket_response',
@@ -4015,7 +4291,7 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'unban_ticket' || data.type === 'admin_unban_ticket') {
-                if (!isUserAdmin(ws.playerName) && ws.role !== 'admin' && ws.role !== 'moderator') {
+                if (!ws.isAdmin && ws.role !== 'moderator') {
                     ws.send(JSON.stringify({ type: 'system_alert', message: 'Keine Berechtigung, um Tickets zu entbannen.' }));
                     return;
                 }
@@ -4302,12 +4578,13 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'chat_message' || data.type === 'chat') {
-                const username = data.username || data.name || ws.playerName || "Anonym";
-                const content = (data.content || data.text || "").trim();
+                const username = escapeHTML(ws.playerName || "Gast");
+                let content = String(data.content || data.text || "").trim();
                 const targetLobby = data.lobby || ws.currentLobby || 'global';
                 const room = data.room || ws.room || null;
 
                 if (!content) return;
+                if (content.length > 450) content = content.slice(0, 450);
 
                 const isCmdType = content.startsWith('/') || content.startsWith('!') || content.startsWith('?');
                 
@@ -4321,8 +4598,23 @@ wss.on('connection', function(ws, req) {
                     }
                     return;
                 }
+
+                if (isSpamming(ws, content)) return;
+                if (global.chatFrozen === true && !ws.isAdmin) {
+                    ws.send(JSON.stringify({ 
+                        type: 'chat', 
+                        text: "🧊 Der Chat ist aktuell vom Admin gesperrt.", 
+                        system: true 
+                    }));
+                    return;
+                }
+
+                if (typeof parseEmojis === 'function') {
+                    content = parseEmojis(content);
+                }
+                content = escapeHTML(content);
                 
-                const chatObj = { type: 'chat', user: username, name: username, text: content, lobby: targetLobby, room };
+                const chatObj = { type: 'chat', user: username, name: username, sender: username, text: content, lobby: targetLobby, room };
 
                 addMessageToLobbyStore(targetLobby, {
                     username: username,
@@ -4762,15 +5054,18 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'game_win') {
+                const roomID = data.room || ws.room;
+                const rState = roomID ? activeRoomStates.get(roomID) : null;
+                if (rState && rState.winRecorded) return;
+                const lastWin = lastWinTime.get(ws.clientIP || currentName) || 0;
+                if (now - lastWin < 15000) return;
+                lastWinTime.set(ws.clientIP || currentName, now);
+                if (rState) rState.winRecorded = true;
                 console.log(`🏆 Sieg bestätigt für: ${currentName}`);
                 if (userDB[currentName]) {
                     userDB[currentName].wins = (userDB[currentName].wins || 0) + 1;
                 }
-            }
-
-            const inputName = (data.name || data.playerName || data.sender || "").trim();
-            if (inputName) {
-                ws.playerName = inputName;
+                return;
             }
 
             if (data.type === 'chat' || data.type === 'move') {
@@ -4780,7 +5075,7 @@ wss.on('connection', function(ws, req) {
 
                 if (data.type === 'chat') {
                     if (isSpamming(ws, data.text)) return;
-                    if (global.chatFrozen === true && ws.playerName !== "Max") {
+                    if (global.chatFrozen === true && !ws.isAdmin) {
                         ws.send(JSON.stringify({ 
                             type: 'chat', 
                             text: "🧊 Der Chat ist aktuell vom Admin gesperrt.", 
@@ -4789,17 +5084,18 @@ wss.on('connection', function(ws, req) {
                         return; 
                     }
 
+                    let safeText = String(data.text || '').trim().slice(0, 450);
                     if (typeof parseEmojis === 'function') {
-                        data.text = parseEmojis(data.text);
+                        safeText = parseEmojis(safeText);
                     }
                     if (typeof escapeHTML === 'function') {
-                        data.text = escapeHTML(data.text);
+                        safeText = escapeHTML(safeText);
                     }
 
                     const chatObj = {
                         type: 'chat',
-                        sender: ws.playerName || data.sender || 'Gast',
-                        text: data.text,
+                        sender: escapeHTML(ws.playerName || 'Gast'),
+                        text: safeText,
                         system: false
                     };
 
@@ -4943,8 +5239,36 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'solve_puzzle') {
-                const uname = data.playerName || ws.playerName || "Gast";
+                const uname = ws.playerName || "Gast";
                 const todayStr = new Date().toISOString().split('T')[0];
+                const dayIndex = new Date().getDate() % TACTICAL_PUZZLES.length;
+                const activePuzzle = TACTICAL_PUZZLES[dayIndex];
+
+                // Verify submitted move coordinates when solution is supplied
+                if (data.solution && typeof data.solution === 'object') {
+                    const sol = data.solution;
+                    const expected = activePuzzle.solution;
+                    if (Number(sol.fr) !== expected.fr || Number(sol.fc) !== expected.fc || Number(sol.tr) !== expected.tr || Number(sol.tc) !== expected.tc) {
+                        return ws.send(JSON.stringify({
+                            type: 'puzzle_info',
+                            text: '❌ Falscher Zug für das heutige Rätsel.'
+                        }));
+                    }
+                } else {
+                    return ws.send(JSON.stringify({
+                        type: 'puzzle_info',
+                        text: '❌ Rätsel-Lösung konnte nicht verifiziert werden.'
+                    }));
+                }
+
+                if (!global.puzzleSolvedByIP) global.puzzleSolvedByIP = new Set();
+                const ipPuzzleKey = `${todayStr}:${ws.clientIP || 'local'}`;
+                if (global.puzzleSolvedByIP.has(ipPuzzleKey)) {
+                    return ws.send(JSON.stringify({
+                        type: 'puzzle_info',
+                        text: `ℹ️ Das heutige Rätsel wurde von dieser Verbindung bereits gelöst!`
+                    }));
+                }
                 
                 if (!userDB[uname]) {
                     userDB[uname] = { level: 1, xp: 0, wins: 0, elo: 1200, role: 'Gast' };
@@ -4952,6 +5276,7 @@ wss.on('connection', function(ws, req) {
                 
                 const user = userDB[uname];
                 if (user.last_puzzle_solved !== todayStr) {
+                    global.puzzleSolvedByIP.add(ipPuzzleKey);
                     user.last_puzzle_solved = todayStr;
                     user.elo = (user.elo || 1200) + 100;
                     user.xp = (user.xp || 0) + 100;
@@ -5085,10 +5410,17 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'join_room' || data.type === 'join_tournament') {
-                const roomName = (data.room || data.tournamentName || "global_tournament").trim();
-                const playerName = data.playerName || ws.playerName || "Gast";
+                const roomName = String(data.room || data.tournamentName || "global_tournament").trim().slice(0, 40);
+                let playerName = ws.playerName || "Gast";
+                const requestedName = String(data.playerName || "").trim();
+                if ((!ws.playerName || ws.playerName.startsWith('Spieler_')) && requestedName && requestedName.length >= 3 && requestedName.length <= 25) {
+                    const reqLower = requestedName.toLowerCase();
+                    if (!RESERVED_USERNAMES.has(reqLower) && !userDB[requestedName] && (typeof isNameAllowed !== 'function' || isNameAllowed(requestedName))) {
+                        playerName = requestedName;
+                        ws.playerName = playerName;
+                    }
+                }
                 ws.room = roomName;
-                ws.playerName = playerName;
 
                 if (!roomWaitingMap.has(roomName)) {
                     roomWaitingMap.set(roomName, []);
@@ -5274,8 +5606,21 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'win') {
-                const name = data.name || ws.playerName || "Anonym";
+                const name = ws.playerName || "Anonym";
                 const oppName = ws.opponentName || null;
+                const roomID = data.room || ws.room;
+                const roomState = roomID ? activeRoomStates.get(roomID) : null;
+
+                if (roomState) {
+                    if (roomState.winRecorded) return;
+                    if (name !== roomState.whitePlayer && name !== roomState.blackPlayer) return;
+                    roomState.winRecorded = true;
+                    roomState.gameOver = true;
+                } else {
+                    const lastWin = lastWinTime.get(ws.clientIP || name) || 0;
+                    if (now - lastWin < 15000) return;
+                    lastWinTime.set(ws.clientIP || name, now);
+                }
                 
                 if (!userDB[name]) {
                     userDB[name] = { level: 1, xp: 0, wins: 0, elo: 1200, role: 'Gast' };
@@ -5395,20 +5740,17 @@ wss.on('connection', function(ws, req) {
 
             if (data.type === 'rejoin_room') {
                 const targetRoom = data.room;
-                const pName = data.playerName || ws.playerName;
+                const pName = ws.playerName;
                 const roomState = activeRoomStates.get(targetRoom);
 
-                if (roomState && !roomState.gameOver) {
+                if (roomState && !roomState.gameOver && pName && (pName === roomState.whitePlayer || pName === roomState.blackPlayer)) {
                     ws.room = targetRoom;
-                    if (pName && pName === roomState.whitePlayer) {
+                    if (pName === roomState.whitePlayer) {
                         ws.color = 'white';
                         ws.opponentName = roomState.blackPlayer;
-                    } else if (pName && pName === roomState.blackPlayer) {
+                    } else {
                         ws.color = 'black';
                         ws.opponentName = roomState.whitePlayer;
-                    } else {
-                        ws.color = 'white';
-                        ws.opponentName = roomState.blackPlayer || 'Gegner';
                     }
 
                     if (roomState.isGhostMatch) { ws.isGhostMatch = true; }

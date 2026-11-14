@@ -3,8 +3,12 @@
 const FORBIDDEN_NAMES = [
     "admin",
     "administrator",
+    "superadmin",
     "moderator",
     "mod",
+    "helper",
+    "staff",
+    "team",
     "system",
     "root",
     "server",
@@ -13,8 +17,12 @@ const FORBIDDEN_NAMES = [
     "owner",
     "eigentümer",
     "chesslive",
+    "schachlive",
+    "prochess",
+    "superuser",
     "ghostplayer",
-    "bot"
+    "bot",
+    "max"
 ];
 
 const BAD_WORDS = [

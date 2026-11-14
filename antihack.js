@@ -66,7 +66,7 @@ function validateTimeDelta(ws, clientTimestamp) {
     const drift = Math.abs(now - clientTimestamp);
 
     // Wenn der Client-Zeitstempel um mehr als 15 Sekunden in der Zukunft oder Vergangenheit liegt
-    if (drift > 300000) { // 5 Minuten Toleranz statt 15 Sekunden
+    if (drift > 15000) {
         console.warn(`⚠️ [TIME-HACK DETECTED] Client Clock Drift: ${drift}ms bei WS ${ws.playerName}`);
         return false;
     }
@@ -99,12 +99,9 @@ function validateSecurity(data, ws, bannedIPs, triggerUltraBan, roomStates = nul
     const name = ws.playerName || "Unbekannter_Spieler";
 
     const executeBan = (reason) => {
-        const ADMIN_LIST = ['max', '222', 'admin', 'max.schule13@gmail.com', 'owner', 'eigentümer'];
-        const isNameAdmin = name && ADMIN_LIST.includes(String(name).toLowerCase().trim());
-        const isEmailAdmin = ws.userEmail && ADMIN_LIST.includes(String(ws.userEmail).toLowerCase().trim());
-        const isWsAdmin = ws.isAdmin || ws.is_owner || ws.role === 'admin';
+        const isWsAdmin = ws.isAdmin === true || ws.is_owner === true || ws.role === 'admin';
         
-        if (isNameAdmin || isEmailAdmin || isWsAdmin) {
+        if (isWsAdmin) {
             console.warn(`🛡️ ADMIN-CONFLICT INTERCEPTED in antihack.js: User '${name}' (${ip}) triggered '${reason}'.`);
             if (typeof global.logAdminConflict === 'function') {
                 global.logAdminConflict(ws, name, reason);

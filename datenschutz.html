@@ -3,43 +3,63 @@
 <head>
     <meta charset="UTF-8">
     <meta name="google-site-verification" content="0JpVd6y2K5Tg-MRFKbDSECCUZ5eNc-WvGvUzDrlcIb4" />
+    <meta name="strix-verification" content="strix-verify-d42958f109fb3690dfb44210a3c9038e">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Datenschutzerklärung - Schach Live</title>
+    <title>Datenschutzerklärung (DSGVO) | Schach Live (Prochess)</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: #0a0a0a;
             color: #eeeeee;
-            line-height: 1.6;
+            line-height: 1.65;
             padding: 40px 20px;
             max-width: 900px;
             margin: auto;
         }
         .container {
             background: rgba(255, 255, 255, 0.05);
-            padding: 30px;
+            padding: 32px;
             border-radius: 15px;
             border: 1px solid #3498db;
-            box-shadow: 0 0 20px rgba(52, 152, 219, 0.2);
+            box-shadow: 0 0 24px rgba(52, 152, 219, 0.2);
         }
         h1 {
             color: #3498db;
             border-bottom: 2px solid #3498db;
             padding-bottom: 10px;
+            margin-top: 0;
         }
         h2 {
             color: #2ecc71;
-            margin-top: 30px;
+            margin-top: 28px;
             border-bottom: 1px solid rgba(255,255,255,0.1);
             padding-bottom: 5px;
+            font-size: 1.2rem;
         }
         p, ul {
-            margin-bottom: 15px;
+            margin-bottom: 14px;
             color: #ccc;
+        }
+        li {
+            margin-bottom: 6px;
+        }
+        a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .info-box {
+            background: rgba(52, 152, 219, 0.08);
+            border-left: 4px solid #3498db;
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin: 14px 0;
+            color: #e0e0e0;
         }
         .back-link {
             display: inline-block;
-            margin-top: 30px;
             color: #3498db;
             text-decoration: none;
             font-weight: bold;
@@ -57,35 +77,58 @@
 <body>
     <div class="container">
         <h1>Datenschutzerklärung</h1>
-        <p>Diese Datenschutzerklärung klärt Sie über die Art, den Umfang und Zweck der Verarbeitung von personenbezogenen Daten innerhalb der App <strong>Schach Live</strong> auf.</p>
+        <p>Diese Datenschutzerklärung informiert dich gemäß der Datenschutz-Grundverordnung (<strong>DSGVO</strong>), dem Bundesdatenschutzgesetz (<strong>BDSG</strong>) sowie dem Telekommunikation-Digitale-Dienste-Datenschutz-Gesetz (<strong>TDDDG</strong>) über Art, Umfang, Zwecke und Rechtsgrundlagen der Verarbeitung personenbezogener Daten bei <strong>Schach Live (Prochess)</strong>.</p>
         
-        <h2>1. Verantwortlicher</h2>
-        <p>Verantwortlich für diese Plattform ist:<br>
-        Max<br>
-        E-Mail: <a href="mailto:blockcom130@gmail.com" style="color: #3498db;">blockcom130@gmail.com</a></p>
+        <h2>1. Verantwortlicher (Art. 4 Nr. 7 DSGVO)</h2>
+        <p>
+            Verantwortlich für die Datenverarbeitung auf dieser Plattform ist:<br>
+            <strong>Max</strong> (Betreiber von Schach Live / Prochess)<br>
+            Bundesrepublik Deutschland<br>
+            E-Mail: <a href="mailto:blockcom130@gmail.com">blockcom130@gmail.com</a>
+        </p>
 
-        <h2>2. Erhebung von Daten</h2>
-        <p>Wenn du unsere Plattform nutzt, verarbeiten wir folgende Daten:</p>
+        <h2>2. Welche Daten wir verarbeiten &amp; Rechtsgrundlagen</h2>
         <ul>
-            <li><strong>Spielerprofile:</strong> Gewählte Benutzernamen, Elo-Zahlen und Spielstatistiken.</li>
-            <li><strong>Verbindungsdaten:</strong> IP-Adressen werden ausschließlich für Sicherheitszwecke (Bans & Anti-Cheat) temporär verarbeitet.</li>
-            <li><strong>Chat-Logs:</strong> Öffentliche Nachrichten werden kurzfristig gespeichert, um Moderatoren die Überprüfung bei Regelverstößen zu ermöglichen.</li>
+            <li><strong>Technische Verbindungs- &amp; Sicherheitsdaten (Server-Logs, IP-Adresse, Rate-Limits):</strong> Zur Auslieferung der Website, Abwehr von Angriffen (DDoS, Brute-Force, XSS/Injection) und Durchsetzung von Hausrechts-Sperren (Bans) wird deine IP-Adresse temporär verarbeitet. <em>Rechtsgrundlage:</em> Berechtigtes Interesse an IT-Sicherheit und Missbrauchsabwehr (Art. 6 Abs. 1 lit. f DSGVO).</li>
+            <li><strong>Spielerprofile, Zugangsdaten &amp; Spielstatistiken:</strong> Bei Registrierung oder Nutzung speichern wir den gewählten Spielernamen, Passwort-Hash (Scrypt mit individuellem Salt – niemals im Klartext), optional eine E-Mail-Adresse (bei Firebase/Google-Login), ELO-Rating, Siege, Niederlagen, Level, XP, Spielhistorie (PGN/Board-Snapshots) und gewählte Design-Einstellungen. <em>Rechtsgrundlage:</em> Vertragserfüllung bzw. Bereitstellung der Plattformfunktion (Art. 6 Abs. 1 lit. b DSGVO).</li>
+            <li><strong>Live-Chat &amp; Support-Tickets:</strong> Öffentliche Chat-Nachrichten werden zeitlich begrenzt zur Darstellung in der jeweiligen Lobby und zur Moderationskontrolle gespeichert. Support- und Entbannungsanfragen enthalten die angegebenen Kontaktdaten und den Nachrichtentext zur Bearbeitung deines Anliegens (Art. 6 Abs. 1 lit. b und f DSGVO).</li>
+            <li><strong>Optionale Sprachsteuerung &amp; Audio-Chat:</strong> Sofern du aktiv auf den Button für Sprachzüge oder Sprachchat klickst, greift der Browser über die Web Speech API bzw. WebRTC auf das Mikrofon zu. Die Audioübertragung erfolgt nur nach ausdrücklicher Browser-Freigabe (Art. 6 Abs. 1 lit. a DSGVO) und wird serverseitig nicht dauerhaft aufgezeichnet.</li>
         </ul>
-        <p>Wir verkaufen <strong>keine</strong> Daten an Dritte.</p>
+        <p>Wir verkaufen <strong>keine</strong> personenbezogenen Daten an Dritte und schalten keine personalisierte Werbung.</p>
 
-        <h2>3. Local Storage & Cookies</h2>
-        <p>Wir verwenden Local Storage in deinem Browser, um deine Themes, deine Elo-Historie und dein Login-Token zu speichern. Es werden keine Tracking-Cookies eingesetzt.</p>
+        <h2>3. Cookies, Session-Tokens &amp; Local Storage (§ 25 TDDDG)</h2>
+        <div class="info-box">
+            <strong>Transparenz nach § 25 Abs. 2 Nr. 2 TDDDG:</strong> Wir verwenden <strong>keine Tracking-, Analyse- oder Werbe-Cookies</strong>. Der Browser-Speicher (<code>localStorage</code> / <code>sessionStorage</code>) sowie ein technisch notwendiges <code>HttpOnly</code>-Session-Cookie (ausschließlich für das geschützte Admin-Login) werden nur gespeichert, soweit sie für den ausdrücklich gewünschten Dienst technisch erforderlich sind.
+        </div>
+        <p>Im Local Storage deines Browsers werden ausschließlich lokale Komfort- und Funktionsdaten gespeichert, darunter: <code>agbAkzeptiert</code> (Bestätigung der Nutzungsbedingungen), <code>playerName</code>, <code>device_preference</code> (PC/Handy-Ansicht), Design-/Theme-Auswahl, Sound-Einstellungen sowie lokal von dir gespeicherte Schachpartien. Du kannst diese Daten jederzeit über die Browser-Einstellungen („Websitedaten / Local Storage löschen“) vollständig entfernen.</p>
 
-        <h2>4. Drittanbieter</h2>
-        <p>Aktuell nutzen wir Firebase für die optionale persistente Authentifizierung und Datenbank (sofern du einen dauerhaften Account erstellst). Firebase unterliegt den Datenschutzbestimmungen von Google.</p>
+        <h2>4. Eingesetzte Drittanbieter &amp; Datenübermittlung</h2>
+        <p>Für bestimmte Funktionen binden wir technisch erforderliche Dienste ein:</p>
+        <ul>
+            <li><strong>Google Firebase (Authentication &amp; Cloud Firestore):</strong> Sofern du dich über Google/Firebase anmeldest oder Profildaten in der Cloud synchronisierst, werden Authentifizierungsdaten und Spielprofile über Dienste der Google Ireland Limited (Gordon House, Barrow Street, Dublin 4, Irland) bzw. Google LLC (USA; EU-US Data Privacy Framework) verarbeitet.</li>
+            <li><strong>Google Gemini KI (Optionale Zug-Analyse):</strong> Wenn du die KI-Partieanalyse nutzt, werden die aktuelle Schachstellung (FEN), der letzte Zug und ein anonymisierter Spielername zur Bewertung an die Gemini-API von Google übermittelt. Es werden keine Passwörter oder E-Mail-Adressen übertragen.</li>
+            <li><strong>Hosting &amp; Inhaltsauslieferung (Render / GitHub Pages / CDNJS / Wikimedia Commons):</strong> Beim Laden der Anwendung und der Schachfiguren-Grafiken (SVG) sowie kryptografischer Hilfsbibliotheken (CryptoJS) wird technisch bedingt deine IP-Adresse an die jeweiligen Server bzw. Content-Delivery-Networks übermittelt (Art. 6 Abs. 1 lit. f DSGVO).</li>
+        </ul>
 
-        <h2>5. Deine Rechte</h2>
-        <p>Du hast jederzeit das Recht auf Auskunft, Löschung oder Sperrung deiner bei uns gespeicherten Daten. Sende uns dazu einfach eine E-Mail oder nutze das In-Game Ticket-System.</p>
+        <h2>5. Speicherdauer</h2>
+        <p>Temporäre Server-Verbindungsprotokolle und Chat-Verläufe werden fortlaufend rotiert und gelöscht. Registrierte Spielerprofile bleiben gespeichert, bis du die Löschung beantragst oder das Konto wegen Inaktivität bereinigt wird. Sicherheitsrelevante Sperreinträge (Bans) werden nur so lange vorgehalten, wie dies zur Wahrung des Hausrechts und zum Schutz vor Missbrauch erforderlich ist.</p>
+
+        <h2>6. Deine Betroffenenrechte (Art. 15–21 &amp; 77 DSGVO)</h2>
+        <p>Du hast jederzeit das Recht auf:</p>
+        <ul>
+            <li><strong>Auskunft</strong> (Art. 15 DSGVO) über die zu deiner Person gespeicherten Daten,</li>
+            <li><strong>Berichtigung</strong> unrichtiger Daten (Art. 16 DSGVO),</li>
+            <li><strong>Löschung</strong> („Recht auf Vergessenwerden“, Art. 17 DSGVO),</li>
+            <li><strong>Einschränkung der Verarbeitung</strong> (Art. 18 DSGVO) sowie <strong>Datenübertragbarkeit</strong> (Art. 20 DSGVO),</li>
+            <li><strong>Widerspruch</strong> gegen Verarbeitungen auf Grundlage von Art. 6 Abs. 1 lit. f DSGVO (Art. 21 DSGVO),</li>
+            <li><strong>Widerruf</strong> erteilter Einwilligungen mit Wirkung für die Zukunft (Art. 7 Abs. 3 DSGVO).</li>
+        </ul>
+        <p>Zur Ausübung deiner Rechte genügt eine formlose E-Mail an <a href="mailto:blockcom130@gmail.com">blockcom130@gmail.com</a>. Zudem hast du das Recht, Beschwerde bei einer zuständigen Datenschutz-Aufsichtsbehörde einzureichen (Art. 77 DSGVO).</p>
+
+        <h2>7. Sicherheit der Verarbeitung (Art. 32 DSGVO)</h2>
+        <p>Wir setzen moderne technische und organisatorische Sicherheitsmaßnahmen ein, darunter Passwort-Hashing mittels Scrypt-KDF, kryptografische Token-Prüfung, WebSocket-Payload- und Ratenbegrenzung, strenge Content-Security-Policy-Header (CSP), Schutz vor XSS und SQL-Injection sowie strikte Zugriffsregeln in Cloud Firestore.</p>
         
-        <h2>6. Impressum & AGB</h2>
-        <p>Informationen zum Betreiber der Seite findest du in unserem <a href="impressum.html" style="color: #f39c12;">Impressum</a>. Unsere Nutzungsbedingungen kannst du in den <a href="AGB.html" style="color: #28a745;">AGB</a> einsehen.</p>
-        
-        <p>Stand: August 2026</p>
+        <p style="font-size: 0.85rem; color: #888; margin-top: 20px;">Stand: November 2026</p>
         
         <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 25px;">
             <a href="index.html" class="back-link">← Zurück zum Spiel</a>

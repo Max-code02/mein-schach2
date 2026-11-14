@@ -295,7 +295,7 @@
                     <span class="nav-icon">📊</span>
                     <span class="nav-label">Analyse</span>
                 </button>
-                <a href="/admin" target="_blank" class="sidebar-nav-btn" data-tooltip="Admin-Portal" id="sidebar-admin-link">
+                <a href="/admin" target="_blank" rel="noopener noreferrer" class="sidebar-nav-btn" data-tooltip="Admin-Portal" id="sidebar-admin-link">
                     <span class="nav-icon">👑</span>
                     <span class="nav-label">Admin-Portal</span>
                 </a>
@@ -433,9 +433,14 @@
 
     <div id="agb-popup">
         <div class="popup-content">
-            <h2>Willkommen bei Prochess!</h2>
-            <p>Um fortzufahren, bestätige bitte, dass du unsere <a href="AGB.html" target="_blank">AGB</a>, die <a href="datenschutz.html" target="_blank">Datenschutzerklärung</a> und das <a href="impressum.html" target="_blank">Impressum</a> akzeptierst.</p>
-            <button class="glass-btn accept-btn" onclick="acceptAGB()">Akzeptieren & Starten</button>
+            <h2>Willkommen bei Schach Live (Prochess)!</h2>
+            <p style="font-size: 0.95em; line-height: 1.5; color: #ddd;">
+                Bitte bestätige vor dem Start, dass du unsere <a href="AGB.html" target="_blank" rel="noopener noreferrer">AGB</a>, die <a href="datenschutz.html" target="_blank" rel="noopener noreferrer">Datenschutzerklärung</a> und das <a href="impressum.html" target="_blank" rel="noopener noreferrer">Impressum</a> zur Kenntnis genommen hast und akzeptierst.
+            </p>
+            <p style="font-size: 0.8em; color: #aaa; margin-top: 8px; line-height: 1.4;">
+                🔒 Hinweis (§ 25 TDDDG): Wir nutzen keine Werbe- oder Tracking-Cookies, sondern ausschließlich technisch notwendigen Browser-Speicher (LocalStorage) für Designs, Einstellungen und Spielstände.
+            </p>
+            <button class="glass-btn accept-btn" onclick="acceptAGB()">Akzeptieren &amp; Starten</button>
         </div>
     </div>
 
@@ -559,7 +564,7 @@
 
             <div style="border-top: 1px solid rgba(255,255,255,0.08); margin-top: 12px; padding-top: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #888;">
                 <span>💡 Klicke auf einen Spieler für sein Profil.</span>
-                <a href="/stats" target="_blank" style="color: #81b64c; text-decoration: none; font-weight: bold;">Vollbild-Rangliste (/stats) ↗</a>
+                <a href="/stats" target="_blank" rel="noopener noreferrer" style="color: #81b64c; text-decoration: none; font-weight: bold;">Vollbild-Rangliste (/stats) ↗</a>
             </div>
         </div>
     </div>
@@ -758,7 +763,7 @@
 
             <!-- Admin Panel (falls Admin) -->
             <div class="glass-panel" id="admin-panel" style="display: none; background: #2b1f1a !important; border: 1px solid #e67e22 !important; padding: 14px; border-radius: 10px; margin-bottom: 15px;">
-                <a href="/admin" target="_blank" style="display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; width: 100%; margin-bottom: 10px; padding: 8px 12px; background: linear-gradient(135deg, #f39c12, #e67e22); color: #fff; font-weight: bold; font-size: 0.85rem; border-radius: 6px;">
+                <a href="/admin" target="_blank" rel="noopener noreferrer" style="display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; width: 100%; margin-bottom: 10px; padding: 8px 12px; background: linear-gradient(135deg, #f39c12, #e67e22); color: #fff; font-weight: bold; font-size: 0.85rem; border-radius: 6px;">
                     <span>🛡️</span>
                     <span>Admin-Zentrale öffnen (/admin)</span>
                     <span>↗</span>
@@ -1185,11 +1190,11 @@
 
             <!-- Footer Links -->
             <div style="margin-top: 15px; padding: 10px 0; text-align: center; font-size: 0.8em; color: #888; display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;">
-                <a href="AGB.html" target="_blank" style="color: #aaa; text-decoration: none;">AGB</a>
+                <a href="AGB.html" target="_blank" rel="noopener noreferrer" style="color: #aaa; text-decoration: none;">AGB</a>
                 <span style="color: rgba(255,255,255,0.2)">|</span>
-                <a href="datenschutz.html" target="_blank" style="color: #aaa; text-decoration: none;">Datenschutz</a>
+                <a href="datenschutz.html" target="_blank" rel="noopener noreferrer" style="color: #aaa; text-decoration: none;">Datenschutz</a>
                 <span style="color: rgba(255,255,255,0.2)">|</span>
-                <a href="impressum.html" target="_blank" style="color: #aaa; text-decoration: none;">Impressum</a>
+                <a href="impressum.html" target="_blank" rel="noopener noreferrer" style="color: #aaa; text-decoration: none;">Impressum</a>
             </div>
         </div>
     </div>

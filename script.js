@@ -513,10 +513,10 @@ window.renderAdminTickets = function(tickets) {
         return `
             <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-left: 4px solid ${statusColor}; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <span style="font-weight: bold; color: #fff; font-size: 0.85em;">👤 ${t.user} <span style="font-size: 0.75em; color: #888;">(${t.id})</span></span>
-                    <span style="background: ${statusColor}; color: white; padding: 1px 6px; border-radius: 10px; font-size: 0.7em; font-weight: bold;">${t.status || 'Offen'}</span>
+                    <span style="font-weight: bold; color: #fff; font-size: 0.85em;">👤 ${escapeHtml(t.user)} <span style="font-size: 0.75em; color: #888;">(${escapeHtml(t.id)})</span></span>
+                    <span style="background: ${statusColor}; color: white; padding: 1px 6px; border-radius: 10px; font-size: 0.7em; font-weight: bold;">${escapeHtml(t.status || 'Offen')}</span>
                 </div>
-                <div style="font-size: 0.75em; color: #aaa; margin-bottom: 4px;">Kontakt: ${t.contact || t.email || 'N/A'} ${t.clientIP ? `| IP: ${t.clientIP}` : ''} | ${t.createdAt || ''}</div>
+                <div style="font-size: 0.75em; color: #aaa; margin-bottom: 4px;">Kontakt: ${escapeHtml(t.contact || t.email || 'N/A')} ${t.clientIP ? `| IP: ${escapeHtml(t.clientIP)}` : ''} | ${escapeHtml(t.createdAt || '')}</div>
                 <div style="font-size: 0.8em; color: #ddd; background: rgba(0,0,0,0.3); padding: 6px; border-radius: 4px; margin-bottom: 6px;">${escapeHtml(t.text)}</div>
                 ${t.banReason ? `<div style="font-size: 0.75em; color: #ff9999; margin-bottom: 4px;">Bann-Grund: ${escapeHtml(t.banReason)}</div>` : ''}
                 ${t.reply ? `<div style="font-size: 0.75em; color: #2ecc71; margin-bottom: 4px;">Antwort: ${escapeHtml(t.reply)}</div>` : ''}
@@ -620,9 +620,9 @@ window.openBanReasonModal = function(username) {
                 <span>🔨</span> Spieler bannen
             </h3>
             <p style="color: #bdc3c7; font-size: 0.85em; margin-bottom: 15px;">
-                Einen Grund für den Bann von <strong id="ban-reason-target-name" style="color: #3498db;">${username}</strong> eingeben:
+                Einen Grund für den Bann von <strong id="ban-reason-target-name" style="color: #3498db;">${escapeHtml(username)}</strong> eingeben:
             </p>
-            <input type="hidden" id="ban-reason-target-input" value="${username}">
+            <input type="hidden" id="ban-reason-target-input" value="${escapeHtml(username)}">
             <div style="margin-bottom: 15px; text-align: left;">
                 <label style="display: block; font-size: 0.8em; color: #aaa; margin-bottom: 5px;">Bann-Grund:</label>
                 <textarea id="ban-reason-text-input" class="auth-input" style="width: 100%; height: 80px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(10, 10, 15, 0.5); color: white; padding: 10px; font-family: inherit; box-sizing: border-box; resize: vertical;" placeholder="z. B. Beleidigung im Chat, Cheating, Spam..."></textarea>
@@ -727,14 +727,14 @@ window.renderAdminLogs = function(logs) {
 
         div.innerHTML = `
             <div style="display: flex; justify-content: space-between; font-weight: bold; color: #ff6b6b;">
-                <span>🛡️ Angriff auf Admin: ${log.targetAdminId || 'Admin'}</span>
-                <span style="font-size: 0.75em; color: #aaa; font-weight: normal;">${log.formattedTime || log.timestamp || ''}</span>
+                <span>🛡️ Angriff auf Admin: ${escapeHtml(log.targetAdminId || 'Admin')}</span>
+                <span style="font-size: 0.75em; color: #aaa; font-weight: normal;">${escapeHtml(log.formattedTime || log.timestamp || '')}</span>
             </div>
             <div style="color: #ddd; font-size: 0.85em;">
-                <strong>Verursacher (User-ID):</strong> ${log.executorId || log.executorName || 'Unbekannt'}
+                <strong>Verursacher (User-ID):</strong> ${escapeHtml(log.executorId || log.executorName || 'Unbekannt')}
             </div>
             <div style="color: #bbb; font-size: 0.8em;">
-                <strong>Grund / Parameter:</strong> ${log.reason || 'Keine Angabe'}
+                <strong>Grund / Parameter:</strong> ${escapeHtml(log.reason || 'Keine Angabe')}
             </div>
         `;
         listEl.appendChild(div);
@@ -1350,7 +1350,12 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
                     triggerGoldDustCelebration();
                 }
                 if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify({ type: 'solve_puzzle', playerName: getMyName() }));
+                    socket.send(JSON.stringify({
+                        type: 'solve_puzzle',
+                        playerName: getMyName(),
+                        puzzleId: ap.id,
+                        solution: { fr, fc, tr, tc }
+                    }));
                 }
                 window.activePuzzle = null;
             } else {
@@ -2750,7 +2755,7 @@ socket.onmessage = (e) => {
             const profileName = document.getElementById('profile-name');
             const pInput = document.getElementById('playerName');
 
-            if (navUserName) navUserName.innerHTML = `<span style="color: #f1c40f; font-weight: bold; text-shadow: 0 0 8px rgba(241,196,15,0.4);">👑 ${adminName} (Admin)</span>`;
+            if (navUserName) navUserName.innerHTML = `<span style="color: #f1c40f; font-weight: bold; text-shadow: 0 0 8px rgba(241,196,15,0.4);">👑 ${escapeHtml(adminName)} (Admin)</span>`;
             if (navUserPill) navUserPill.style.display = 'flex';
             if (navAuthBtn) navAuthBtn.style.display = 'none';
             if (adminPanel) adminPanel.style.display = 'block';
@@ -2770,7 +2775,7 @@ socket.onmessage = (e) => {
         }
         if (data.type === 'login_success') {
             const statusBox = document.getElementById('save-status');
-            if (statusBox) statusBox.innerHTML = "<span style='color: #00ff00;'>✅ Angemeldet als " + data.name + "</span>";
+            if (statusBox) statusBox.innerHTML = "<span style='color: #00ff00;'>✅ Angemeldet als " + escapeHtml(data.name) + "</span>";
             if (data.name) {
                 const pInput = document.getElementById('playerName');
                 if (pInput) pInput.value = data.name;
@@ -2899,7 +2904,7 @@ socket.onmessage = (e) => {
 
         if (data.type === 'login_error') {
             const statusBox = document.getElementById('save-status');
-            if (statusBox) statusBox.innerHTML = "<span style='color: #ff4444;'>❌ " + (data.text || "Login fehlgeschlagen") + "</span>";
+            if (statusBox) statusBox.innerHTML = "<span style='color: #ff4444;'>❌ " + escapeHtml(data.text || "Login fehlgeschlagen") + "</span>";
             if (data.text && (data.text.includes('gesperrt') || data.text.includes('gebannt') || data.text.includes('Sperre'))) {
                 if (typeof showBanOverlay === 'function') {
                     showBanOverlay(data.text);
@@ -2977,12 +2982,12 @@ socket.onmessage = (e) => {
                                     ${badge || `#${i + 1}`}
                                 </div>
                                 <div style="display: flex; flex-direction: column;">
-                                    <strong style="color: white; font-size: 1.05em; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">${p.name}</strong>
-                                    <span style="color: #95a5a6; font-size: 0.8em;">Lvl ${p.level || 1} • Elo: ${p.elo || 1200}</span>
+                                    <strong style="color: white; font-size: 1.05em; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">${escapeHtml(p.name)}</strong>
+                                    <span style="color: #95a5a6; font-size: 0.8em;">Lvl ${Number(p.level) || 1} • Elo: ${Number(p.elo) || 1200}</span>
                                 </div>
                             </div>
                             <div style="text-align: right;">
-                                <div style="color: #f1c40f; font-weight: bold; font-size: 1.1em;">${p.wins || 0} 🏆</div>
+                                <div style="color: #f1c40f; font-weight: bold; font-size: 1.1em;">${Number(p.wins) || 0} 🏆</div>
                                 <div style="color: #ccc; font-size: 0.7em;">Siege</div>
                             </div>
                         </div>`;
@@ -3000,10 +3005,10 @@ socket.onmessage = (e) => {
                     listEl.innerHTML = data.games.map(g => `
                         <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.85em;">
                             <div style="display: flex; flex-direction: column; gap: 2px;">
-                                <span style="font-weight: bold; color: #f1c40f;">Raum ${g.room}</span>
-                                <span style="color: #ccc;">⚪ ${g.whitePlayer} vs ⚫ ${g.blackPlayer}</span>
+                                <span style="font-weight: bold; color: #f1c40f;">Raum ${escapeHtml(g.room)}</span>
+                                <span style="color: #ccc;">⚪ ${escapeHtml(g.whitePlayer)} vs ⚫ ${escapeHtml(g.blackPlayer)}</span>
                             </div>
-                            <button onclick="joinSpectate('${g.room}')" style="background: #3498db; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.85em;">👁️ Zuschauen</button>
+                            <button onclick="joinSpectate(decodeURIComponent('${encodeURIComponent(g.room || '')}'))" style="background: #3498db; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.85em;">👁️ Zuschauen</button>
                         </div>
                     `).join('');
                 }
@@ -3713,7 +3718,7 @@ if (emoteMenuBtn && emotePopup) {
                     msgDiv.style.backgroundColor = "rgba(40, 167, 69, 0.15)";
                     msgDiv.style.borderLeft = "3px solid #28a745";
                     
-                    msgDiv.innerHTML = `<strong style="color: #28a745;">${myName}:</strong> <span style="color: white;">${message}</span>`;
+                    msgDiv.innerHTML = `<strong style="color: #28a745;">${escapeHtml(myName)}:</strong> <span style="color: white;">${escapeHtml(message)}</span>`;
                     
                     chatMessages.appendChild(msgDiv);
                     chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -4638,13 +4643,13 @@ window.renderAdminUsers = function(users) {
 
         const roleBadge = role === 'admin' 
             ? `<span style="color: #f1c40f; font-weight: bold; font-size: 0.8em;">👑 Admin</span>` 
-            : `<span style="color: #aaa; font-size: 0.8em;">${role}</span>`;
+            : `<span style="color: #aaa; font-size: 0.8em;">${escapeHtml(role)}</span>`;
 
         html += `
             <div style="background: rgba(255,255,255,0.04); border: 1px solid ${isBanned ? 'rgba(231,76,60,0.4)' : 'rgba(255,255,255,0.08)'}; border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; transition: background 0.2s;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div style="display: flex; align-items: center; gap: 6px;">
-                        <strong style="color: ${isBanned ? '#ff6b6b' : '#fff'}; font-size: 0.9em;">${name}</strong>
+                        <strong style="color: ${isBanned ? '#ff6b6b' : '#fff'}; font-size: 0.9em;">${escapeHtml(name)}</strong>
                         ${roleBadge}
                     </div>
                     <div>${statusBadge}</div>
@@ -4774,21 +4779,21 @@ window.renderAdminTickets = function(tickets, supportEmail) {
         html += `
             <div style="background: rgba(255,255,255,0.03); border: 1px solid ${isResolved ? 'rgba(46,204,113,0.3)' : 'rgba(241,196,15,0.3)'}; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; font-size: 0.82em;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                    <strong style="color: #fff;">${t.id || 'Ticket'}</strong>
-                    <span style="color: ${statusColor}; font-weight: bold; border: 1px solid ${statusColor}; padding: 1px 5px; border-radius: 3px; font-size: 0.75em;">${t.status || 'Offen'}</span>
+                    <strong style="color: #fff;">${escapeHtml(t.id || 'Ticket')}</strong>
+                    <span style="color: ${statusColor}; font-weight: bold; border: 1px solid ${statusColor}; padding: 1px 5px; border-radius: 3px; font-size: 0.75em;">${escapeHtml(t.status || 'Offen')}</span>
                 </div>
-                <div style="color: #ddd; margin-bottom: 3px;"><strong>Spieler/Kontakt:</strong> ${user} ${t.clientIP ? '(' + t.clientIP + ')' : ''}</div>
-                <div style="color: #aaa; background: rgba(0,0,0,0.2); padding: 5px 8px; border-radius: 4px; margin-bottom: 4px;">${t.text || ''}</div>
-                ${t.reply ? `<div style="color: #2ecc71; font-style: italic; margin-bottom: 4px;">Antwort: ${t.reply}</div>` : ''}
+                <div style="color: #ddd; margin-bottom: 3px;"><strong>Spieler/Kontakt:</strong> ${escapeHtml(user)} ${t.clientIP ? '(' + escapeHtml(t.clientIP) + ')' : ''}</div>
+                <div style="color: #aaa; background: rgba(0,0,0,0.2); padding: 5px 8px; border-radius: 4px; margin-bottom: 4px;">${escapeHtml(t.text || '')}</div>
+                ${t.reply ? `<div style="color: #2ecc71; font-style: italic; margin-bottom: 4px;">Antwort: ${escapeHtml(t.reply)}</div>` : ''}
                 <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75em; color: #777;">
-                    <span>${t.createdAt || ''}</span>
+                    <span>${escapeHtml(t.createdAt || '')}</span>
                     <div style="display: flex; gap: 4px;">
                         ${!isResolved ? `
-                            <button onclick="window.unbanTicket('${t.id}')" class="glass-btn success" style="padding: 2px 6px; font-size: 0.75em; cursor: pointer; background: rgba(46,204,113,0.25); border: 1px solid #2ecc71; color: #a3e4d7;">
+                            <button onclick="window.unbanTicket(decodeURIComponent('${encodeURIComponent(t.id || '')}'))" class="glass-btn success" style="padding: 2px 6px; font-size: 0.75em; cursor: pointer; background: rgba(46,204,113,0.25); border: 1px solid #2ecc71; color: #a3e4d7;">
                                 🔓 Entbannen & Genehmigen
                             </button>
                         ` : `
-                            <button onclick="window.unbanTicket('${t.id}')" class="glass-btn" style="padding: 2px 6px; font-size: 0.75em; cursor: pointer;">
+                            <button onclick="window.unbanTicket(decodeURIComponent('${encodeURIComponent(t.id || '')}'))" class="glass-btn" style="padding: 2px 6px; font-size: 0.75em; cursor: pointer;">
                                 🔄 Erneut Freischalten
                             </button>
                         `}
@@ -4876,10 +4881,10 @@ window.renderAdminLogs = function(logs) {
         html += `
             <div style="background: rgba(231,76,60,0.1); border: 1px solid rgba(231,76,60,0.3); border-radius: 4px; padding: 6px 8px;">
                 <div style="display: flex; justify-content: space-between; color: #ff6b6b; font-weight: bold;">
-                    <span>🛡️ ${item.event || item.type || 'Admin-Conflict'}</span>
-                    <span style="font-size: 0.75em; color: #aaa;">${item.formattedTime || ''}</span>
+                    <span>🛡️ ${escapeHtml(item.event || item.type || 'Admin-Conflict')}</span>
+                    <span style="font-size: 0.75em; color: #aaa;">${escapeHtml(item.formattedTime || '')}</span>
                 </div>
-                <div style="color: #ddd; margin-top: 2px;">${item.details || item.reason || ''}</div>
+                <div style="color: #ddd; margin-top: 2px;">${escapeHtml(item.details || item.reason || '')}</div>
             </div>
         `;
     });
@@ -4899,8 +4904,8 @@ window.renderAdminElixir = function(queue) {
     queue.forEach(item => {
         html += `
             <div style="background: rgba(155,89,182,0.1); border: 1px solid rgba(155,89,182,0.3); border-radius: 4px; padding: 6px 8px; margin-bottom: 4px; display: flex; justify-content: space-between;">
-                <span style="color: #d2b4de; font-weight: bold;">${item.playerName || 'Spieler'}</span>
-                <span style="color: #aaa; font-size: 0.8em;">${item.timeControl || '10 min'}</span>
+                <span style="color: #d2b4de; font-weight: bold;">${escapeHtml(item.playerName || 'Spieler')}</span>
+                <span style="color: #aaa; font-size: 0.8em;">${escapeHtml(item.timeControl || '10 min')}</span>
             </div>
         `;
     });
@@ -5006,18 +5011,22 @@ window.renderSavedGamesList = function() {
         return;
     }
     
-    listEl.innerHTML = savedGames.map(game => `
+    listEl.innerHTML = savedGames.map(game => {
+        const safeGameName = escapeHtml(game.name || 'Partie');
+        const encGameId = encodeURIComponent(game.id || '');
+        return `
         <div style="background: rgba(255,255,255,0.05); padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center;">
             <div style="display: flex; flex-direction: column; gap: 3px; overflow: hidden;">
-                <span style="font-weight: bold; color: #3498db; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${game.name}">${game.name}</span>
-                <span style="font-size: 0.75em; color: #888;">${new Date(game.date).toLocaleString()} | Züge: ${game.history ? game.history.length : 0}</span>
+                <span style="font-weight: bold; color: #3498db; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${safeGameName}">${safeGameName}</span>
+                <span style="font-size: 0.75em; color: #888;">${escapeHtml(new Date(game.date).toLocaleString())} | Züge: ${game.history ? Number(game.history.length) : 0}</span>
             </div>
             <div style="display: flex; gap: 4px; flex-shrink: 0;">
-                <button onclick="loadSavedGame('${game.id}')" class="glass-btn success" style="padding: 4px 8px; font-size: 0.8em; border-radius: 4px; border: none; cursor: pointer;">Laden</button>
-                <button onclick="deleteSavedGame('${game.id}')" class="glass-btn danger" style="padding: 4px 8px; font-size: 0.8em; border-radius: 4px; border: none; cursor: pointer;">X</button>
+                <button onclick="loadSavedGame(decodeURIComponent('${encGameId}'))" class="glass-btn success" style="padding: 4px 8px; font-size: 0.8em; border-radius: 4px; border: none; cursor: pointer;">Laden</button>
+                <button onclick="deleteSavedGame(decodeURIComponent('${encGameId}'))" class="glass-btn danger" style="padding: 4px 8px; font-size: 0.8em; border-radius: 4px; border: none; cursor: pointer;">X</button>
             </div>
         </div>
-    `).reverse().join('');
+    `;
+    }).reverse().join('');
 };
 
 // Initialize list on load

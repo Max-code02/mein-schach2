@@ -1,172 +1,286 @@
 rules_version = '2';
 
 service cloud.firestore {
-match /databases/{database}/documents {
+  match /databases/{database}/documents {
 
-// ------------------------------------------------------------
-// AUTH
-// ------------------------------------------------------------
+    // ------------------------------------------------------------
+    // GLOBAL DEFAULT DENY (Zero-Trust Catch-All)
+    // ------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
 
-function isSignedIn() {
-  return request.auth != null;
-}
+    // ------------------------------------------------------------
+    // AUTH & IDENTITY HELPERS
+    // ------------------------------------------------------------
 
-function isMasterAdmin() {
-  return isSignedIn()
-    && (
-      (request.auth.token.email != null && request.auth.token.email.lower() == 'max.schule13@gmail.com')
-      || request.auth.token.admin == true
-    );
-}
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
 
-// ------------------------------------------------------------
-// PLAYERS
-// ------------------------------------------------------------
+    function isNonAnonymous() {
+      return isSignedIn()
+        && request.auth.token != null
+        && ('firebase' in request.auth.token)
+        && ('sign_in_provider' in request.auth.token.firebase)
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
 
-match /players/{playerId} {
+    function isOwner(userId) {
+      return isNonAnonymous() && request.auth.uid == userId;
+    }
 
-  // Spielerprofile dürfen gelesen werden.
-  allow read: if true;
+    // Admin-Rechte werden NIEMALS über beliebige Custom Claims oder Client-Felder bezogen,
+    // sondern ausschließlich über verifizierte Master-Admin-E-Mail oder eine
+    // nicht durch Clients beschreibbare /admins/{uid}-Allowlist.
+    function isMasterAdmin() {
+      return isNonAnonymous()
+        && (
+          (
+            ('email' in request.auth.token)
+            && ('email_verified' in request.auth.token)
+            && request.auth.token.email is string
+            && request.auth.token.email_verified == true
+            && request.auth.token.email.lower() == 'max.schule13@gmail.com'
+          )
+          || exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        );
+    }
 
-  // Ein normaler Nutzer darf nur sein eigenes Profil anlegen.
-  // Kritische Rechte/Felder dürfen dabei niemals gesetzt werden.
-  allow create: if isSignedIn()
-    && request.auth.uid == playerId
-    && (
-      !('role' in request.resource.data)
-      || request.resource.data.role == 'user'
-      || request.resource.data.role == 'Gast'
-    )
-    && (
-      !('is_owner' in request.resource.data)
-      || request.resource.data.is_owner == false
-    )
-    && (
-      !('is_banned' in request.resource.data)
-      || request.resource.data.is_banned == false
-    )
-    && !('ip_ban' in request.resource.data)
-    && !('ban_reason' in request.resource.data);
+    // ------------------------------------------------------------
+    // VALIDATION HELPERS (ID-Poisoning & Schema Guards)
+    // ------------------------------------------------------------
 
-  // Normale Nutzer dürfen ausschließlich harmlose Profildaten ändern.
-  // Stats, Rollen, Bans usw. bleiben serverseitig.
-  allow update: if isMasterAdmin()
-    || (
-      isSignedIn()
-      && request.auth.uid == playerId
-      && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-        'avatar',
-        'selectedTheme',
-        'board_theme',
-        'piece_theme'
-      ])
-    );
+    function isValidId(id) {
+      return id is string
+        && id.size() >= 1
+        && id.size() <= 128
+        && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
 
-  // Ein Nutzer darf sein eigenes Profil nicht löschen.
-  // Nur der Server/Admin darf löschen.
-  allow delete: if isMasterAdmin();
-}
+    function isValidLeaderboardId(id) {
+      return id is string
+        && id.size() >= 1
+        && id.size() <= 64
+        && id.matches('^[a-zA-Z0-9_\\.\\- ]+$');
+    }
 
-// ------------------------------------------------------------
-// LEADERBOARD
-// ------------------------------------------------------------
+    function isValidOptShortString(val, maxLen) {
+      return val is string && val.size() <= maxLen;
+    }
 
-match /leaderboard/{entryDocId} {
+    function isReservedUsername(name) {
+      return name.lower() in [
+        'admin', 'administrator', 'superadmin', 'moderator', 'mod',
+        'helper', 'staff', 'team', 'system', 'root', 'server',
+        'support', 'official', 'owner', 'eigentümer', 'max',
+        'superuser', 'ghostplayer', 'bot', 'gast', 'gastspieler',
+        'anonym', 'anonymous', 'null', 'undefined', 'schachlive', 'prochess'
+      ];
+    }
 
-  // Rangliste darf öffentlich gelesen werden.
-  allow read: if true;
+    function isValidPlayerCreate(data, playerId) {
+      return data.keys().hasAll(['username', 'uid', 'role', 'elo', 'wins', 'losses', 'level', 'xp'])
+        && data.keys().hasOnly([
+          'username', 'uid', 'role', 'elo', 'wins', 'losses', 'level', 'xp',
+          'coins', 'avatar', 'selectedTheme', 'board_theme', 'piece_theme', 'createdAt'
+        ])
+        && data.uid is string
+        && data.uid == request.auth.uid
+        && data.uid == playerId
+        && data.username is string
+        && data.username.size() >= 2
+        && data.username.size() <= 30
+        && data.username.matches('^[a-zA-Z0-9_\\.\\- ]+$')
+        && (!isReservedUsername(data.username) || isMasterAdmin())
+        && data.role == 'user'
+        && data.elo == 1200
+        && data.wins == 0
+        && data.losses == 0
+        && data.level == 1
+        && data.xp == 0
+        && (!('coins' in data) || data.coins == 1000)
+        && (!('avatar' in data) || isValidOptShortString(data.avatar, 200))
+        && (!('selectedTheme' in data) || isValidOptShortString(data.selectedTheme, 64))
+        && (!('board_theme' in data) || isValidOptShortString(data.board_theme, 64))
+        && (!('piece_theme' in data) || isValidOptShortString(data.piece_theme, 64))
+        && (!('createdAt' in data) || data.createdAt == request.time);
+    }
 
-  // Schreiben ausschließlich über Server/Admin.
-  allow write: if isMasterAdmin();
-}
+    function isValidPlayerCosmeticUpdate(incoming, existing) {
+      return incoming.diff(existing).affectedKeys().hasOnly([
+          'avatar', 'selectedTheme', 'board_theme', 'piece_theme'
+        ])
+        && (!('uid' in existing) || incoming.uid == existing.uid)
+        && (!('role' in existing) || incoming.role == existing.role)
+        && (!('elo' in existing) || incoming.elo == existing.elo)
+        && (!('wins' in existing) || incoming.wins == existing.wins)
+        && (!('losses' in existing) || incoming.losses == existing.losses)
+        && (!('level' in existing) || incoming.level == existing.level)
+        && (!('xp' in existing) || incoming.xp == existing.xp)
+        && (!('coins' in existing) || incoming.coins == existing.coins)
+        && (!('is_banned' in existing) || incoming.is_banned == existing.is_banned)
+        && (!('avatar' in incoming) || isValidOptShortString(incoming.avatar, 200))
+        && (!('selectedTheme' in incoming) || isValidOptShortString(incoming.selectedTheme, 64))
+        && (!('board_theme' in incoming) || isValidOptShortString(incoming.board_theme, 64))
+        && (!('piece_theme' in incoming) || isValidOptShortString(incoming.piece_theme, 64));
+    }
 
-// ------------------------------------------------------------
-// PRIVATE USER DATA
-// ------------------------------------------------------------
+    function isValidPrivateUserCreate(data, userId) {
+      return data.keys().hasAll(['uid', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'preferences', 'savedGames', 'notes', 'updatedAt'])
+        && data.uid is string
+        && data.uid == request.auth.uid
+        && data.uid == userId
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time
+        && (!('preferences' in data) || (data.preferences is map && data.preferences.size() <= 20))
+        && (!('savedGames' in data) || (data.savedGames is list && data.savedGames.size() <= 50))
+        && (!('notes' in data) || isValidOptShortString(data.notes, 2000));
+    }
 
-match /users_private/{userId} {
+    function isValidPrivateUserUpdate(incoming, existing) {
+      return incoming.diff(existing).affectedKeys().hasOnly([
+          'preferences', 'savedGames', 'notes', 'updatedAt'
+        ])
+        && incoming.uid == existing.uid
+        && incoming.uid == request.auth.uid
+        && incoming.updatedAt is timestamp
+        && incoming.updatedAt == request.time
+        && (!('preferences' in incoming) || (incoming.preferences is map && incoming.preferences.size() <= 20))
+        && (!('savedGames' in incoming) || (incoming.savedGames is list && incoming.savedGames.size() <= 50))
+        && (!('notes' in incoming) || isValidOptShortString(incoming.notes, 2000));
+    }
 
-  allow read, write: if isSignedIn()
-    && request.auth.uid == userId;
-}
+    function isValidTicketCreate(data) {
+      return data.keys().hasAll(['ownerUid', 'text', 'status', 'createdAt'])
+        && data.keys().hasOnly(['ownerUid', 'text', 'contact', 'user', 'status', 'createdAt'])
+        && data.ownerUid is string
+        && data.ownerUid == request.auth.uid
+        && data.text is string
+        && data.text.size() >= 1
+        && data.text.size() <= 2000
+        && data.status == 'Offen'
+        && data.createdAt is timestamp
+        && data.createdAt == request.time
+        && (!('contact' in data) || isValidOptShortString(data.contact, 100))
+        && (!('user' in data) || isValidOptShortString(data.user, 40));
+    }
 
-// ------------------------------------------------------------
-// BANS
-// ------------------------------------------------------------
+    function isValidTicketUserUpdate(incoming, existing) {
+      return existing.ownerUid == request.auth.uid
+        && existing.status == 'Offen'
+        && incoming.diff(existing).affectedKeys().hasOnly(['text', 'contact'])
+        && incoming.ownerUid == existing.ownerUid
+        && incoming.status == existing.status
+        && incoming.createdAt == existing.createdAt
+        && incoming.text is string
+        && incoming.text.size() >= 1
+        && incoming.text.size() <= 2000
+        && (!('contact' in incoming) || isValidOptShortString(incoming.contact, 100));
+    }
 
-match /bans/{banId} {
+    // ------------------------------------------------------------
+    // ADMINS (Nur über Server/Console verwaltete Admin-Allowlist)
+    // ------------------------------------------------------------
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && isOwner(adminId);
+      allow list, create, update, delete: if false;
+    }
 
-  // Bann-Daten sind nicht öffentlich bzw. nur Admin.
-  allow read, write: if isMasterAdmin();
-}
+    // ------------------------------------------------------------
+    // LEADERBOARD (Öffentliche, bereinigte Highscore-Projektion ohne PII)
+    // ------------------------------------------------------------
+    match /leaderboard/{entryDocId} {
+      allow get: if isValidLeaderboardId(entryDocId);
+      allow list: if true;
+      allow create, update, delete: if isMasterAdmin();
+    }
 
-// ------------------------------------------------------------
-// GAMES
-// ------------------------------------------------------------
+    // ------------------------------------------------------------
+    // PLAYERS (Private Spielerprofile — nur Besitzer oder MasterAdmin)
+    // ------------------------------------------------------------
+    match /players/{playerId} {
+      allow get: if isValidId(playerId) && (isMasterAdmin() || isOwner(playerId));
+      allow list: if isMasterAdmin();
+      allow create: if isValidId(playerId) && isOwner(playerId) && isValidPlayerCreate(request.resource.data, playerId);
+      allow update: if isValidId(playerId) && (isMasterAdmin() || (isOwner(playerId) && isValidPlayerCosmeticUpdate(request.resource.data, resource.data)));
+      allow delete: if isValidId(playerId) && isMasterAdmin();
+    }
 
-match /games/{gameId} {
+    // ------------------------------------------------------------
+    // USERS_PRIVATE (Streng isolierte Nutzerdaten mit Schema-Limit)
+    // ------------------------------------------------------------
+    match /users_private/{userId} {
+      allow get: if isValidId(userId) && (isMasterAdmin() || isOwner(userId));
+      allow list: if isMasterAdmin();
+      allow create: if isValidId(userId) && isOwner(userId) && isValidPrivateUserCreate(request.resource.data, userId);
+      allow update: if isValidId(userId) && isOwner(userId) && isValidPrivateUserUpdate(request.resource.data, resource.data);
+      allow delete: if isValidId(userId) && (isMasterAdmin() || isOwner(userId));
+    }
 
-  // Partien dürfen gelesen werden.
-  // Neue/ändernde Daten kommen vom Server.
-  allow read: if isSignedIn();
-  allow write: if isMasterAdmin();
-}
+    // ------------------------------------------------------------
+    // TICKETS (Eindeutiges ownerUid-Feld, geschlossene Feldliste)
+    // ------------------------------------------------------------
+    match /tickets/{ticketId} {
+      allow get: if isValidId(ticketId) && (
+        isMasterAdmin() || (isNonAnonymous() && resource.data.ownerUid == request.auth.uid)
+      );
+      allow list: if isMasterAdmin() || (
+        isNonAnonymous() && resource.data.ownerUid == request.auth.uid
+      );
+      allow create: if isValidId(ticketId) && isNonAnonymous() && isValidTicketCreate(request.resource.data);
+      allow update: if isValidId(ticketId) && (
+        isMasterAdmin() || (isNonAnonymous() && isValidTicketUserUpdate(request.resource.data, resource.data))
+      );
+      allow delete: if isValidId(ticketId) && isMasterAdmin();
+    }
 
-// ------------------------------------------------------------
-// MESSAGES
-// ------------------------------------------------------------
+    // ------------------------------------------------------------
+    // MESSAGES (Nicht öffentlich abfragbar — Auslieferung über Server/WS)
+    // ------------------------------------------------------------
+    match /messages/{messageId} {
+      allow get: if isValidId(messageId) && isMasterAdmin();
+      allow list: if isMasterAdmin();
+      allow create, update, delete: if isMasterAdmin();
+    }
 
-match /messages/{messageId} {
+    // ------------------------------------------------------------
+    // SYSTEM (Nur connection_health für angemeldete Nutzer per get)
+    // ------------------------------------------------------------
+    match /system/{docId} {
+      allow get: if isValidId(docId) && (
+        isMasterAdmin() || (isNonAnonymous() && docId == 'connection_health')
+      );
+      allow list: if isMasterAdmin();
+      allow create, update, delete: if isMasterAdmin();
+    }
 
-  allow read: if true;
-  allow write: if isMasterAdmin();
-}
+    // ------------------------------------------------------------
+    // GAMES, BANS & ADMIN LOGS (Ausschließlich Server / MasterAdmin)
+    // ------------------------------------------------------------
+    match /games/{gameId} {
+      allow get: if isValidId(gameId) && isMasterAdmin();
+      allow list: if isMasterAdmin();
+      allow create, update, delete: if isMasterAdmin();
+    }
 
-// ------------------------------------------------------------
-// TICKETS
-// ------------------------------------------------------------
+    match /bans/{banId} {
+      allow get: if isValidId(banId) && isMasterAdmin();
+      allow list: if isMasterAdmin();
+      allow create, update, delete: if isMasterAdmin();
+    }
 
-match /tickets/{ticketId} {
+    match /admin_conflicts/{logId} {
+      allow get: if isValidId(logId) && isMasterAdmin();
+      allow list: if isMasterAdmin();
+      allow create, update, delete: if isMasterAdmin();
+    }
 
-  // Nutzer dürfen nur eigene Tickets lesen/anlegen, Admin darf alle lesen.
-  allow read: if isMasterAdmin() || (
-    isSignedIn() && (
-      ('userId' in resource.data && resource.data.userId == request.auth.uid) ||
-      ('uid' in resource.data && resource.data.uid == request.auth.uid)
-    )
-  );
-
-  allow create: if isSignedIn() && (
-    ('userId' in request.resource.data && request.resource.data.userId == request.auth.uid) ||
-    ('uid' in request.resource.data && request.resource.data.uid == request.auth.uid)
-  );
-
-  // Bestehende Tickets dürfen nur vom Besitzer geändert werden.
-  allow update: if isMasterAdmin() || (
-    isSignedIn() && (
-      ('userId' in resource.data && resource.data.userId == request.auth.uid) ||
-      ('uid' in resource.data && resource.data.uid == request.auth.uid)
-    )
-  );
-
-  allow delete: if isMasterAdmin();
-}
-
-// ------------------------------------------------------------
-// SYSTEM
-// ------------------------------------------------------------
-
-match /system/{docId} {
-
-  allow read: if true;
-  allow write: if isMasterAdmin();
-}
-
-// ------------------------------------------------------------
-// DEFAULT DENY
-// ------------------------------------------------------------
-// Alles, was oben nicht ausdrücklich erlaubt wurde,
-// ist automatisch verboten.
-
-}
+    match /admin_logs/{logId} {
+      allow get: if isValidId(logId) && isMasterAdmin();
+      allow list: if isMasterAdmin();
+      allow create, update, delete: if isMasterAdmin();
+    }
+  }
 }

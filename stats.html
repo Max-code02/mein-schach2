@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="google-site-verification" content="0JpVd6y2K5Tg-MRFKbDSECCUZ5eNc-WvGvUzDrlcIb4" />
+<meta name="strix-verification" content="strix-verify-d42958f109fb3690dfb44210a3c9038e">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="style.css"> 
 <title>Schach Live | Globales Leaderboard</title>
@@ -84,6 +85,16 @@ background: #007bff;
 </div>
 
 <script type="module">
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
     async function loadStats() {
         const tbody = document.getElementById('leaderboard-body');
         const apiBaseUrl = window.location.hostname.includes('github.io') ? 'https://mein-schach2.onrender.com' : '';
@@ -92,18 +103,23 @@ background: #007bff;
             const data = await res.json();
             if (data.success && data.list && data.list.length > 0) {
                 tbody.innerHTML = data.list.map((p, i) => {
-                    let badge = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
-                    let color = i === 0 ? '#f1c40f' : i === 1 ? '#bdc3c7' : i === 2 ? '#cd7f32' : 'rgba(255,255,255,0.7)';
-                    let bg = i === 0 ? 'linear-gradient(90deg, rgba(241,196,15,0.15) 0%, rgba(0,0,0,0) 100%)' : 'rgba(255,255,255,0.02)';
-                    
+                    const badge = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
+                    const color = i === 0 ? '#f1c40f' : i === 1 ? '#bdc3c7' : i === 2 ? '#cd7f32' : 'rgba(255,255,255,0.7)';
+                    const bg = i === 0 ? 'linear-gradient(90deg, rgba(241,196,15,0.15) 0%, rgba(0,0,0,0) 100%)' : 'rgba(255,255,255,0.02)';
+                    const safeName = escapeHtml(p.name || 'Spieler');
+                    const safeRole = escapeHtml(p.role || 'Gast');
+                    const safeLevel = Number(p.level) || 1;
+                    const safeElo = Number(p.elo) || 1200;
+                    const safeWins = Number(p.wins) || 0;
+
                     return `
                     <tr style="background: ${bg}; transition: 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='${bg}'">
                         <td style="font-size: 1.5em; font-weight: bold; color: ${color}; text-align: center;">${badge || `#${i + 1}`}</td>
                         <td>
-                            <div style="font-weight: bold; color: white; font-size: 1.1em;">${p.name} <span style="font-size: 0.6em; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; margin-left: 5px;">${p.role || 'Gast'}</span></div>
-                            <div style="color: #95a5a6; font-size: 0.8em;">Lvl ${p.level || 1} • Elo: ${p.elo || 1200}</div>
+                            <div style="font-weight: bold; color: white; font-size: 1.1em;">${safeName} <span style="font-size: 0.6em; background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; margin-left: 5px;">${safeRole}</span></div>
+                            <div style="color: #95a5a6; font-size: 0.8em;">Lvl ${safeLevel} • Elo: ${safeElo}</div>
                         </td>
-                        <td style="font-size: 1.2em; font-weight: bold; color: #f1c40f;">${p.wins || 0} 🏆</td>
+                        <td style="font-size: 1.2em; font-weight: bold; color: #f1c40f;">${safeWins} 🏆</td>
                     </tr>
                 `}).join('');
                 return;
@@ -113,7 +129,6 @@ background: #007bff;
         }
     }
 
-    // Simulierter Go-Core-Ticker wie in deiner index.html
     setInterval(() => {
         const tasks = ["Analyse-Kanal stabil", "Mutex-Sperre geprüft", "Concurrency optimal"];
         const randomTask = tasks[Math.floor(Math.random() * tasks.length)];
@@ -123,11 +138,18 @@ background: #007bff;
 
     loadStats();
 </script>
-        <div class="glass-panel">
-<span>💬 <strong>Community</strong></span>
-<a href="chat.html" style="display: block; background: #3498db; color: white; text-align: center; padding: 10px; border-radius: 8px; text-decoration: none; margin-top: 10px; font-weight: bold;">
-    🌐 Zum Globalen Chatroom
-</a>
+<div class="glass-panel" style="width: 100%; max-width: 650px; margin: 0 auto 20px auto; box-sizing: border-box;">
+    <span>💬 <strong>Community</strong></span>
+    <a href="chat.html" style="display: block; background: #3498db; color: white; text-align: center; padding: 10px; border-radius: 8px; text-decoration: none; margin-top: 10px; font-weight: bold;">
+        🌐 Zum Globalen Chatroom
+    </a>
+    <div style="margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; font-size: 0.85em;">
+        <a href="AGB.html" style="color: #aaa; text-decoration: none;">📜 AGB</a>
+        <span style="color: rgba(255,255,255,0.2);">|</span>
+        <a href="datenschutz.html" style="color: #aaa; text-decoration: none;">🔒 Datenschutz</a>
+        <span style="color: rgba(255,255,255,0.2);">|</span>
+        <a href="impressum.html" style="color: #aaa; text-decoration: none;">⚖️ Impressum</a>
+    </div>
 </div>
 </body>
 </html>
