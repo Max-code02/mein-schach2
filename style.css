@@ -3,9 +3,9 @@
     --success: #28a745;
     --warning: #f1c40f;
     --danger: #dc3545;
-    --bg: #0d0d0d;
-    --board-white: rgba(255, 255, 255, 0.15);
-    --board-black: rgba(0, 0, 0, 0.25);
+    --bg: #161512;
+    --board-white: #eeeed2;
+    --board-black: #769656;
 }
 
 body { 
@@ -174,17 +174,13 @@ body.glass-effects-enabled .top-header {
     height: 100%;
     aspect-ratio: 1 / 1;
     box-sizing: border-box;
-    border: 8px solid rgba(255, 255, 255, 0.15); 
-    border-radius: 8px;
-    background: rgba(10, 10, 15, 0.05);
-    backdrop-filter: blur(2px) saturate(120%);
-    -webkit-backdrop-filter: blur(2px) saturate(120%);
-    box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 30px rgba(255, 255, 255, 0.1), inset 0 0 20px rgba(0,0,0,0.5);
-    transition: transform 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    border: 4px solid #2b2926; 
+    border-radius: 6px;
+    background: #2b2926;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.55);
+    overflow: hidden;
+    touch-action: none;
 }
-
-.flipped { transform: rotate(180deg); }
-.flipped .square img { transform: rotate(180deg); }
 
 .square { 
     width: 100%; 
@@ -215,48 +211,40 @@ body.glass-effects-enabled .top-header {
 .black-sq { background-color: var(--board-black); }
 
 .move-dot {
-    width: 24px;
-    height: 24px;
-    background: transparent;
-    border: 3px solid var(--move-dot-color, #f1c40f);
+    width: 32%;
+    height: 32%;
+    background: var(--move-dot-color, rgba(0, 0, 0, 0.18));
+    border: none;
     border-radius: 50%;
     position: absolute;
     z-index: 10;
     pointer-events: none;
-    opacity: 0.75;
-    transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), border-color 0.25s ease, box-shadow 0.25s ease, opacity 0.25s;
+    transition: transform 0.15s ease, opacity 0.15s ease;
 }
 
 .square:hover .move-dot {
-    transform: scale(1.35);
-    border-color: var(--move-dot-color, #f1c40f);
-    box-shadow: 0 0 10px var(--move-dot-color, #f1c40f);
-    opacity: 1;
+    transform: scale(1.18);
 }
 
 .move-dot.capture-dot {
-    width: 52px;
-    height: 52px;
-    border: 4px solid rgba(231, 76, 60, 0.55);
+    width: 86%;
+    height: 86%;
+    border: 5px solid rgba(0, 0, 0, 0.18);
     background: transparent;
-    box-shadow: inset 0 0 8px rgba(231, 76, 60, 0.2);
+    box-sizing: border-box;
 }
 
 .square:hover .move-dot.capture-dot {
-    transform: scale(1.1);
-    border-color: rgba(231, 76, 60, 0.9);
-    box-shadow: 0 0 12px rgba(231, 76, 60, 0.5), inset 0 0 12px rgba(231, 76, 60, 0.4);
+    transform: scale(1.04);
+    border-color: rgba(0, 0, 0, 0.28);
 }
 
 .selected {
-    background-color: rgba(241, 196, 15, 0.3) !important;
-    box-shadow: inset 0 0 18px rgba(241, 196, 15, 0.65), 0 0 8px rgba(241, 196, 15, 0.3) !important;
-    transition: all 0.2s ease;
+    background-color: rgba(245, 246, 130, 0.65) !important;
 }
 
 .in-check {
-    background-color: rgba(231, 76, 60, 0.4) !important;
-    animation: pulse-red-glow 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite !important;
+    background: radial-gradient(circle, rgba(235, 45, 45, 0.95) 0%, rgba(200, 20, 20, 0.6) 55%, transparent 75%) !important;
 }
 
 @keyframes pulse-red-glow {
@@ -549,39 +537,52 @@ button:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); 
     color: rgba(255, 255, 255, 0.35) !important;
 }
 
-/* Piece Themes using high-performance CSS filters */
+/* Piece Themes using high-performance CSS filters (supports both Wikimedia URLs & Lichess data-piece-color) */
 #chess-board.piece-goldsilver img {
     filter: drop-shadow(1px 2px 2px rgba(0,0,0,0.4));
 }
 /* White pieces are Gold */
+#chess-board.piece-goldsilver img[data-piece-color="white"],
 #chess-board.piece-goldsilver [src*="lt45.svg"],
 #chess-board.piece-goldsilver [src*="plt45.svg"] {
     filter: drop-shadow(1px 2px 3px rgba(0,0,0,0.4)) sepia(0.85) saturate(3.5) hue-rotate(-5deg) brightness(1.05) contrast(1.15) !important;
 }
 /* Black pieces are Silver/Platinum */
+#chess-board.piece-goldsilver img[data-piece-color="black"],
 #chess-board.piece-goldsilver [src*="dt45.svg"],
 #chess-board.piece-goldsilver [src*="pdt45.svg"] {
     filter: drop-shadow(1px 2px 3px rgba(0,0,0,0.5)) grayscale(1) brightness(1.05) contrast(1.25) !important;
 }
 
 /* Neon pieces */
+#chess-board.piece-neon img[data-piece-color="white"],
 #chess-board.piece-neon [src*="lt45.svg"],
 #chess-board.piece-neon [src*="plt45.svg"] {
     filter: drop-shadow(0 0 6px rgba(0, 240, 255, 0.95)) brightness(1.3) !important;
 }
+#chess-board.piece-neon img[data-piece-color="black"],
 #chess-board.piece-neon [src*="dt45.svg"],
 #chess-board.piece-neon [src*="pdt45.svg"] {
     filter: drop-shadow(0 0 6px rgba(255, 0, 128, 0.95)) brightness(1.3) !important;
 }
 
 /* Vintage wooden sepia pieces */
+#chess-board.piece-vintage img[data-piece-color="white"],
 #chess-board.piece-vintage [src*="lt45.svg"],
 #chess-board.piece-vintage [src*="plt45.svg"] {
     filter: drop-shadow(1px 2px 2px rgba(0,0,0,0.35)) sepia(0.6) saturate(1.8) hue-rotate(15deg) brightness(1.05) !important;
 }
+#chess-board.piece-vintage img[data-piece-color="black"],
 #chess-board.piece-vintage [src*="dt45.svg"],
 #chess-board.piece-vintage [src*="pdt45.svg"] {
     filter: drop-shadow(1px 2px 3px rgba(0,0,0,0.5)) sepia(0.9) saturate(1.3) hue-rotate(-15deg) brightness(0.65) contrast(1.25) !important;
+}
+
+/* Crisp pixel-style pieces */
+#chess-board.piece-pixel img {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    filter: contrast(1.22) saturate(1.18) drop-shadow(2px 2px 0 rgba(0,0,0,0.5)) !important;
 }
 
 /* ==========================================================================
@@ -696,19 +697,17 @@ button:hover { background: rgba(255,255,255,0.15); transform: translateY(-1px); 
     }
 }
 
-/* Highly specific overrides to make last-move and premove visible on all themes with !important */
+/* Highly specific overrides to make last-move and premove crisp like Chess.com */
 #chess-board .square.white-sq.last-move,
 #chess-board .square.black-sq.last-move,
 #chess-board .square.last-move {
-    background: rgba(241, 196, 15, 0.3) !important;
-    box-shadow: inset 0 0 0 5px rgba(241, 196, 15, 0.8) !important;
+    background-image: linear-gradient(rgba(245, 246, 130, 0.52), rgba(245, 246, 130, 0.52)) !important;
 }
 
 #chess-board .square.white-sq.premove,
 #chess-board .square.black-sq.premove,
 #chess-board .square.premove {
-    background: rgba(231, 76, 60, 0.3) !important;
-    box-shadow: inset 0 0 0 5px rgba(231, 76, 60, 0.8) !important;
+    background-image: linear-gradient(rgba(235, 97, 80, 0.6), rgba(235, 97, 80, 0.6)) !important;
 }
 
 /* Neon theme glow shedding and piece styling */
@@ -1651,3 +1650,479 @@ body {
         justify-content: center;
     }
 }
+
+/* ==========================================================================
+   ♟️ CHESS.COM PROFESSIONAL BOARD MECHANICS, EVAL BAR, PLAYER BARS & HISTORY
+   ========================================================================== */
+
+.board-section {
+    max-width: 560px;
+}
+
+.board-status-strip {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    gap: 8px;
+    padding: 6px 12px;
+    margin-bottom: 8px;
+    background: #21201d;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+
+.opening-badge {
+    font-size: 0.76rem;
+    color: #bab8b5;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 3px 9px;
+    border-radius: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 240px;
+}
+
+.board-area-column {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.board-area-column #player-bar-black { order: 1; }
+.board-area-column #board-stage-row { order: 2; }
+.board-area-column #player-bar-white { order: 3; }
+
+.board-area-column.flipped-layout #player-bar-white { order: 1; }
+.board-area-column.flipped-layout #board-stage-row { order: 2; }
+.board-area-column.flipped-layout #player-bar-black { order: 3; }
+
+.cc-player-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #21201d;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 7px 12px;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease;
+}
+
+.cc-player-bar.active-turn {
+    border-color: rgba(129, 182, 76, 0.55);
+}
+
+.cc-player-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.cc-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+.cc-avatar-white {
+    background: #eeeed2;
+    color: #262421;
+}
+
+.cc-avatar-black {
+    background: #363431;
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.cc-player-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.cc-player-name-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.cc-player-name {
+    font-weight: 700;
+    font-size: 0.92rem;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cc-player-elo {
+    font-size: 0.76rem;
+    color: #8c8a87;
+    font-variant-numeric: tabular-nums;
+}
+
+.cc-captured-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 16px;
+    font-size: 0.8rem;
+}
+
+.cc-captured-pieces {
+    color: #d6d4d0;
+    letter-spacing: -1px;
+    line-height: 1;
+}
+
+.cc-material-diff {
+    color: #81b64c;
+    font-weight: 700;
+    font-size: 0.74rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.cc-clock {
+    width: auto !important;
+    flex-direction: row !important;
+}
+
+.cc-clock .time,
+.mobile-clock .time {
+    font-size: 1.15rem !important;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    padding: 6px 12px !important;
+    border-radius: 6px !important;
+    min-width: 68px;
+    text-align: center;
+}
+
+/* Board Stage Row & Evaluation Bar */
+.board-stage-row {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.board-stage-row #board-wrapper {
+    flex: 1;
+    min-width: 0;
+}
+
+.eval-bar-container {
+    width: 24px;
+    background: #2b2926;
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    flex-shrink: 0;
+}
+
+.eval-bar-container.flipped-eval {
+    justify-content: flex-start;
+}
+
+.eval-bar-white {
+    width: 100%;
+    background: #eeeed2;
+    transition: height 0.2s ease, width 0.2s ease;
+}
+
+.eval-score-label {
+    position: absolute;
+    left: 50%;
+    bottom: 4px;
+    transform: translateX(-50%);
+    font-size: 9px;
+    font-weight: 800;
+    color: #161512;
+    background: rgba(238, 238, 210, 0.9);
+    padding: 1px 2px;
+    border-radius: 2px;
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+    z-index: 3;
+}
+
+.eval-bar-container.eval-black-adv .eval-score-label {
+    bottom: auto;
+    top: 4px;
+    color: #ffffff;
+    background: rgba(43, 41, 38, 0.9);
+}
+
+/* Horizontal mobile eval strip */
+.mobile-stage-row {
+    flex-direction: column;
+    gap: 4px;
+}
+
+.eval-bar-container.eval-horizontal {
+    width: 100%;
+    height: 12px;
+    flex-direction: row;
+    justify-content: flex-start;
+}
+
+.eval-bar-container.eval-horizontal .eval-bar-white {
+    height: 100%;
+}
+
+.eval-bar-container.eval-horizontal .eval-score-label {
+    bottom: auto;
+    top: 50%;
+    left: 6px;
+    transform: translateY(-50%);
+    font-size: 8px;
+}
+
+/* Interactive 4-Piece Promotion Picker */
+.promotion-picker {
+    position: absolute;
+    z-index: 120;
+    width: 12.5%;
+    display: flex;
+    flex-direction: column;
+    background: #2b2926;
+    border: 2px solid #81b64c;
+    border-radius: 6px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.75);
+    overflow: hidden;
+}
+
+.promo-option {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #312e2b;
+    cursor: pointer;
+    padding: 4px;
+    box-sizing: border-box;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    transition: background 0.12s ease;
+}
+
+.promo-option:last-child {
+    border-bottom: none;
+}
+
+.promo-option:hover {
+    background: #81b64c;
+}
+
+.promo-option img {
+    width: 86%;
+    height: 86%;
+    object-fit: contain;
+    pointer-events: none;
+}
+
+/* Interactive Move History Grid & Navigation Bar */
+.move-history-grid {
+    flex: 1;
+    overflow-y: auto;
+    background: #1b1a17;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.move-row {
+    display: grid;
+    grid-template-columns: 36px 1fr 1fr;
+    align-items: center;
+    gap: 4px;
+    border-radius: 4px;
+}
+
+.move-row:nth-child(even) {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.move-num {
+    color: #8c8a87;
+    font-size: 0.78rem;
+    text-align: right;
+    padding-right: 6px;
+    user-select: none;
+}
+
+.move-ply {
+    padding: 4px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #e2e1e0;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: background 0.12s ease;
+}
+
+.move-ply:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.move-ply.active {
+    background: #363431;
+    color: #ffffff;
+    box-shadow: inset 0 -2px 0 #81b64c;
+}
+
+.move-quality-badge {
+    font-size: 0.68rem;
+    font-weight: 800;
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+.mq-brilliant { color: #1baca6; }
+.mq-great { color: #5c8bb0; }
+.mq-inaccuracy { color: #f7c631; }
+.mq-mistake { color: #e6912c; }
+.mq-blunder { color: #ca3431; }
+
+.move-nav-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+}
+
+.move-nav-btn {
+    padding: 6px 4px !important;
+    font-size: 0.9rem;
+    background: #2b2926 !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Pointer Drag & Drop Ghost Piece */
+.drag-ghost-piece {
+    position: fixed;
+    pointer-events: none;
+    z-index: 999999;
+    transform: translate(-50%, -50%) scale(1.15);
+    filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.65));
+    will-change: left, top;
+}
+
+.square.dragging-origin img {
+    opacity: 0.25;
+}
+
+.square.drag-over {
+    box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.65) !important;
+}
+
+/* Right-click Square Highlights (Chess.com Green/Red/Blue/Yellow) */
+#chess-board .square.sq-hl-green { background-image: linear-gradient(rgba(105, 190, 80, 0.65), rgba(105, 190, 80, 0.65)) !important; }
+#chess-board .square.sq-hl-red { background-image: linear-gradient(rgba(235, 97, 80, 0.72), rgba(235, 97, 80, 0.72)) !important; }
+#chess-board .square.sq-hl-blue { background-image: linear-gradient(rgba(82, 176, 220, 0.7), rgba(82, 176, 220, 0.7)) !important; }
+#chess-board .square.sq-hl-yellow { background-image: linear-gradient(rgba(247, 198, 49, 0.7), rgba(247, 198, 49, 0.7)) !important; }
+
+/* Hint Highlight Squares */
+#chess-board .square.sq-hint-from {
+    box-shadow: inset 0 0 0 3px #3498db, inset 0 0 14px rgba(52, 152, 219, 0.55) !important;
+}
+#chess-board .square.sq-hint-to {
+    box-shadow: inset 0 0 0 3px #2ecc71, inset 0 0 16px rgba(46, 204, 113, 0.6) !important;
+}
+
+/* Hover Row for Leaderboard */
+.leaderboard-player-row {
+    cursor: pointer;
+    transition: transform 0.16s ease, background 0.16s ease !important;
+}
+.leaderboard-player-row:hover {
+    transform: scale(1.015);
+}
+
+/* Opening Explorer Continuations & Trainer Bar */
+.opening-continuations-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    align-items: center;
+    padding: 4px 0;
+}
+.opening-move-chip {
+    background: rgba(52, 152, 219, 0.16);
+    border: 1px solid rgba(52, 152, 219, 0.4);
+    color: #9ad1f5;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.12s ease;
+}
+.opening-move-chip:hover {
+    background: rgba(52, 152, 219, 0.34);
+    color: #fff;
+    transform: translateY(-1px);
+}
+.opening-trainer-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 7px;
+    padding: 6px 8px;
+}
+
+/* Interactive Replay Controls Bar */
+#replay-controls-bar {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+    background: rgba(52, 152, 219, 0.14);
+    border: 1px solid rgba(52, 152, 219, 0.45);
+    border-radius: 8px;
+    padding: 6px 10px;
+}
+
+.toast-close-btn {
+    background: none;
+    border: none;
+    color: #aaa;
+    cursor: pointer;
+    font-size: 1.15em;
+    line-height: 1;
+    padding: 0 4px;
+}
+.toast-close-btn:hover {
+    color: #fff;
+}
+
+

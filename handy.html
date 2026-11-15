@@ -184,7 +184,7 @@
             aspect-ratio: 1 / 1;
             margin: 0 auto;
             position: relative;
-            touch-action: manipulation;
+            touch-action: none;
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 8px 25px rgba(0,0,0,0.6);
@@ -206,6 +206,7 @@
             box-sizing: border-box !important;
             user-select: none;
             -webkit-user-select: none;
+            touch-action: none;
         }
 
         .square, .cell {
@@ -220,7 +221,7 @@
             position: relative !important;
             box-sizing: border-box !important;
             cursor: pointer !important;
-            touch-action: manipulation !important;
+            touch-action: none !important;
             user-select: none !important;
             -webkit-user-select: none !important;
         }
@@ -381,7 +382,7 @@
             <p style="color: #9aa5b1; font-size: 0.78rem; line-height: 1.35;">
                 🔒 Kein Tracking – ausschließlich technisch notwendiger LocalStorage (§ 25 TDDDG).
             </p>
-            <button onclick="acceptAGB()" style="background: #28a745; color: #fff; border: none; padding: 11px 22px; border-radius: 8px; font-weight: bold; font-size: 1rem; margin-top: 10px; cursor: pointer; width: 100%;">Akzeptieren &amp; Starten</button>
+            <button data-action="acceptAGB" style="background: #28a745; color: #fff; border: none; padding: 11px 22px; border-radius: 8px; font-weight: bold; font-size: 1rem; margin-top: 10px; cursor: pointer; width: 100%;">Akzeptieren &amp; Starten</button>
         </div>
     </div>
 
@@ -390,7 +391,7 @@
         <div class="mobile-brand">
             <span>♟️</span>
             <span>Schach Live</span>
-            <div id="daily-streak" style="margin-left: 6px; background: rgba(231, 76, 60, 0.2); border: 1px solid #e74c3c; color: #e74c3c; padding: 2px 6px; border-radius: 10px; font-size: 0.72rem; font-weight: bold; cursor: pointer;" onclick="openFeaturesModal()">
+            <div id="daily-streak" style="margin-left: 6px; background: rgba(231, 76, 60, 0.2); border: 1px solid #e74c3c; color: #e74c3c; padding: 2px 6px; border-radius: 10px; font-size: 0.72rem; font-weight: bold; cursor: pointer;" data-action="openFeaturesModal">
                 🔥 <span id="streak-count">1</span>
             </div>
         </div>
@@ -399,13 +400,13 @@
                 ● <span id="nav-server-status" style="display: none;">Server Online</span>
                 <span id="nav-ping" style="color: #3498db;">-- ms</span>
             </span>
-            <button id="themeToggleBtn" onclick="toggleAppTheme()" class="glass-btn" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 15px;">🌙</button>
-            <button id="navAuthBtn" onclick="openAuthModal()" class="glass-btn primary" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 15px;">🔐</button>
+            <button id="themeToggleBtn" data-action="toggleAppTheme" class="glass-btn" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 15px;">🌙</button>
+            <button id="navAuthBtn" data-action="openAuthModal" class="glass-btn primary" style="padding: 4px 8px; font-size: 0.75rem; border-radius: 15px;">🔐</button>
             <div id="navUserPill" style="display: none; align-items: center; gap: 4px; background: rgba(255,255,255,0.1); padding: 3px 8px; border-radius: 15px; font-size: 0.75rem;">
                 <span id="navUserName" style="color: #f1c40f; font-weight: bold;">Gast</span>
-                <button id="navLogoutBtn" onclick="logout()" class="glass-btn danger" style="padding: 2px 6px; font-size: 0.65rem; border-radius: 10px;">X</button>
+                <button id="navLogoutBtn" data-action="logout" class="glass-btn danger" style="padding: 2px 6px; font-size: 0.65rem; border-radius: 10px;">X</button>
             </div>
-            <a href="index.html?mode=desktop" class="btn-pc-switch" onclick="setPcPreference()" title="Zur Desktop-Version wechseln">💻 PC</a>
+            <a href="index.html?mode=desktop" class="btn-pc-switch" data-action="setPcPreference" title="Zur Desktop-Version wechseln">💻 PC</a>
         </div>
     </header>
 
@@ -414,24 +415,15 @@
 
         <!-- Hidden elements required by script.js / script2.js for backward-compat -->
         <span id="nav-user-counter" style="display: none;">1 Online</span>
-        <button id="navThemeToggle" onclick="toggleAppTheme()" style="display: none;"></button>
-        <button id="navFocusToggle" onclick="toggleChessMode()" style="display: none;"></button>
+        <button id="navThemeToggle" data-action="toggleAppTheme" style="display: none;"></button>
+        <button id="navFocusToggle" data-action="toggleChessMode" style="display: none;"></button>
 
         <!-- ================= TAB 1: SPIEL (GAME BOARD) ================= -->
         <div id="tab-game" class="sidebar-tab-content active">
 
-            <!-- Opponent Clock & Profile Bar (Top) -->
-            <div class="mobile-player-bar">
-                <div class="mobile-player-info">
-                    <div class="mobile-avatar">👤</div>
-                    <div>
-                        <div class="mobile-player-name" id="name-black">Schwarz</div>
-                        <div class="mobile-player-sub">Gegner</div>
-                    </div>
-                </div>
-                <div class="player-clock mobile-clock" id="clock-black">
-                    <span class="time" id="time-black">10:00</span>
-                </div>
+            <div class="board-status-strip">
+                <span id="status-display" style="font-size: 0.85rem; font-weight: bold; color: #f1c40f;">Weiß am Zug</span>
+                <span id="opening-name-badge" class="opening-badge">Standardposition</span>
             </div>
 
             <!-- Spectator Notice Banner -->
@@ -440,31 +432,66 @@
                 <button id="leaveSpectateBtn" class="glass-btn danger" style="padding: 3px 8px; font-size: 0.75rem;">Beenden</button>
             </div>
 
-            <!-- Status Display -->
-            <div id="status-display" style="text-align: center; font-size: 0.85rem; font-weight: bold; color: #f1c40f; padding: 2px 0;">Weiß am Zug</div>
-
-            <!-- Responsive Chessboard -->
-            <div id="board-wrapper">
-                <div id="emote-popup-area" style="position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 100; overflow: hidden; display: flex; justify-content: center; align-items: center;"></div>
-                <div id="chess-board"></div>
-            </div>
-
-            <!-- Player Clock & Profile Bar (Bottom) -->
-            <div class="mobile-player-bar">
-                <div class="mobile-player-info">
-                    <div class="mobile-avatar" style="border-color: #2ecc71;">♟️</div>
-                    <div>
-                        <div class="mobile-player-name" id="name-white" style="color: #2ecc71;">Weiß</div>
-                        <div class="mobile-player-sub">Du</div>
+            <div id="board-area-column" class="board-area-column" style="width:100%;">
+                <!-- Opponent Clock & Profile Bar (Black Top by default) -->
+                <div class="mobile-player-bar cc-player-bar" id="player-bar-black">
+                    <div class="mobile-player-info">
+                        <div class="mobile-avatar">♚</div>
+                        <div>
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <span class="mobile-player-name" id="name-black">Schwarz</span>
+                                <span class="cc-player-elo" id="elo-black"></span>
+                            </div>
+                            <div class="cc-captured-row">
+                                <span id="captured-black" class="cc-captured-pieces"></span>
+                                <span id="material-black" class="cc-material-diff"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="player-clock mobile-clock" id="clock-black">
+                        <span class="time" id="time-black">10:00</span>
                     </div>
                 </div>
-                <div class="player-clock active mobile-clock" id="clock-white">
-                    <span class="time" id="time-white">10:00</span>
+
+                <!-- Compact Eval Strip + Responsive Chessboard -->
+                <div id="board-stage-row" class="board-stage-row mobile-stage-row">
+                    <div id="eval-bar-container" class="eval-bar-container eval-horizontal" title="Stellungsbewertung">
+                        <div id="eval-bar-white" class="eval-bar-white" style="width: 50%;"></div>
+                        <span id="eval-score-label" class="eval-score-label">0.0</span>
+                    </div>
+                    <div id="board-wrapper">
+                        <div id="emote-popup-area" style="position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 100; overflow: hidden; display: flex; justify-content: center; align-items: center;"></div>
+                        <div id="chess-board"></div>
+                        <div id="promotion-picker" class="promotion-picker" style="display: none;"></div>
+                    </div>
+                </div>
+
+                <!-- Player Clock & Profile Bar (White Bottom by default) -->
+                <div class="mobile-player-bar cc-player-bar" id="player-bar-white">
+                    <div class="mobile-player-info">
+                        <div class="mobile-avatar" style="border-color: #81b64c;">♔</div>
+                        <div>
+                            <div style="display:flex;align-items:center;gap:6px;">
+                                <span class="mobile-player-name" id="name-white" style="color: #81b64c;">Weiß</span>
+                                <span class="cc-player-elo" id="elo-white"></span>
+                            </div>
+                            <div class="cc-captured-row">
+                                <span id="captured-white" class="cc-captured-pieces"></span>
+                                <span id="material-white" class="cc-material-diff"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="player-clock active mobile-clock" id="clock-white">
+                        <span class="time" id="time-white">10:00</span>
+                    </div>
                 </div>
             </div>
 
             <!-- Quick Action Touch Bar -->
-            <div class="mobile-quick-actions">
+            <div class="mobile-quick-actions" style="grid-template-columns: repeat(5, 1fr);">
+                <button id="flipBoardBtn" data-action="flipBoard" class="mobile-quick-btn">
+                    <span>⇅</span> Drehen
+                </button>
                 <button id="resetBtn" class="mobile-quick-btn">
                     <span>🆕</span> Neu
                 </button>
@@ -480,9 +507,17 @@
             </div>
 
             <!-- Secondary Action Row -->
-            <div style="display: flex; gap: 6px; margin-top: 4px;">
-                <button id="emoteBtn" class="glass-btn" style="flex: 1; padding: 8px; font-size: 0.8rem; font-weight: bold;">😀 Emotes</button>
-                <button id="featuresBtn" onclick="openFeaturesModal()" class="glass-btn purple" style="flex: 1; padding: 8px; font-size: 0.8rem; font-weight: bold;">⚙️ Einstellungen</button>
+            <div style="display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap;">
+                <button id="hintMoveBtn" data-action="requestHintMove" class="glass-btn" style="flex: 1; padding: 8px; font-size: 0.78rem; font-weight: bold;">💡 Tipp</button>
+                <button id="soundToggleBtn" data-action="toggleSoundEnabled" class="glass-btn" style="flex: 1; padding: 8px; font-size: 0.78rem; font-weight: bold;">🔊 Ton</button>
+                <button id="emoteBtn" class="glass-btn" style="flex: 1; padding: 8px; font-size: 0.78rem; font-weight: bold;">😀 Emotes</button>
+                <button id="fenPgnBtn" data-action="copyCurrentPGN" class="glass-btn" style="flex: 1; padding: 8px; font-size: 0.78rem; font-weight: bold;">📄 PGN</button>
+                <button id="featuresBtn" data-action="openFeaturesModal" class="glass-btn purple" style="flex: 1; padding: 8px; font-size: 0.78rem; font-weight: bold;">⚙️</button>
+            </div>
+            <div style="display: flex; gap: 6px; align-items: center; justify-content: center; margin-top: 4px;">
+                <button id="voiceChatBtn" class="glass-btn" style="display: none; padding: 6px 10px; font-size: 0.78rem;">🎤 Voice-Chat</button>
+                <button id="voiceMuteBtn" data-action="toggleVoiceMute" class="glass-btn" style="display: none; padding: 6px 10px; font-size: 0.78rem;">🎙️ Mikro an</button>
+                <span id="voice-status" style="font-size: 0.75rem; color: #2ecc71;"></span>
             </div>
 
             <!-- Emote Picker Floating Menu -->
@@ -512,13 +547,18 @@
                     </div>
 
                     <div id="bot-difficulty-container">
-                        <label style="font-size: 0.8rem; color: #ccc; display: block; margin-bottom: 3px;">🤖 Bot-Schwierigkeit:</label>
-                        <select id="botDifficulty" style="width: 100%; padding: 8px; border-radius: 6px; background: rgba(0,0,0,0.5); color: white; border: 1px solid #444;">
+                        <label style="font-size: 0.8rem; color: #ccc; display: block; margin-bottom: 3px;">🤖 Bot-Schwierigkeit &amp; Farbe:</label>
+                        <select id="botDifficulty" style="width: 100%; padding: 8px; border-radius: 6px; background: rgba(0,0,0,0.5); color: white; border: 1px solid #444; margin-bottom: 6px;">
                             <option value="instant" selected>⚡ Sofort-Bot (Schnell)</option>
                             <option value="1">Leicht (Anfänger)</option>
                             <option value="3">Mittel (Fortgeschritten)</option>
                             <option value="5">Schwer (Profi)</option>
                             <option value="10">Meister (Stockfish 🔥)</option>
+                        </select>
+                        <select id="botColorSelect" style="width: 100%; padding: 8px; border-radius: 6px; background: rgba(0,0,0,0.5); color: white; border: 1px solid #444;">
+                            <option value="white" selected>♔ Als Weiß spielen</option>
+                            <option value="black">♚ Als Schwarz spielen</option>
+                            <option value="random">🎲 Farbe zufällig</option>
                         </select>
                     </div>
 
@@ -544,10 +584,10 @@
                             <span>💬</span> Freund per WhatsApp herausfordern
                         </button>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-                            <button id="copyInviteLinkBtn" onclick="quickCopyInviteLink()" class="glass-btn" style="padding: 6px 8px; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 4px; border: 1px solid rgba(255,255,255,0.2);">
+                            <button id="copyInviteLinkBtn" data-action="quickCopyInviteLink" class="glass-btn" style="padding: 6px 8px; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 4px; border: 1px solid rgba(255,255,255,0.2);">
                                 <span>📋</span> Link kopieren
                             </button>
-                            <button id="shareNativeBtn" onclick="quickNativeShare()" class="glass-btn primary" style="padding: 6px 8px; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                            <button id="shareNativeBtn" data-action="quickNativeShare" class="glass-btn primary" style="padding: 6px 8px; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 4px;">
                                 <span>📱</span> Teilen (Apps)
                             </button>
                         </div>
@@ -557,9 +597,40 @@
             </div>
 
             <!-- Move History (Notation) -->
-            <div class="glass-panel" id="move-history-panel" style="max-height: 180px;">
-                <span style="font-size: 0.85rem; font-weight: bold;">📋 Zugsverlauf</span>
-                <div id="move-history-list" style="overflow-y: auto; max-height: 120px; font-family: monospace; font-size: 0.85rem; display: flex; flex-direction: column; gap: 2px; margin-top: 6px;"></div>
+            <div class="glass-panel" id="move-history-panel">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <span style="font-size: 0.85rem; font-weight: bold;">📋 Zugsverlauf</span>
+                    <div style="display:flex; gap:4px;">
+                        <button data-action="jumpToMoveIndex" data-arg1="0" class="glass-btn move-nav-btn" style="padding:3px 8px;font-size:0.75rem;">⏮</button>
+                        <button data-action="stepHistory" data-arg1="-1" class="glass-btn move-nav-btn" style="padding:3px 8px;font-size:0.75rem;">◀</button>
+                        <button data-action="stepHistory" data-arg1="1" class="glass-btn move-nav-btn" style="padding:3px 8px;font-size:0.75rem;">▶</button>
+                        <button data-action="jumpToLive" class="glass-btn move-nav-btn" style="padding:3px 8px;font-size:0.75rem;">⏭</button>
+                    </div>
+                </div>
+                <div id="move-history-list" class="move-history-grid" style="max-height: 150px;"></div>
+                <div id="opening-continuations" class="opening-continuations-bar" style="display:none; margin-top: 6px;"></div>
+                <div id="opening-trainer-bar" class="opening-trainer-bar" style="margin-top: 6px;">
+                    <div class="opening-trainer-row">
+                        <select id="trainer-repertoire-select" title="Eröffnungsrepertoire auswählen"></select>
+                        <button id="trainerToggleBtn" class="glass-btn" data-action="toggleOpeningTrainer" style="padding: 4px 10px; font-size: 0.75rem; white-space: nowrap;">🎓 Trainer</button>
+                    </div>
+                    <div id="trainer-status-text" style="display:none; font-size: 0.75rem; color: #a9d977;"></div>
+                </div>
+                <div id="replay-controls-bar" style="display:none; margin-top: 6px;">
+                    <span id="replay-status-text">Replay</span>
+                    <div class="replay-btn-group">
+                        <button id="replayPrevBtn" class="glass-btn" data-action="replayStep" data-arg1="-1">◀</button>
+                        <button id="replayPauseBtn" class="glass-btn" data-action="replayTogglePause">⏸️ Pause</button>
+                        <button id="replayNextBtn" class="glass-btn" data-action="replayStep" data-arg1="1">▶</button>
+                        <select id="replay-speed-select">
+                            <option value="0.5">0.5x</option>
+                            <option value="1" selected>1x</option>
+                            <option value="2">2x</option>
+                            <option value="3">3x</option>
+                        </select>
+                        <button id="replayStopBtn" class="glass-btn danger" data-action="replayStop">✖</button>
+                    </div>
+                </div>
             </div>
 
         </div>
@@ -630,7 +701,7 @@
                 <div id="profile-display" style="display: flex; flex-direction: column; gap: 8px; align-items: center; background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; margin-top: 8px;">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <div id="profile-name" style="font-size: 1.15rem; font-weight: bold; color: #f1c40f;">Gastspieler</div>
-                        <button id="edit-name-btn" onclick="openNameModal()" class="glass-btn" style="background: none; border: none; cursor: pointer; color: #aaa;">✏️</button>
+                        <button id="edit-name-btn" data-action="openNameModal" class="glass-btn" style="background: none; border: none; cursor: pointer; color: #aaa;">✏️</button>
                     </div>
                     <div id="profile-stats" style="font-size: 0.85rem; color: #ccc;">Elo: 1200 | Siege: 0</div>
                     
@@ -646,8 +717,8 @@
                         </div>
                     </div>
 
-                    <button id="openAuthBtn" onclick="openAuthModal()" class="glass-btn primary" style="width: 100%; padding: 8px; font-weight: bold; margin-top: 4px;">🔐 Einloggen / Registrieren</button>
-                    <button id="logoutBtn" onclick="logout()" class="glass-btn danger" style="display: none; width: 100%; padding: 8px; font-weight: bold; margin-top: 4px;">🚪 Abmelden</button>
+                    <button id="openAuthBtn" data-action="openAuthModal" class="glass-btn primary" style="width: 100%; padding: 8px; font-weight: bold; margin-top: 4px;">🔐 Einloggen / Registrieren</button>
+                    <button id="logoutBtn" data-action="logout" class="glass-btn danger" style="display: none; width: 100%; padding: 8px; font-weight: bold; margin-top: 4px;">🚪 Abmelden</button>
                 </div>
             </div>
 
@@ -675,7 +746,7 @@
                 </a>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                     <span>🛡️ <strong>Admin-Verwaltung</strong></span>
-                    <button onclick="requestAdminUsersRefresh()" class="glass-btn primary" style="padding: 4px 8px; font-size: 0.75rem;">🔄 Laden</button>
+                    <button data-action="requestAdminUsersRefresh" class="glass-btn primary" style="padding: 4px 8px; font-size: 0.75rem;">🔄 Laden</button>
                 </div>
                 <div id="admin-user-list" style="display: flex; flex-direction: column; gap: 6px; font-size: 0.8rem;"></div>
                 <div id="admin-tickets-section" style="margin-top: 10px; display: none;">
@@ -708,10 +779,11 @@
                     <div>
                         <label style="font-size: 0.8rem; color: #ccc; display: block; margin-bottom: 3px;">Figuren-Stil:</label>
                         <select id="pieceThemeSelect" style="width: 100%; padding: 8px; background: rgba(0,0,0,0.5); color: white; border: 1px solid #444; border-radius: 6px;">
-                            <option value="classic">Klassisch (Wikipedia)</option>
-                            <option value="goldsilver">Gold & Silber ✨</option>
+                            <option value="classic">Klassisch (Turnier)</option>
+                            <option value="goldsilver">Gold &amp; Silber ✨</option>
                             <option value="neon">Neon Glow 🔴🔵</option>
                             <option value="vintage">Vintage Holz 🪵</option>
+                            <option value="pixel">8-Bit Pixel Art 🎮</option>
                         </select>
                     </div>
 
@@ -773,23 +845,23 @@
 
     <!-- Fixed Bottom App Navigation Bar -->
     <nav class="mobile-bottom-nav">
-        <button class="mobile-nav-item sidebar-tab-btn active" onclick="switchMobileTab('tab-game', this)">
+        <button class="mobile-nav-item sidebar-tab-btn active" data-action="switchMobileTab" data-arg1="tab-game">
             <span class="nav-icon">🎮</span>
             <span>Spiel</span>
         </button>
-        <button class="mobile-nav-item sidebar-tab-btn" onclick="switchMobileTab('tab-chat', this)">
+        <button class="mobile-nav-item sidebar-tab-btn" data-action="switchMobileTab" data-arg1="tab-chat">
             <span class="nav-icon">💬</span>
             <span>Chat</span>
         </button>
-        <button class="mobile-nav-item sidebar-tab-btn" onclick="switchMobileTab('tab-profile', this)">
+        <button class="mobile-nav-item sidebar-tab-btn" data-action="switchMobileTab" data-arg1="tab-profile">
             <span class="nav-icon">🏆</span>
             <span>Profil</span>
         </button>
-        <button class="mobile-nav-item sidebar-tab-btn" onclick="switchMobileTab('tab-design', this)">
+        <button class="mobile-nav-item sidebar-tab-btn" data-action="switchMobileTab" data-arg1="tab-design">
             <span class="nav-icon">🎨</span>
             <span>Design</span>
         </button>
-        <button class="mobile-nav-item" onclick="openFeaturesModal()">
+        <button class="mobile-nav-item" data-action="openFeaturesModal">
             <span class="nav-icon">⚙️</span>
             <span>Mehr</span>
         </button>
@@ -800,34 +872,35 @@
     <!-- Checkmate Modal -->
     <div id="checkmate-modal" class="modal-overlay">
         <div class="modal-box" style="border-color: #f1c40f; box-shadow: 0 0 40px rgba(241, 196, 15, 0.3); max-width: 360px; width: 90%;">
-            <span class="close-modal" onclick="document.getElementById('checkmate-modal').style.display='none'">&times;</span>
-            <div class="checkmate-icon">👑</div>
+            <span class="close-modal" data-action="closeCheckmateModal">&times;</span>
+            <div class="checkmate-icon" id="checkmate-icon">👑</div>
             <div class="checkmate-title">Schachmatt!</div>
             <div class="checkmate-winner" id="checkmate-winner-text">Weiß gewinnt das Spiel.</div>
-            <button class="glass-btn checkmate-btn" onclick="document.getElementById('checkmate-modal').style.display='none'; resetGame();">Neue Partie starten</button>
-            <button class="glass-btn success checkmate-btn" style="margin-top: 8px; background: linear-gradient(135deg, #25D366 0%, #128C7E 100%); color: white; border: 1px solid rgba(255,255,255,0.3); font-weight: bold;" onclick="shareVictoryWhatsApp();">
+            <div id="checkmate-accuracy-summary" style="display:none; background:#262421; border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:10px; margin-bottom:12px; text-align:left; font-size:0.82rem;"></div>
+            <button class="glass-btn checkmate-btn" data-action="closeCheckmateModal" data-arg1="reset">Neue Partie starten</button>
+            <button class="glass-btn success checkmate-btn" style="margin-top: 8px; background: linear-gradient(135deg, #25D366 0%, #128C7E 100%); color: white; border: 1px solid rgba(255,255,255,0.3); font-weight: bold;" data-action="shareVictoryWhatsApp">
                 💬 Sieg auf WhatsApp teilen 🏆
             </button>
-            <button class="glass-btn primary checkmate-btn" style="margin-top: 8px;" onclick="downloadReplay();">📥 Replay (PGN) herunterladen</button>
-            <button class="glass-btn purple checkmate-btn" style="margin-top: 8px;" onclick="shareGameForAnalysis();">🔍 Analyse (Lichess)</button>
+            <button class="glass-btn primary checkmate-btn" style="margin-top: 8px;" data-action="downloadReplay">📥 Replay (PGN) herunterladen</button>
+            <button class="glass-btn purple checkmate-btn" style="margin-top: 8px;" data-action="shareGameForAnalysis">🔍 Analyse (Lichess)</button>
         </div>
     </div>
 
     <!-- Auth Modal -->
     <div id="auth-modal" class="modal-overlay">
         <div class="modal-box" style="max-width: 380px; width: 92%;">
-            <span class="close-modal" onclick="document.getElementById('auth-modal').style.display='none'">&times;</span>
+            <span class="close-modal" data-action="closeAuthModal">&times;</span>
             <h3 style="color: white; margin-top: 0; margin-bottom: 12px;">Einloggen / Registrieren</h3>
             <p style="color: #bdc3c7; font-size: 0.8rem; margin-bottom: 12px;">Speichere deinen Elo-Wert und deine Statistiken.</p>
             <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;">
                 <input type="email" id="auth-email-input" class="auth-input" placeholder="E-Mail-Adresse" style="padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.5); color: white; width: 100%;">
                 <input type="password" id="auth-password-input" class="auth-input" placeholder="Passwort (min. 6 Zeichen)" style="padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.5); color: white; width: 100%;">
                 <div style="display: flex; gap: 8px;">
-                    <button class="glass-btn success auth-btn" style="flex: 1; padding: 8px; font-weight: bold;" onclick="submitAuthEmailLogin()">Einloggen</button>
-                    <button class="glass-btn primary auth-btn" style="flex: 1; padding: 8px; font-weight: bold;" onclick="submitAuthEmailRegister()">Registrieren</button>
+                    <button class="glass-btn success auth-btn" style="flex: 1; padding: 8px; font-weight: bold;" data-action="submitAuthEmailLogin">Einloggen</button>
+                    <button class="glass-btn primary auth-btn" style="flex: 1; padding: 8px; font-weight: bold;" data-action="submitAuthEmailRegister">Registrieren</button>
                 </div>
             </div>
-            <button id="auth-guest-btn" class="glass-btn auth-btn" style="width: 100%; background: rgba(255,255,255,0.1); color: #fff; padding: 8px; font-weight: bold;" onclick="playAsGuest()">👤 Als Gast spielen</button>
+            <button id="auth-guest-btn" class="glass-btn auth-btn" style="width: 100%; background: rgba(255,255,255,0.1); color: #fff; padding: 8px; font-weight: bold;" data-action="playAsGuest">👤 Als Gast spielen</button>
             <div id="auth-status" style="margin-top: 10px; font-size: 0.85rem;"></div>
         </div>
     </div>
@@ -835,10 +908,10 @@
     <!-- Name Modal -->
     <div id="name-modal" class="modal-overlay">
         <div class="modal-box" style="max-width: 360px; width: 90%;">
-            <span class="close-modal" onclick="document.getElementById('name-modal').style.display='none'">&times;</span>
+            <span class="close-modal" data-action="closeNameModal">&times;</span>
             <h3 style="color: white; margin-top: 0; margin-bottom: 15px;">Benutzername ändern</h3>
             <input type="text" id="new-username" class="auth-input" placeholder="Neuer Name" maxlength="15" style="width: 100%; padding: 8px; margin-bottom: 10px;">
-            <button class="glass-btn auth-btn" onclick="submitNameChange()" style="width: 100%;">Speichern</button>
+            <button class="glass-btn auth-btn" data-action="submitNameChange" style="width: 100%;">Speichern</button>
             <div id="name-status" style="margin-top: 10px; font-size: 0.85rem;"></div>
         </div>
     </div>
@@ -848,7 +921,7 @@
         <div style="background:#1a1a24; padding:20px; border-radius:15px; border:1px solid #444; max-width:400px; width:100%; max-height:85vh; overflow-y:auto; color: white;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <h3 id="ppm-name" style="margin:0; color:#f1c40f;">Spielername</h3>
-                <button onclick="document.getElementById('player-profile-modal').style.display='none'" class="glass-btn" style="background:#e74c3c; padding: 4px 10px;">X</button>
+                <button data-action="closePlayerProfileModal" class="glass-btn" style="background:#e74c3c; padding: 4px 10px;">X</button>
             </div>
             <div style="display:flex; gap:10px; margin-bottom:12px; color:#ccc; font-size: 0.85rem;">
                 <span id="ppm-elo">Elo: 1200</span> | <span id="ppm-level">Level: 1</span> | <span id="ppm-role">Gast</span>
@@ -865,7 +938,7 @@
         <div class="modal-box" style="background: #161926; border: 1px solid #8e44ad; padding: 18px; border-radius: 12px; max-width: 450px; width: 100%; max-height: 85vh; overflow-y: auto; text-align: left; color: white;">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 8px; margin-bottom: 15px;">
                 <h3 style="margin: 0; color: #8e44ad; font-size: 1.1rem;">⚙️ Einstellungen & Features</h3>
-                <button onclick="document.getElementById('features-modal').style.display='none'" class="glass-btn danger" style="padding: 4px 8px;">X</button>
+                <button data-action="closeFeaturesModal" class="glass-btn danger" style="padding: 4px 8px;">X</button>
             </div>
 
             <div style="display: flex; flex-direction: column; gap: 12px;">
@@ -877,13 +950,13 @@
                         <option value="koth">King of the Hill</option>
                         <option value="blindfold">Blindfold Chess</option>
                     </select>
-                    <button id="startVariantBtn" onclick="startVariantGame()" class="glass-btn success" style="width: 100%; padding: 8px; font-weight: bold;">Variante starten</button>
-                    <button id="passPlayBtn" onclick="startPassAndPlay()" class="glass-btn warning" style="width: 100%; padding: 8px; font-weight: bold; margin-top: 4px;">👥 Pass & Play</button>
+                    <button id="startVariantBtn" data-action="startVariantGame" class="glass-btn success" style="width: 100%; padding: 8px; font-weight: bold;">Variante starten</button>
+                    <button id="passPlayBtn" data-action="startPassAndPlay" class="glass-btn warning" style="width: 100%; padding: 8px; font-weight: bold; margin-top: 4px;">👥 Pass & Play</button>
                 </div>
 
                 <div>
                     <label style="display: block; margin-bottom: 4px; font-size: 0.85rem;">Sound-Pack:</label>
-                    <select id="soundPackSelect" onchange="changeSoundPack(this.value)" style="width: 100%; padding: 8px; border-radius: 6px; background: #2c3e50; color: white; border: 1px solid #555;">
+                    <select id="soundPackSelect" style="width: 100%; padding: 8px; border-radius: 6px; background: #2c3e50; color: white; border: 1px solid #555;">
                         <option value="classic">Klassisches Holz</option>
                         <option value="arcade">Arcade / 8-Bit</option>
                         <option value="orchestra">Orchester / Episch</option>
@@ -892,7 +965,7 @@
 
                 <div>
                     <label style="display: block; margin-bottom: 4px; font-size: 0.85rem;">Figuren-Set:</label>
-                    <select id="pieceSetSelect" onchange="changePieceSet(this.value)" style="width: 100%; padding: 8px; border-radius: 6px; background: #2c3e50; color: white; border: 1px solid #555;">
+                    <select id="pieceSetSelect" style="width: 100%; padding: 8px; border-radius: 6px; background: #2c3e50; color: white; border: 1px solid #555;">
                         <option value="neo">Klassisch (Neo)</option>
                         <option value="pixel">8-Bit Pixel Art</option>
                         <option value="wood">Holz-Stil</option>
@@ -969,48 +1042,13 @@
     <!-- In-App Notification Toast Container -->
     <div id="in-app-toast-container" style="position: fixed; top: 55px; left: 50%; transform: translateX(-50%); z-index: 2000000; display: flex; flex-direction: column; gap: 8px; width: 92%; max-width: 380px; pointer-events: none;"></div>
 
-    <!-- Mobile Navigation Script -->
-    <script>
-        function switchMobileTab(tabId, btn) {
-            document.querySelectorAll('.sidebar-tab-content').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.mobile-bottom-nav .sidebar-tab-btn').forEach(b => b.classList.remove('active'));
-            
-            const target = document.getElementById(tabId);
-            if (target) {
-                target.classList.add('active');
-            }
-            if (btn) {
-                btn.classList.add('active');
-            }
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-
-        // Bridge to desktop switchSidebarTab
-        window.switchSidebarTab = function(tabId, btn) {
-            switchMobileTab(tabId, btn);
-        };
-
-        function setPcPreference() {
-            localStorage.setItem('device_preference', 'pc');
-        }
-
-        function openFeaturesModal() {
-            const modal = document.getElementById('features-modal');
-            if (modal) modal.style.display = 'flex';
-        }
-    </script>
-
-    <!-- AGB & Datenschutz Popup (§ 25 TDDDG) -->
-    <div id="agb-popup" style="display: none; position: fixed; z-index: 3000000; left: 0; top: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); align-items: center; justify-content: center; padding: 16px;">
-        <div style="background: #141722; padding: 24px; border-radius: 14px; text-align: center; border: 1px solid #28a745; max-width: 360px; width: 100%; color: #eee; box-shadow: 0 12px 32px rgba(0,0,0,0.7);">
-            <h2 style="margin-top: 0; color: #2ecc71; font-size: 1.25rem;">Willkommen bei Prochess!</h2>
-            <p style="color: #ccc; font-size: 0.9rem; line-height: 1.5;">Um fortzufahren, bestätige bitte unsere <a href="AGB.html" target="_blank" rel="noopener noreferrer" style="color: #2ecc71;">AGB</a>, die <a href="datenschutz.html" target="_blank" rel="noopener noreferrer" style="color: #3498db;">Datenschutzerklärung</a> und das <a href="impressum.html" target="_blank" rel="noopener noreferrer" style="color: #f39c12;">Impressum</a>.</p>
-            <p style="color: #aaa; font-size: 0.78rem; line-height: 1.4; margin-bottom: 16px;">🔒 <strong>Hinweis (§ 25 TDDDG):</strong> Keine Werbe-Cookies. Technisch notwendiger LocalStorage wird für Login, Themes und Spielstand genutzt.</p>
-            <button class="glass-btn success" style="width: 100%; padding: 11px; border-radius: 8px; font-weight: bold; font-size: 0.95rem;" onclick="acceptAGB()">Akzeptieren &amp; Starten</button>
-        </div>
-    </div>
-
     <!-- Core Scripts -->
+    <script src="app-ui.js"></script>
+    <script src="soundEngine.js"></script>
+    <script src="openingBook.js"></script>
+    <script src="openingTrainer.js"></script>
+    <script src="evalEngine.js"></script>
+    <script src="pgnEngine.js"></script>
     <script type="module" src="features.js"></script>
     <script type="module" src="script.js"></script>
     <script type="module" src="script2.js"></script>

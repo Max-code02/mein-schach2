@@ -201,10 +201,10 @@ if (localStorage.getItem('banned') === 'true') {
 window.showInAppConfirmToast = function(title, message, onAccept, onDecline) {
     const container = document.getElementById('in-app-toast-container');
     if (!container) {
-        if (confirm(`${title}\n${message}`)) {
-            if (onAccept) onAccept();
+        if (typeof window.showGameRequestModal === 'function') {
+            window.showGameRequestModal('❓', title, message, 'Bestätigen', 'Abbrechen', onAccept, onDecline);
         } else {
-            if (onDecline) onDecline();
+            console.warn('[ConfirmToast] Kein Container gefunden:', title, message);
         }
         return;
     }
@@ -259,6 +259,50 @@ window.showInAppConfirmToast = function(title, message, onAccept, onDecline) {
     }
 };
 
+window.showInAppPrompt = function(title, message, defaultVal, onSubmit) {
+    let modal = document.getElementById('dynamic-prompt-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'dynamic-prompt-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); backdrop-filter:blur(5px); z-index:2600000; justify-content:center; align-items:center; padding:15px;';
+        modal.innerHTML = `
+            <div style="background:#1e1d1a; border:1px solid rgba(255,255,255,0.18); border-radius:12px; padding:22px; width:100%; max-width:400px; color:white; box-sizing:border-box;">
+                <h3 id="dp-title" style="margin:0 0 8px 0; color:#f1c40f; font-size:1.1rem;"></h3>
+                <p id="dp-msg" style="font-size:0.86rem; color:#bab8b5; margin:0 0 12px 0;"></p>
+                <input id="dp-input" type="text" style="width:100%; box-sizing:border-box; padding:9px 11px; border-radius:6px; background:#161512; border:1px solid rgba(255,255,255,0.2); color:white; margin-bottom:14px;" />
+                <div style="display:flex; gap:8px;">
+                    <button id="dp-cancel" class="glass-btn" style="flex:1; padding:9px;">Abbrechen</button>
+                    <button id="dp-ok" class="glass-btn success" style="flex:1; padding:9px;">Bestätigen</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+    const titleEl = document.getElementById('dp-title');
+    const msgEl = document.getElementById('dp-msg');
+    const inputEl = document.getElementById('dp-input');
+    const cancelBtn = document.getElementById('dp-cancel');
+    const okBtn = document.getElementById('dp-ok');
+    if (titleEl) titleEl.textContent = title || 'Eingabe';
+    if (msgEl) msgEl.textContent = message || '';
+    if (inputEl) inputEl.value = defaultVal || '';
+    modal.style.display = 'flex';
+    setTimeout(() => { if (inputEl) inputEl.focus(); }, 30);
+
+    const close = () => { modal.style.display = 'none'; };
+    if (cancelBtn) cancelBtn.onclick = close;
+    if (okBtn) okBtn.onclick = () => {
+        const val = inputEl ? inputEl.value : '';
+        close();
+        if (typeof onSubmit === 'function') onSubmit(val);
+    };
+    if (inputEl) inputEl.onkeydown = (e) => {
+        if (e.key === 'Enter') { okBtn?.click(); }
+        if (e.key === 'Escape') { close(); }
+    };
+};
+
 window.showInAppNotification = function(title, message, level = 'info') {
     const container = document.getElementById('in-app-toast-container');
     if (!container) {
@@ -267,6 +311,7 @@ window.showInAppNotification = function(title, message, level = 'info') {
     }
 
     const toast = document.createElement('div');
+    toast.className = 'in-app-toast';
     toast.style.pointerEvents = 'auto';
     toast.style.background = level === 'warning' ? '#2c1515' : '#1e2836';
     toast.style.borderLeft = level === 'warning' ? '5px solid #e74c3c' : '5px solid #3498db';
@@ -279,13 +324,14 @@ window.showInAppNotification = function(title, message, level = 'info') {
     toast.style.opacity = '0';
     toast.style.transform = 'translateY(-10px)';
 
+    const esc = typeof escapeHtml === 'function' ? escapeHtml : (s => String(s || ''));
     toast.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
             <div>
-                <div style="font-weight: bold; font-size: 0.9em; color: ${level === 'warning' ? '#ff6b6b' : '#5db0e6'}; margin-bottom: 4px;">${title || 'System-Benachrichtigung'}</div>
-                <div style="font-size: 0.85em; color: #e0e0e0; line-height: 1.4;">${message || ''}</div>
+                <div style="font-weight: bold; font-size: 0.9em; color: ${level === 'warning' ? '#ff6b6b' : '#5db0e6'}; margin-bottom: 4px;">${esc(title || 'System-Benachrichtigung')}</div>
+                <div style="font-size: 0.85em; color: #e0e0e0; line-height: 1.4;">${esc(message || '')}</div>
             </div>
-            <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; color: #888; cursor: pointer; font-size: 1.1em; line-height: 1;">&times;</button>
+            <button type="button" class="toast-close-btn" data-toast-close="1" style="background: none; border: none; color: #888; cursor: pointer; font-size: 1.1em; line-height: 1;">&times;</button>
         </div>
     `;
 
@@ -385,11 +431,11 @@ window.handleAdminUsersUpdate = function(users) {
         if (role === 'admin' || role === 'Admin') roleBadge = '<span style="background: #e74c3c; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; font-weight: bold;">👑 Admin</span>';
         else if (role === 'moderator' || role === 'Mod') roleBadge = '<span style="background: #f39c12; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75em;">🛡️ Mod</span>';
 
-        let kickBtn = `<button onclick="adminKickUser(decodeURIComponent('${encodedUname}'))" style="background: #e67e22; color: white; border: none; padding: 3px 7px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;" title="Spieler kicken">⚡ Kick</button>`;
+        let kickBtn = `<button type="button" data-admin-action="kick" data-target="${encodedUname}" style="background: #e67e22; color: white; border: none; padding: 3px 7px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;" title="Spieler kicken">⚡ Kick</button>`;
 
-        let banBtn = `<button onclick="adminBanUser(decodeURIComponent('${encodedUname}'))" style="background: #c0392b; color: white; border: none; padding: 3px 7px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;" title="Spieler bannen">⛔ Ban</button>`;
+        let banBtn = `<button type="button" data-admin-action="ban" data-target="${encodedUname}" style="background: #c0392b; color: white; border: none; padding: 3px 7px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;" title="Spieler bannen">⛔ Ban</button>`;
         if (isBanned) {
-            banBtn = `<button onclick="adminUnbanUser(decodeURIComponent('${encodedUname}'))" style="background: #27ae60; color: white; border: none; padding: 3px 7px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;" title="Spieler entbannen">🔓 Entbannen</button>`;
+            banBtn = `<button type="button" data-admin-action="unban" data-target="${encodedUname}" style="background: #27ae60; color: white; border: none; padding: 3px 7px; border-radius: 4px; font-size: 0.75em; cursor: pointer; font-weight: bold;" title="Spieler entbannen">🔓 Entbannen</button>`;
         }
 
         return `
@@ -403,8 +449,8 @@ window.handleAdminUsersUpdate = function(users) {
                 <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75em; color: #aaa; margin-top: 2px;">
                     <div>IP: ${safeIP} | Siege: ${Number(u.wins) || 0}</div>
                     <div style="display: flex; gap: 4px;">
-                        <button onclick="setUserRole(decodeURIComponent('${encodedUname}'), 'admin')" style="background: #8e44ad; color: white; border: none; padding: 3px 6px; border-radius: 3px; font-size: 0.7em; cursor: pointer;">👑 Admin</button>
-                        <button onclick="setUserRole(decodeURIComponent('${encodedUname}'), 'moderator')" style="background: #d35400; color: white; border: none; padding: 3px 6px; border-radius: 3px; font-size: 0.7em; cursor: pointer;">🛡️ Mod</button>
+                        <button type="button" data-admin-action="role" data-target="${encodedUname}" data-role="admin" style="background: #8e44ad; color: white; border: none; padding: 3px 6px; border-radius: 3px; font-size: 0.7em; cursor: pointer;">👑 Admin</button>
+                        <button type="button" data-admin-action="role" data-target="${encodedUname}" data-role="moderator" style="background: #d35400; color: white; border: none; padding: 3px 6px; border-radius: 3px; font-size: 0.7em; cursor: pointer;">🛡️ Mod</button>
                         ${kickBtn}
                         ${banBtn}
                     </div>
@@ -415,12 +461,18 @@ window.handleAdminUsersUpdate = function(users) {
 };
 
 window.adminKickUser = function(username) {
-    const reason = prompt(`Grund für Kick von ${username}:`, "Fehlverhalten im Spiel / Chat");
-    if (reason !== null && socket && socket.readyState === 1) {
-        socket.send(JSON.stringify({ type: 'admin_action', action: 'kick', target: username, reason: reason }));
-        socket.send(JSON.stringify({ type: 'chat_message', username: getMyName(), content: `/kick "${username}" ${reason}` }));
-        window.showInAppNotification("Admin", `Kick für ${username} gesendet.`, "warning");
-        setTimeout(window.requestAdminUsersRefresh, 500);
+    const executeKick = (reason) => {
+        if (reason !== null && socket && socket.readyState === 1) {
+            socket.send(JSON.stringify({ type: 'admin_action', action: 'kick', target: username, reason: reason }));
+            socket.send(JSON.stringify({ type: 'chat_message', username: getMyName(), content: `/kick "${username}" ${reason}` }));
+            window.showInAppNotification("Admin", `Kick für ${username} gesendet.`, "warning");
+            setTimeout(window.requestAdminUsersRefresh, 500);
+        }
+    };
+    if (typeof window.showInAppPrompt === 'function') {
+        window.showInAppPrompt("Spieler kicken", `Grund für Kick von ${username}:`, "Fehlverhalten im Spiel / Chat", executeKick);
+    } else {
+        executeKick("Fehlverhalten im Spiel / Chat");
     }
 };
 
@@ -521,9 +573,9 @@ window.renderAdminTickets = function(tickets) {
                 ${t.banReason ? `<div style="font-size: 0.75em; color: #ff9999; margin-bottom: 4px;">Bann-Grund: ${escapeHtml(t.banReason)}</div>` : ''}
                 ${t.reply ? `<div style="font-size: 0.75em; color: #2ecc71; margin-bottom: 4px;">Antwort: ${escapeHtml(t.reply)}</div>` : ''}
                 <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
-                    ${t.status !== 'Entbannt' ? `<button onclick="unbanTicket(decodeURIComponent('${encodeURIComponent(t.id)}'), decodeURIComponent('${encodeURIComponent(t.user || '')}'))" style="background: #27ae60; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer; font-weight: bold;">🔓 Entbannen & Genehmigen</button>` : ''}
-                    <button onclick="replyToTicket(decodeURIComponent('${encodeURIComponent(t.id)}'))" style="background: #3498db; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer;">💬 Antworten</button>
-                    ${t.status !== 'Abgelehnt' ? `<button onclick="rejectTicket(decodeURIComponent('${encodeURIComponent(t.id)}'))" style="background: #e74c3c; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer;">❌ Ablehnen</button>` : ''}
+                    ${t.status !== 'Entbannt' ? `<button type="button" data-admin-action="unban-ticket" data-ticket-id="${encodeURIComponent(t.id || '')}" data-target="${encodeURIComponent(t.user || '')}" style="background: #27ae60; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer; font-weight: bold;">🔓 Entbannen &amp; Genehmigen</button>` : ''}
+                    <button type="button" data-admin-action="reply-ticket" data-ticket-id="${encodeURIComponent(t.id || '')}" style="background: #3498db; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer;">💬 Antworten</button>
+                    ${t.status !== 'Abgelehnt' ? `<button type="button" data-admin-action="reject-ticket" data-ticket-id="${encodeURIComponent(t.id || '')}" style="background: #e74c3c; color: white; border: none; padding: 3px 8px; border-radius: 4px; font-size: 0.7em; cursor: pointer;">❌ Ablehnen</button>` : ''}
                 </div>
             </div>
         `;
@@ -531,7 +583,7 @@ window.renderAdminTickets = function(tickets) {
 };
 
 window.unbanTicket = function(ticketId, username) {
-    if (confirm(`Möchtest du das Ticket ${ticketId} genehmigen und den Spieler '${username}' sowie seine IP entsperren?`)) {
+    const runUnban = () => {
         fetch('/api/admin/unban-ticket', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -539,40 +591,44 @@ window.unbanTicket = function(ticketId, username) {
         })
         .then(res => res.json())
         .then(data => {
-            if (data.success) {
-                if (window.showInAppNotification) window.showInAppNotification("Admin", data.message || `Ticket ${ticketId} erfolgreich entbannt!`, "success");
+            if (data.success && window.showInAppNotification) {
+                window.showInAppNotification("Admin", data.message || `Ticket ${ticketId} erfolgreich entbannt!`, "success");
             }
             window.requestAdminTicketsRefresh();
             if (window.requestAdminUsersRefresh) window.requestAdminUsersRefresh();
         })
-        .catch(err => {
+        .catch(() => {
             if (socket && socket.readyState === 1) {
                 socket.send(JSON.stringify({ type: 'unban_ticket', ticketId, reply: 'Entbannungsantrag genehmigt!' }));
             }
         });
+    };
+    if (typeof window.showGameRequestModal === 'function') {
+        window.showGameRequestModal("🔓", "Ticket genehmigen", `Möchtest du Ticket ${ticketId} genehmigen und '${username}' entsperren?`, "Entsperren", "Abbrechen", runUnban, () => {});
+    } else {
+        runUnban();
     }
 };
 
 window.rejectTicket = function(ticketId) {
-    const reason = prompt("Grund für die Ablehnung des Support-Tickets:", "Entbannungsantrag abgelehnt.");
-    if (reason !== null) {
+    window.showInAppPrompt("Ticket ablehnen", "Grund für die Ablehnung des Support-Tickets:", "Entbannungsantrag abgelehnt.", (reason) => {
         fetch('/api/admin/reply-ticket', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ticketId, reply: reason, status: 'Abgelehnt' })
         }).then(() => window.requestAdminTicketsRefresh());
-    }
+    });
 };
 
 window.replyToTicket = function(ticketId) {
-    const reply = prompt("Antwort / Statusänderung für Support-Ticket:");
-    if (reply !== null) {
+    window.showInAppPrompt("Ticket beantworten", "Antwort / Statusänderung für Support-Ticket:", "", (reply) => {
+        if (!reply || !reply.trim()) return;
         fetch('/api/admin/reply-ticket', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ticketId, reply, status: 'Beantwortet' })
         }).then(() => window.requestAdminTicketsRefresh());
-    }
+    });
 };
 
 window.setUserRole = function(username, role) {
@@ -586,11 +642,12 @@ window.adminBanUser = function(username) {
     if (typeof openBanReasonModal === 'function') {
         openBanReasonModal(username);
     } else {
-        const reason = prompt(`Bann-Grund für ${username}:`, "Admin-Entscheidung");
-        if (reason && socket && socket.readyState === 1) {
-            socket.send(JSON.stringify({ type: 'admin_ban_user', target: username, reason: reason }));
-            window.showInAppNotification("Admin", `Bann für ${username} gesendet.`, "warning");
-        }
+        window.showInAppPrompt("Spieler bannen", `Bann-Grund für ${username}:`, "Admin-Entscheidung", (reason) => {
+            if (reason && socket && socket.readyState === 1) {
+                socket.send(JSON.stringify({ type: 'admin_ban_user', target: username, reason: reason }));
+                window.showInAppNotification("Admin", `Bann für ${username} gesendet.`, "warning");
+            }
+        });
     }
 };
 
@@ -615,7 +672,7 @@ window.openBanReasonModal = function(username) {
         modal.style.cssText = 'display: flex; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(5px); z-index: 999999; justify-content: center; align-items: center; padding: 15px;';
         modal.innerHTML = `
         <div class="modal-box" style="max-width: 440px; width: 90%; border: 1px solid rgba(231, 76, 60, 0.5); background: #181c24; padding: 25px; border-radius: 12px; text-align: center; color: white; position: relative;">
-            <span class="close-modal" onclick="closeBanReasonModal()" style="position: absolute; top: 10px; right: 14px; font-size: 24px; cursor: pointer; color: #888;">&times;</span>
+            <span class="close-modal" data-action="closeBanReasonModal" style="position: absolute; top: 10px; right: 14px; font-size: 24px; cursor: pointer; color: #888;">&times;</span>
             <h3 style="color: #e74c3c; margin-top: 0; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 8px;">
                 <span>🔨</span> Spieler bannen
             </h3>
@@ -628,8 +685,8 @@ window.openBanReasonModal = function(username) {
                 <textarea id="ban-reason-text-input" class="auth-input" style="width: 100%; height: 80px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(10, 10, 15, 0.5); color: white; padding: 10px; font-family: inherit; box-sizing: border-box; resize: vertical;" placeholder="z. B. Beleidigung im Chat, Cheating, Spam..."></textarea>
             </div>
             <div style="display: flex; gap: 10px;">
-                <button style="flex: 1; background: #7f8c8d; color: white; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;" onclick="closeBanReasonModal()" class="glass-btn">Abbrechen</button>
-                <button style="flex: 1; color: white; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold;" onclick="submitBanWithReasonModal()" class="glass-btn danger">Bannen ausführen</button>
+                <button type="button" style="flex: 1; background: #7f8c8d; color: white; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;" data-action="closeBanReasonModal" class="glass-btn">Abbrechen</button>
+                <button type="button" style="flex: 1; color: white; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: bold;" data-action="submitBanWithReasonModal" class="glass-btn danger">Bannen ausführen</button>
             </div>
         </div>`;
         document.body.appendChild(modal);
@@ -674,8 +731,8 @@ window.executeBanUser = function(username, reason) {
             reason: reason
         }));
         ws.send(JSON.stringify({ type: 'chat', text: `/ban "${username}" ${reason}` }));
-    } else {
-        alert("Du bist nicht mit dem Server verbunden!");
+    } else if (typeof window.showInAppNotification === 'function') {
+        window.showInAppNotification("Verbindung", "Du bist nicht mit dem Server verbunden!", "warning");
     }
 };
 
@@ -847,13 +904,11 @@ function onVideoReady(videoUrl, promptText) {
     }
 
     if (container) {
-        // Hier wird der Button erzeugt
+        const safeUrl = sanitizeVideoUrl(videoUrl);
         container.innerHTML = `
             <div class="video-success-box">
-                <p>🎬 <strong>Dein Video:</strong> ${promptText}</p>
-                <button onclick="playVideo('${videoUrl}')" class="play-btn">
-                    ▶ JETZT ANSEHEN
-                </button>
+                <p>🎬 <strong>Dein Video:</strong> ${escapeHtml(promptText)}</p>
+                ${safeUrl ? `<button type="button" data-play-video="${encodeURIComponent(safeUrl)}" class="play-btn">▶ JETZT ANSEHEN</button>` : ''}
             </div>
         `;
     }
@@ -866,9 +921,30 @@ let illegalMoveCount = 0;
 let opponentName = "Unbekannt"; // Diese Zeile neu einfügen
 let onlineRoom = ""; // Hier wird sie erstellt
 let myColor = "white"; // Hier wird sie erstellt
+let botColor = "black";
 window.isTacticalPuzzleMode = false;
 let lastMove = null;
 let premove = null;
+
+// Chess.com Pro Engine State
+let isBoardFlipped = false;
+let moveSnapshots = [];
+let viewPly = -1; // -1 = live board
+let drawArrows = [];
+let highlightSquares = {};
+let hintMoveSquares = null;
+let currentEvalCp = 0.0;
+let currentEvalMate = null;
+let evalRequestCounter = 0;
+let pendingEvalByPly = {};
+let pendingHintEvalId = null;
+let currentOpening = null;
+let gameEnded = false;
+let activeVariant = 'standard';
+let pendingStockfishFallbackTimer = null;
+let lastSecondTickPlayed = -1;
+let trainerActive = false;
+let trainerRepertoireId = localStorage.getItem('trainer_repertoire_id') || 'sicilian_main';
 
 let whiteTime = 600;
 let blackTime = 600;
@@ -877,7 +953,13 @@ let timerInterval = null;
 
 function formatTime(secs) {
     if (secs === Infinity || secs === 'unlimited' || secs === undefined || secs === null || isNaN(secs)) return '∞';
-    const totalSecs = Math.max(0, Math.floor(secs));
+    const safe = Math.max(0, Number(secs));
+    if (safe < 20) {
+        const m = Math.floor(safe / 60);
+        const s = (safe % 60).toFixed(1).padStart(4, '0');
+        return `${m}:${s}`;
+    }
+    const totalSecs = Math.floor(safe);
     const m = Math.floor(totalSecs / 60);
     const s = totalSecs % 60;
     return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
@@ -887,24 +969,48 @@ function startTimer() {
     if (timerInterval) clearInterval(timerInterval);
     const tcSelect = document.getElementById("timeControl");
     const tc = tcSelect ? tcSelect.value : "unlimited";
-    if (tc === 'unlimited' || whiteTime === Infinity || blackTime === Infinity || isNaN(whiteTime)) {
+    if (tc === 'unlimited' || whiteTime === Infinity || blackTime === Infinity || isNaN(whiteTime) || gameEnded) {
         updateTimerUI();
         return;
     }
+    let lastTick = performance.now();
+    lastSecondTickPlayed = -1;
     timerInterval = setInterval(() => {
+        if (gameEnded) {
+            clearInterval(timerInterval);
+            return;
+        }
+        const now = performance.now();
+        const dt = Math.min(0.5, (now - lastTick) / 1000);
+        lastTick = now;
+
         if (turn === 'white') {
             if (whiteTime > 0) {
-                whiteTime--;
+                whiteTime = Math.max(0, whiteTime - dt);
+                if (whiteTime < 10 && whiteTime > 0) {
+                    const secInt = Math.ceil(whiteTime);
+                    if (secInt !== lastSecondTickPlayed) {
+                        lastSecondTickPlayed = secInt;
+                        window.SoundEngine?.playClockTickSound();
+                    }
+                }
                 if (whiteTime <= 0) { whiteTime = 0; handleTimeout('Weiß'); }
             }
         } else {
             if (blackTime > 0) {
-                blackTime--;
+                blackTime = Math.max(0, blackTime - dt);
+                if (blackTime < 10 && blackTime > 0) {
+                    const secInt = Math.ceil(blackTime);
+                    if (secInt !== lastSecondTickPlayed) {
+                        lastSecondTickPlayed = secInt;
+                        window.SoundEngine?.playClockTickSound();
+                    }
+                }
                 if (blackTime <= 0) { blackTime = 0; handleTimeout('Schwarz'); }
             }
         }
         updateTimerUI();
-    }, 1000);
+    }, 100);
 }
 
 function updateTimerUI() {
@@ -915,29 +1021,43 @@ function updateTimerUI() {
 
     const wClock = document.getElementById('clock-white');
     const bClock = document.getElementById('clock-black');
+    const wBar = document.getElementById('player-bar-white');
+    const bBar = document.getElementById('player-bar-black');
 
     if (wClock && bClock) {
-        if (turn === 'white') {
+        if (turn === 'white' && !gameEnded) {
             wClock.classList.add('active');
             bClock.classList.remove('active');
-        } else {
+            if (wBar) wBar.classList.add('active-turn');
+            if (bBar) bBar.classList.remove('active-turn');
+        } else if (!gameEnded) {
             bClock.classList.add('active');
             wClock.classList.remove('active');
+            if (bBar) bBar.classList.add('active-turn');
+            if (wBar) wBar.classList.remove('active-turn');
+        } else {
+            wClock.classList.remove('active');
+            bClock.classList.remove('active');
+            if (wBar) wBar.classList.remove('active-turn');
+            if (bBar) bBar.classList.remove('active-turn');
         }
 
-        if (whiteTime !== Infinity && !isNaN(whiteTime) && whiteTime < 30) wClock.classList.add('low-time');
+        if (whiteTime !== Infinity && !isNaN(whiteTime) && whiteTime < 20) wClock.classList.add('low-time');
         else wClock.classList.remove('low-time');
-        
-        if (blackTime !== Infinity && !isNaN(blackTime) && blackTime < 30) bClock.classList.add('low-time');
+
+        if (blackTime !== Infinity && !isNaN(blackTime) && blackTime < 20) bClock.classList.add('low-time');
         else bClock.classList.remove('low-time');
     }
 }
 
 function handleTimeout(color) {
+    if (gameEnded) return;
+    gameEnded = true;
     if (timerInterval) clearInterval(timerInterval);
     const winner = color === 'Weiß' ? 'Schwarz' : 'Weiß';
-    showCheckmateModal(winner, `${color} hat keine Zeit mehr!`);
-    
+    window.SoundEngine?.playMateSound();
+    showCheckmateModal(winner, `Zeit abgelaufen (${color})!`);
+
     const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'game_over', reason: 'timeout', text: `${color} hat keine Zeit mehr! ${winner} gewinnt.` }));
@@ -956,12 +1076,37 @@ function showCheckmateModal(winnerName, reason = "Schachmatt!") {
     const modal = document.getElementById('checkmate-modal');
     const winnerText = document.getElementById('checkmate-winner-text');
     const title = document.querySelector('.checkmate-title');
+    const iconEl = document.getElementById('checkmate-icon');
+    const accEl = document.getElementById('checkmate-accuracy-summary');
+
     if (modal && winnerText && title) {
         title.innerText = reason;
-        winnerText.innerText = `${winnerName} gewinnt das Spiel.`;
+        const isDraw = winnerName === 'Remis' || winnerName === 'Unentschieden';
+        if (iconEl) {
+            if (isDraw) iconEl.innerText = '🤝';
+            else if (reason.toLowerCase().includes('zeit')) iconEl.innerText = '⏱️';
+            else iconEl.innerText = '👑';
+        }
+        winnerText.innerText = isDraw ? 'Die Partie endet Remis (½–½).' : `${winnerName} gewinnt die Partie!`;
+
+        if (accEl && window.EvalEngine && moveSnapshots.length >= 2) {
+            const evalArr = moveSnapshots.map(s => Number(s.evalAfter ?? s.evalBefore ?? 0));
+            const acc = window.EvalEngine.calculateMatchAccuracy(evalArr);
+            const openText = currentOpening ? `${currentOpening.eco} · ${currentOpening.name}` : 'Freie Eröffnung';
+            accEl.style.display = 'block';
+            accEl.innerHTML = `
+                <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                    <span>⚪ Genauigkeit Weiß: <strong style="color:#81b64c;">${acc.whiteAccuracy}%</strong></span>
+                    <span>⚫ Schwarz: <strong style="color:#f1c40f;">${acc.blackAccuracy}%</strong></span>
+                </div>
+                <div style="color:#bab8b5; font-size:0.8rem;">📖 ${escapeHtml(openText)} • ${moveHistoryLog.length} Halbzüge</div>
+            `;
+        } else if (accEl) {
+            accEl.style.display = 'none';
+        }
+
         modal.style.display = 'flex';
-        
-        if (typeof showConfetti === 'function') {
+        if (!isDraw && typeof showConfetti === 'function') {
             showConfetti();
         }
     }
@@ -1131,17 +1276,184 @@ function isAttacked(tr, tc, attackerColor) {
     return false;
 }
 
-function canMoveLogic(fr, fc, tr, tc) {
-    if (!board) return false;
+let evalWorker = null;
+try {
+    if (typeof Worker !== 'undefined') {
+        evalWorker = new Worker('engineWorker.js');
+        evalWorker.onmessage = (e) => {
+            const res = e.data;
+            if (!res || res.type !== 'eval_result') return;
+
+            if (pendingHintEvalId !== null && res.evalId === pendingHintEvalId) {
+                pendingHintEvalId = null;
+                if (res.bestMove) {
+                    const bm = res.bestMove;
+                    hintMoveSquares = { fr: bm.fr, fc: bm.fc, tr: bm.tr, tc: bm.tc };
+                    if (!Array.isArray(drawArrows)) drawArrows = [];
+                    drawArrows = drawArrows.filter(a => !a.isHint);
+                    drawArrows.push({ fr: bm.fr, fc: bm.fc, tr: bm.tr, tc: bm.tc, color: 'blue', isHint: true });
+                    draw();
+                    const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+                    const moveLabel = `${files[bm.fc]}${8 - bm.fr} → ${files[bm.tc]}${8 - bm.tr}`;
+                    window.showInAppNotification?.('💡 Zug-Tipp', `Empfohlener Zug: ${moveLabel}`, 'info');
+                } else {
+                    window.showInAppNotification?.('💡 Zug-Tipp', 'Keine legalen Züge mehr verfügbar.', 'info');
+                }
+                return;
+            }
+
+            const plyIdx = pendingEvalByPly[res.evalId];
+            currentEvalCp = Number(res.cp) || 0;
+            currentEvalMate = res.mate !== undefined ? res.mate : null;
+            updateEvalBarUI(currentEvalCp, currentEvalMate);
+
+            if (plyIdx !== undefined && moveSnapshots[plyIdx]) {
+                const snap = moveSnapshots[plyIdx];
+                snap.evalAfter = currentEvalCp;
+                snap.mate = currentEvalMate;
+                if (plyIdx > 0 && window.EvalEngine) {
+                    const prevEval = Number(moveSnapshots[plyIdx - 1]?.evalAfter ?? 0);
+                    const wasWhite = (plyIdx % 2) === 1;
+                    snap.quality = window.EvalEngine.classifyMove(prevEval, currentEvalCp, wasWhite);
+                }
+                renderInteractiveMoveHistory();
+                delete pendingEvalByPly[res.evalId];
+            }
+        };
+    }
+} catch (err) {
+    console.warn('Eval worker init skipped:', err);
+}
+
+function getCurrentCastlingRights() {
+    let castling = "";
+    if (!hasMoved.whiteK) { if (!hasMoved.whiteR8) castling += "K"; if (!hasMoved.whiteR1) castling += "Q"; }
+    if (!hasMoved.blackK) { if (!hasMoved.blackR8) castling += "k"; if (!hasMoved.blackR1) castling += "q"; }
+    return castling;
+}
+
+function requestLiveEval(plyIdx) {
+    if (!evalWorker || !board) return;
+    evalRequestCounter++;
+    pendingEvalByPly[evalRequestCounter] = plyIdx;
+    evalWorker.postMessage({
+        action: 'eval',
+        evalId: evalRequestCounter,
+        board,
+        turn,
+        castling: getCurrentCastlingRights(),
+        enPassantTarget
+    });
+}
+
+window.requestHintMove = function() {
+    if (gameEnded) {
+        window.showInAppNotification?.('Zug-Tipp', 'Die Partie ist bereits beendet.', 'info');
+        return;
+    }
+    if (window.isReplayMode) {
+        window.showInAppNotification?.('Zug-Tipp', 'Im Replay-Modus nicht verfügbar.', 'info');
+        return;
+    }
+    if (!evalWorker || !board) {
+        const legal = getAllLegalMoves(turn);
+        if (legal.length > 0) {
+            const m = legal[0];
+            hintMoveSquares = { fr: m.fr, fc: m.fc, tr: m.tr, tc: m.tc };
+            drawArrows = (drawArrows || []).filter(a => !a.isHint);
+            drawArrows.push({ fr: m.fr, fc: m.fc, tr: m.tr, tc: m.tc, color: 'blue', isHint: true });
+            draw();
+        }
+        return;
+    }
+    evalRequestCounter++;
+    pendingHintEvalId = evalRequestCounter;
+    evalWorker.postMessage({
+        action: 'eval',
+        evalId: evalRequestCounter,
+        board,
+        turn,
+        castling: getCurrentCastlingRights(),
+        enPassantTarget
+    });
+};
+
+function syncSoundButtonUI() {
+    const enabled = window.SoundEngine && typeof window.SoundEngine.isSoundEnabled === 'function'
+        ? window.SoundEngine.isSoundEnabled()
+        : localStorage.getItem('sound_enabled') !== 'false';
+    const btn = document.getElementById('soundToggleBtn');
+    if (btn) {
+        btn.textContent = enabled ? '🔊 Ton' : '🔇 Stumm';
+        btn.style.opacity = enabled ? '1' : '0.72';
+    }
+}
+window.syncSoundButtonUI = syncSoundButtonUI;
+
+window.toggleSoundEnabled = function() {
+    const currentlyEnabled = window.SoundEngine && typeof window.SoundEngine.isSoundEnabled === 'function'
+        ? window.SoundEngine.isSoundEnabled()
+        : localStorage.getItem('sound_enabled') !== 'false';
+    const nextEnabled = !currentlyEnabled;
+    if (window.SoundEngine && typeof window.SoundEngine.setSoundEnabled === 'function') {
+        window.SoundEngine.setSoundEnabled(nextEnabled);
+    } else {
+        try { localStorage.setItem('sound_enabled', nextEnabled ? 'true' : 'false'); } catch (e) {}
+    }
+    syncSoundButtonUI();
+    if (nextEnabled) {
+        window.SoundEngine?.playMoveSound();
+    }
+};
+
+function updateEvalBarUI(cp, mate = null) {
+    const barContainer = document.getElementById('eval-bar-container');
+    const barWhite = document.getElementById('eval-bar-white');
+    const labelEl = document.getElementById('eval-score-label');
+    if (!barContainer || !barWhite || !labelEl) return;
+
+    const pct = window.EvalEngine ? window.EvalEngine.getWinPercentage(cp, mate) : Math.max(4, Math.min(96, Math.round(50 + cp * 5)));
+    const isHoriz = barContainer.classList.contains('eval-horizontal');
+
+    if (isHoriz) {
+        barWhite.style.width = `${pct}%`;
+        barWhite.style.height = '100%';
+    } else {
+        barWhite.style.height = `${pct}%`;
+        barWhite.style.width = '100%';
+    }
+
+    if (mate !== null && mate !== undefined) {
+        labelEl.textContent = (mate > 0 ? `+M${mate}` : `-M${Math.abs(mate)}`);
+    } else {
+        const val = Number(cp) || 0;
+        labelEl.textContent = (val > 0 ? '+' : '') + val.toFixed(1);
+    }
+
+    if ((mate !== null && mate < 0) || (mate === null && cp < -0.15)) {
+        barContainer.classList.add('eval-black-adv');
+    } else {
+        barContainer.classList.remove('eval-black-adv');
+    }
+}
+window.updateEvalBarUI = updateEvalBarUI;
+
+function canMoveLogic(fr, fc, tr, tc, turnOverride = null) {
+    if (!board || fr < 0 || fr > 7 || fc < 0 || fc > 7 || tr < 0 || tr > 7 || tc < 0 || tc > 7) return false;
+    if (fr === tr && fc === tc) return false;
     const p = board[fr][fc];
+    if (!p) return false;
+    const activeTurn = turnOverride || turn;
+    if (!isOwn(p, activeTurn)) return false;
     const t = board[tr][tc];
-    if (t && isOwn(t, turn)) return false;
+    if (t && isOwn(t, activeTurn)) return false;
+
     const dr = tr - fr;
     const dc = tc - fc;
     const ar = Math.abs(dr);
     const ac = Math.abs(dc);
     const type = p.toLowerCase();
-    
+
     if (type === 'p') {
         const dir = p === 'P' ? -1 : 1;
         if (dc === 0 && dr === dir && !t) return true;
@@ -1157,20 +1469,23 @@ function canMoveLogic(fr, fc, tr, tc) {
     if (type === 'k') {
         if (ar <= 1 && ac <= 1) return true;
         if (dr === 0 && ac === 2) {
-            const opponentColor = turn === "white" ? "black" : "white";
+            const opponentColor = activeTurn === "white" ? "black" : "white";
+            const expectedRook = activeTurn === "white" ? "R" : "r";
+            const expectedRow = activeTurn === "white" ? 7 : 0;
+            if (fr !== expectedRow || fc !== 4) return false;
             if (isAttacked(fr, fc, opponentColor)) return false;
             if (tc === 6) {
-                if (board[fr][5] === "" && board[fr][6] === "" &&
+                if (board[fr][7] === expectedRook && board[fr][5] === "" && board[fr][6] === "" &&
                     !isAttacked(fr, 5, opponentColor) &&
                     !isAttacked(fr, 6, opponentColor)) {
-                    return turn === "white" ? (!hasMoved.whiteK && !hasMoved.whiteR8) : (!hasMoved.blackK && !hasMoved.blackR8);
+                    return activeTurn === "white" ? (!hasMoved.whiteK && !hasMoved.whiteR8) : (!hasMoved.blackK && !hasMoved.blackR8);
                 }
             }
             if (tc === 2) {
-                if (board[fr][1] === "" && board[fr][2] === "" && board[fr][3] === "" &&
+                if (board[fr][0] === expectedRook && board[fr][1] === "" && board[fr][2] === "" && board[fr][3] === "" &&
                     !isAttacked(fr, 3, opponentColor) &&
                     !isAttacked(fr, 2, opponentColor)) {
-                    return turn === "white" ? (!hasMoved.whiteK && !hasMoved.whiteR1) : (!hasMoved.blackK && !hasMoved.blackR1);
+                    return activeTurn === "white" ? (!hasMoved.whiteK && !hasMoved.whiteR1) : (!hasMoved.blackK && !hasMoved.blackR1);
                 }
             }
         }
@@ -1179,134 +1494,445 @@ function canMoveLogic(fr, fc, tr, tc) {
     return false;
 }
 
-function isCheckmate(color) {
-    const k = typeof findKing === 'function' ? findKing(color) : (window.findKing ? window.findKing(color) : null);
-    if (!k || !isAttacked(k.r, k.c, color === "white" ? "black" : "white")) return false;
+function isSafeMove(fr, fc, tr, tc, turnOverride = null) {
+    if (!board) return false;
+    const activeTurn = turnOverride || turn;
+    const backupPiece = board[tr][tc];
+    const piece = board[fr][fc];
+    const isEnPassant = piece && piece.toLowerCase() === 'p' && fc !== tc && !backupPiece &&
+        enPassantTarget && enPassantTarget.r === tr && enPassantTarget.c === tc;
+
+    let epCaptured = "";
+    if (isEnPassant) {
+        epCaptured = board[fr][tc];
+        board[fr][tc] = "";
+    }
+
+    board[tr][tc] = piece;
+    board[fr][fc] = "";
+
+    const k = typeof findKing === 'function' ? findKing(activeTurn) : (window.findKing ? window.findKing(activeTurn) : null);
+    const opponent = activeTurn === "white" ? "black" : "white";
+    const safe = k ? !isAttacked(k.r, k.c, opponent) : true;
+
+    board[fr][fc] = piece;
+    board[tr][tc] = backupPiece;
+    if (isEnPassant) {
+        board[fr][tc] = epCaptured;
+    }
+    return safe;
+}
+
+function getAllLegalMoves(color) {
+    const legal = [];
+    if (!board) return legal;
     for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
             if (board[r][c] && isOwn(board[r][c], color)) {
                 for (let tr = 0; tr < 8; tr++) {
                     for (let tc = 0; tc < 8; tc++) {
-                        if (canMoveLogic(r, c, tr, tc) && isSafeMove(r, c, tr, tc)) {
-                            return false;
+                        if (canMoveLogic(r, c, tr, tc, color) && isSafeMove(r, c, tr, tc, color)) {
+                            legal.push({ fr: r, fc: c, tr, tc });
                         }
                     }
                 }
             }
         }
     }
-    return true;
+    return legal;
 }
 
-function isSafeMove(fr, fc, tr, tc) {
+function isCheckmate(color) {
+    const k = typeof findKing === 'function' ? findKing(color) : (window.findKing ? window.findKing(color) : null);
+    if (!k || !isAttacked(k.r, k.c, color === "white" ? "black" : "white")) return false;
+    return getAllLegalMoves(color).length === 0;
+}
+
+function isStalemate(color) {
+    const k = typeof findKing === 'function' ? findKing(color) : (window.findKing ? window.findKing(color) : null);
+    if (k && isAttacked(k.r, k.c, color === "white" ? "black" : "white")) return false;
+    return getAllLegalMoves(color).length === 0;
+}
+
+function isInsufficientMaterial() {
     if (!board) return false;
-    const backupPiece = board[tr][tc];
-    const piece = board[fr][fc];
-    board[tr][tc] = piece;
-    board[fr][fc] = "";
-    
-    const k = typeof findKing === 'function' ? findKing(turn) : (window.findKing ? window.findKing(turn) : null);
-    const opponent = turn === "white" ? "black" : "white";
-    const safe = k ? !isAttacked(k.r, k.c, opponent) : true;
-    
-    board[fr][fc] = piece;
-    board[tr][tc] = backupPiece;
-    return safe;
+    const pieces = [];
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const p = board[r][c];
+            if (!p) continue;
+            const t = p.toLowerCase();
+            if (t === 'q' || t === 'r' || t === 'p') return false;
+            if (t !== 'k') pieces.push({ type: t, color: p === p.toUpperCase() ? 'w' : 'b', sqColor: (r + c) % 2 });
+        }
+    }
+    if (pieces.length === 0) return true; // K vs K
+    if (pieces.length === 1 && (pieces[0].type === 'n' || pieces[0].type === 'b')) return true; // K+B/N vs K
+    if (pieces.length === 2 && pieces[0].type === 'b' && pieces[1].type === 'b' && pieces[0].color !== pieces[1].color && pieces[0].sqColor === pieces[1].sqColor) {
+        return true; // K+B vs K+B on same-colored squares
+    }
+    return false;
+}
+
+function getPositionKey() {
+    const boardStr = board.map(r => r.map(x => x || '.').join('')).join('/');
+    let castling = "";
+    if (!hasMoved.whiteK) { if (!hasMoved.whiteR8) castling += "K"; if (!hasMoved.whiteR1) castling += "Q"; }
+    if (!hasMoved.blackK) { if (!hasMoved.blackR8) castling += "k"; if (!hasMoved.blackR1) castling += "q"; }
+    const ep = enPassantTarget ? `${enPassantTarget.r},${enPassantTarget.c}` : '-';
+    return `${boardStr}|${turn}|${castling || '-'}|${ep}`;
+}
+
+function applyFlipLayout() {
+    const col = document.getElementById('board-area-column');
+    if (col) col.classList.toggle('flipped-layout', isBoardFlipped);
+    const evalC = document.getElementById('eval-bar-container');
+    if (evalC && !evalC.classList.contains('eval-horizontal')) {
+        evalC.classList.toggle('flipped-eval', isBoardFlipped);
+    }
+    if (typeof draw === 'function') draw();
+}
+
+function flipBoard() {
+    isBoardFlipped = !isBoardFlipped;
+    applyFlipLayout();
+}
+window.flipBoard = flipBoard;
+
+function updateCapturedMaterialUI() {
+    if (!window.EvalEngine || !board) return;
+    const data = window.EvalEngine.getCapturedAndMaterial(board);
+    const glyphsWhite = { P: '♙', N: '♘', B: '♗', R: '♖', Q: '♕' };
+    const glyphsBlack = { p: '♟', n: '♞', b: '♝', r: '♜', q: '♛' };
+
+    const capW = document.getElementById('captured-white');
+    const capB = document.getElementById('captured-black');
+    const matW = document.getElementById('material-white');
+    const matB = document.getElementById('material-black');
+
+    if (capW) capW.textContent = data.capturedByWhite.map(p => glyphsBlack[p] || '').join('');
+    if (capB) capB.textContent = data.capturedByBlack.map(p => glyphsWhite[p] || '').join('');
+    if (matW) matW.textContent = data.whiteLead > 0 ? `+${data.whiteLead}` : '';
+    if (matB) matB.textContent = data.blackLead > 0 ? `+${data.blackLead}` : '';
+}
+window.updateCapturedMaterialUI = updateCapturedMaterialUI;
+
+function playUciMoveOnBoard(uciStr, broadcast = false) {
+    if (!uciStr || uciStr.length < 4) return false;
+    const fc = uciStr.charCodeAt(0) - 97;
+    const fr = 8 - parseInt(uciStr[1], 10);
+    const tc = uciStr.charCodeAt(2) - 97;
+    const tr = 8 - parseInt(uciStr[3], 10);
+    const promo = uciStr[4] ? uciStr[4].toLowerCase() : null;
+    if (canMoveLogic(fr, fc, tr, tc, turn) && isSafeMove(fr, fc, tr, tc, turn)) {
+        doMove(fr, fc, tr, tc, broadcast, promo);
+        return true;
+    }
+    return false;
+}
+
+function syncTrainerUI(statusMessage = '') {
+    const toggleBtn = document.getElementById('trainerToggleBtn');
+    const statusEl = document.getElementById('trainer-status-text');
+    if (toggleBtn) {
+        toggleBtn.textContent = trainerActive ? '🎓 Aktiv' : '🎓 Trainer';
+        toggleBtn.style.background = trainerActive ? 'rgba(129, 182, 76, 0.25)' : '';
+        toggleBtn.style.borderColor = trainerActive ? '#81b64c' : '';
+    }
+    if (statusEl) {
+        if (trainerActive) {
+            statusEl.style.display = 'block';
+            if (statusMessage) statusEl.textContent = statusMessage;
+        } else {
+            statusEl.style.display = 'none';
+            statusEl.textContent = '';
+        }
+    }
+}
+
+window.toggleOpeningTrainer = function() {
+    trainerActive = !trainerActive;
+    if (!trainerActive) {
+        syncTrainerUI('');
+        return;
+    }
+    const sel = document.getElementById('trainer-repertoire-select');
+    if (sel && sel.value) {
+        trainerRepertoireId = sel.value;
+        try { localStorage.setItem('trainer_repertoire_id', trainerRepertoireId); } catch (e) {}
+    }
+    const rep = window.OpeningTrainer?.getRepertoire(trainerRepertoireId);
+    if (!rep) {
+        trainerActive = false;
+        syncTrainerUI('');
+        return;
+    }
+
+    const gm = document.getElementById('gameMode');
+    if (gm) gm.value = 'local';
+    resetGame(true);
+    myColor = rep.side;
+    isBoardFlipped = (rep.side === 'black');
+    applyFlipLayout();
+
+    syncTrainerUI(`${rep.name} (${rep.side === 'white' ? 'Weiß' : 'Schwarz'}) — Spiele die Theorie!`);
+    if (rep.side === 'black' && rep.moves.length > 0) {
+        setTimeout(() => {
+            if (trainerActive && moveSnapshots.length === 1 && !gameEnded) {
+                playUciMoveOnBoard(rep.moves[0], false);
+            }
+        }, 300);
+    }
+};
+
+function updateOpeningExplorer() {
+    const badge = document.getElementById('opening-name-badge');
+    const contBar = document.getElementById('opening-continuations');
+    const uciList = moveSnapshots.slice(1).map(s => s.uci).filter(Boolean);
+
+    if (badge && window.OpeningBook) {
+        if (uciList.length === 0) {
+            currentOpening = null;
+            badge.textContent = 'Startstellung';
+            badge.title = 'Standard-Schachstellung';
+        } else {
+            const found = window.OpeningBook.identifyOpening(uciList);
+            if (found) {
+                currentOpening = found;
+                badge.textContent = `${found.eco} · ${found.name}`;
+                badge.title = `${found.eco}: ${found.name}`;
+            } else if (!currentOpening) {
+                badge.textContent = 'Freie Partie';
+            }
+        }
+    }
+
+    if (contBar && window.OpeningBook) {
+        if (uciList.length < 14 && !gameEnded && !window.isReplayMode && !window.isTacticalPuzzleMode) {
+            const nextList = window.OpeningBook.getBookContinuations(uciList).slice(0, 5);
+            if (nextList.length > 0) {
+                const esc = typeof escapeHtml === 'function' ? escapeHtml : (s => String(s || ''));
+                contBar.innerHTML = nextList.map(m => {
+                    const label = m.uci.length >= 4 ? `${m.uci.slice(0, 2)}-${m.uci.slice(2, 4)}` : m.uci;
+                    return `<button type="button" class="opening-move-chip" data-opening-uci="${esc(m.uci)}" title="${esc(m.eco + ' ' + m.name)}">${esc(label)} <span style="opacity:0.7;">${esc(m.eco)}</span></button>`;
+                }).join('');
+                contBar.style.display = 'flex';
+            } else {
+                contBar.innerHTML = '';
+                contBar.style.display = 'none';
+            }
+        } else {
+            contBar.innerHTML = '';
+            contBar.style.display = 'none';
+        }
+    }
+
+    if (trainerActive && window.OpeningTrainer && uciList.length > 0 && !window._suppressEvalAndSound) {
+        const rep = window.OpeningTrainer.getRepertoire(trainerRepertoireId);
+        if (rep) {
+            const lastIdx = uciList.length - 1;
+            const moverWasWhite = (lastIdx % 2) === 0;
+            const isPlayerMove = (rep.side === 'white' && moverWasWhite) || (rep.side === 'black' && !moverWasWhite);
+            if (isPlayerMove) {
+                const check = window.OpeningTrainer.validateTrainerMove(trainerRepertoireId, lastIdx, uciList[lastIdx]);
+                syncTrainerUI(check.message);
+                const statusEl = document.getElementById('trainer-status-text');
+                if (statusEl) statusEl.style.color = check.valid ? '#a9d977' : '#f1c40f';
+                if (check.valid && !check.isCompleted && check.nextTheoreticalMove) {
+                    const expectedReply = check.nextTheoreticalMove;
+                    setTimeout(() => {
+                        if (trainerActive && !gameEnded && moveSnapshots.length - 1 === uciList.length) {
+                            playUciMoveOnBoard(expectedReply, false);
+                        }
+                    }, 340);
+                }
+            }
+        }
+    }
+}
+
+window.applySanMoveSilent = function(sanToken) {
+    if (!sanToken || !board) return false;
+    const cleanSan = String(sanToken).trim().replace(/[+#!?]+$/g, '').replace(/0-0-0/g, 'O-O-O').replace(/0-0/g, 'O-O');
+    if (/^[a-h][1-8][a-h][1-8][qrbn]?$/i.test(cleanSan)) {
+        const fc = cleanSan.charCodeAt(0) - 97;
+        const fr = 8 - parseInt(cleanSan[1], 10);
+        const tc = cleanSan.charCodeAt(2) - 97;
+        const tr = 8 - parseInt(cleanSan[3], 10);
+        const promo = cleanSan[4] ? cleanSan[4].toLowerCase() : null;
+        if (canMoveLogic(fr, fc, tr, tc, turn) && isSafeMove(fr, fc, tr, tc, turn)) {
+            window._lastMoveWasDrag = true;
+            doMove(fr, fc, tr, tc, false, promo);
+            return true;
+        }
+        return false;
+    }
+
+    const legal = getAllLegalMoves(turn);
+    const promoMatch = cleanSan.match(/=([QRBNDTLS])/i);
+    const promoMapDe = { D: 'q', Q: 'q', T: 'r', R: 'r', L: 'b', B: 'b', S: 'n', N: 'n' };
+    const promoP = promoMatch ? promoMapDe[promoMatch[1].toUpperCase()] : null;
+
+    for (const m of legal) {
+        const p = board[m.fr][m.fc];
+        const isCap = board[m.tr][m.tc] !== "" || (p.toLowerCase() === 'p' && enPassantTarget && m.tr === enPassantTarget.r && m.tc === enPassantTarget.c);
+        const genDe = getAlgebraicNotation(m.fr, m.fc, m.tr, m.tc, p, isCap, board, promoP, false, false, turn);
+        const genEn = genDe.replace('D', 'Q').replace('T', 'R').replace('L', 'B').replace('S', 'N').replace('=D', '=Q').replace('=T', '=R').replace('=L', '=B').replace('=S', '=N');
+        if (genDe === cleanSan || genEn === cleanSan) {
+            window._lastMoveWasDrag = true;
+            doMove(m.fr, m.fc, m.tr, m.tc, false, promoP);
+            return true;
+        }
+    }
+    return false;
+};
+
+window.buildReplaySnapshots = function(movesList) {
+    if (!Array.isArray(movesList) || movesList.length === 0) return 0;
+    window._suppressEvalAndSound = true;
+    let applied = 0;
+    try {
+        for (const mv of movesList) {
+            if (typeof mv === 'object' && mv.fr !== undefined && mv.fc !== undefined && mv.tr !== undefined && mv.tc !== undefined) {
+                window._lastMoveWasDrag = true;
+                doMove(mv.fr, mv.fc, mv.tr, mv.tc, false, mv.promotion || null);
+                applied++;
+            } else if (window.applySanMoveSilent(String(mv))) {
+                applied++;
+            } else {
+                break;
+            }
+        }
+    } finally {
+        window._suppressEvalAndSound = false;
+    }
+    updateCapturedMaterialUI();
+    updateOpeningExplorer();
+    renderInteractiveMoveHistory();
+    requestLiveEval(moveSnapshots.length - 1);
+    return applied;
+};
+
+function updatePlayerNamesBar() {
+    const nw = document.getElementById('name-white');
+    const nb = document.getElementById('name-black');
+    const mode = gameModeSelect ? gameModeSelect.value : 'local';
+    const me = typeof getMyName === 'function' ? getMyName() : 'Spieler';
+
+    if (mode === 'bot') {
+        const diffEl = document.getElementById('botDifficulty');
+        const diffTxt = diffEl ? diffEl.options[diffEl.selectedIndex]?.text || 'KI' : 'KI';
+        if (myColor === 'black') {
+            if (nw) nw.textContent = `🤖 ${diffTxt}`;
+            if (nb) nb.textContent = me;
+        } else {
+            if (nw) nw.textContent = me;
+            if (nb) nb.textContent = `🤖 ${diffTxt}`;
+        }
+    } else if (mode === 'online' || mode === 'random') {
+        if (myColor === 'white') {
+            if (nw) nw.textContent = me;
+            if (nb) nb.textContent = opponentName || 'Gegner';
+        } else {
+            if (nw) nw.textContent = opponentName || 'Gegner';
+            if (nb) nb.textContent = me;
+        }
+    } else {
+        if (nw) nw.textContent = 'Spieler Weiß';
+        if (nb) nb.textContent = 'Spieler Schwarz';
+    }
 }
 
 let isAnimating = false;
 
-function doMove(fr, fc, tr, tc, broadcast = true) {
-    if (!board || fr === undefined || fc === undefined || tr === undefined || tc === undefined) return;
+function doMove(fr, fc, tr, tc, broadcast = true, promoPiece = null) {
+    if (gameEnded || !board || fr === undefined || fc === undefined || tr === undefined || tc === undefined) return;
+    if (viewPly !== -1) jumpToLive();
     const piece = board[fr][fc];
     if (!piece) return;
-    
-    // 1. Visuelle Animation auf dem aktuellen DOM starten
+
     const currentBoardEl = document.getElementById("chess-board") || boardEl;
+    const skipAnim = !!window._lastMoveWasDrag;
+    window._lastMoveWasDrag = false;
     let animationDuration = 0;
-    
-    if (currentBoardEl && currentBoardEl.children.length >= 64) {
-        // Squares are indexed by r * 8 + c
-        const startSq = currentBoardEl.children[fr * 8 + fc];
-        const destSq = currentBoardEl.children[tr * 8 + tc];
+
+    if (!skipAnim && currentBoardEl && currentBoardEl.children.length >= 64) {
+        const startSq = currentBoardEl.querySelector(`[data-r="${fr}"][data-c="${fc}"]`);
+        const destSq = currentBoardEl.querySelector(`[data-r="${tr}"][data-c="${tc}"]`);
         const img = startSq ? startSq.querySelector("img") : null;
-        
+
         if (img && destSq) {
             isAnimating = true;
-            animationDuration = 280; // Dauer der Animation in ms
-            
+            animationDuration = 160;
+
             const startRect = startSq.getBoundingClientRect();
             const destRect = destSq.getBoundingClientRect();
             const dx = destRect.left - startRect.left;
             const dy = destRect.top - startRect.top;
-            
-            // Geschlagene Figur im Zielfeld ausblenden und schrumpfen
+
             const destImg = destSq.querySelector("img");
             if (destImg) {
-                destImg.style.transition = "all 200ms ease-out";
+                destImg.style.transition = "all 140ms ease-out";
                 destImg.style.transform = "scale(0)";
                 destImg.style.opacity = "0";
             }
-            
-            // En-Passant geschlagenen Bauern ausblenden
-            if (piece.toLowerCase() === 'p' && enPassantTarget && tr === enPassantTarget.r && tc === enPassantTarget.c) {
-                const epSq = currentBoardEl.children[fr * 8 + tc];
+
+            if (piece.toLowerCase() === 'p' && enPassantTarget && tr === enPassantTarget.r && tc === enPassantTarget.c && !board[tr][tc]) {
+                const epSq = currentBoardEl.querySelector(`[data-r="${fr}"][data-c="${tc}"]`);
                 const epImg = epSq ? epSq.querySelector("img") : null;
                 if (epImg) {
-                    epImg.style.transition = "all 200ms ease-out";
+                    epImg.style.transition = "all 140ms ease-out";
                     epImg.style.transform = "scale(0)";
                     epImg.style.opacity = "0";
                 }
             }
-            
-            // Rochade Turm Animation
+
             if (piece.toLowerCase() === 'k' && Math.abs(tc - fc) === 2) {
-                if (tc === 6) { // Königseite
-                    const rookSq = currentBoardEl.children[fr * 8 + 7];
-                    const targetRookSq = currentBoardEl.children[fr * 8 + 5];
-                    const rImg = rookSq ? rookSq.querySelector("img") : null;
-                    if (rImg && targetRookSq) {
-                        const rStartRect = rookSq.getBoundingClientRect();
-                        const rDestRect = targetRookSq.getBoundingClientRect();
-                        const rDx = rDestRect.left - rStartRect.left;
-                        rImg.style.transition = "transform 280ms cubic-bezier(0.25, 1, 0.5, 1)";
-                        rImg.style.transform = `translate(${rDx}px, 0px)`;
-                    }
-                } else if (tc === 2) { // Damenseite
-                    const rookSq = currentBoardEl.children[fr * 8 + 0];
-                    const targetRookSq = currentBoardEl.children[fr * 8 + 3];
-                    const rImg = rookSq ? rookSq.querySelector("img") : null;
-                    if (rImg && targetRookSq) {
-                        const rStartRect = rookSq.getBoundingClientRect();
-                        const rDestRect = targetRookSq.getBoundingClientRect();
-                        const rDx = rDestRect.left - rStartRect.left;
-                        rImg.style.transition = "transform 280ms cubic-bezier(0.25, 1, 0.5, 1)";
-                        rImg.style.transform = `translate(${rDx}px, 0px)`;
-                    }
+                const rookFc = tc === 6 ? 7 : 0;
+                const rookTc = tc === 6 ? 5 : 3;
+                const rookSq = currentBoardEl.querySelector(`[data-r="${fr}"][data-c="${rookFc}"]`);
+                const targetRookSq = currentBoardEl.querySelector(`[data-r="${fr}"][data-c="${rookTc}"]`);
+                const rImg = rookSq ? rookSq.querySelector("img") : null;
+                if (rImg && targetRookSq) {
+                    const rDx = targetRookSq.getBoundingClientRect().left - rookSq.getBoundingClientRect().left;
+                    rImg.style.transition = "transform 160ms cubic-bezier(0.25, 1, 0.5, 1)";
+                    rImg.style.transform = `translate(${rDx}px, 0px)`;
                 }
             }
-            
-            // Figur gleiten lassen
+
             img.style.zIndex = "150";
-            img.style.transition = "transform 280ms cubic-bezier(0.25, 1, 0.5, 1)";
+            img.style.transition = "transform 160ms cubic-bezier(0.25, 1, 0.5, 1)";
             img.style.transform = `translate(${dx}px, ${dy}px)`;
         }
     }
-    
-    // 2. Zustand nach Abschluss der Animation aktualisieren
-    setTimeout(() => {
+
+    const finalizeMove = () => {
         isAnimating = false;
-        const isCapture = board[tr][tc] !== "";
-        
+        const moverColor = isOwn(piece, "white") ? "white" : "black";
+        const isEnPassant = piece.toLowerCase() === 'p' && enPassantTarget && tr === enPassantTarget.r && tc === enPassantTarget.c && !board[tr][tc];
+        const isCapture = board[tr][tc] !== "" || isEnPassant;
+        const isCastle = piece.toLowerCase() === 'k' && Math.abs(tc - fc) === 2;
+
+        // Snapshot for SAN disambiguation before board changes
+        const boardBefore = board.map(r => [...r]);
+
         history.push({
-            board: board.map(r => [...r]),
+            board: boardBefore,
             turn,
             hasMoved: { ...hasMoved },
             enPassantTarget,
             halfMoveClock
         });
 
-        if (piece.toLowerCase() === 'p' && enPassantTarget && tr === enPassantTarget.r && tc === enPassantTarget.c) {
+        let appliedPromo = null;
+        let finalPiece = piece;
+        if (piece.toLowerCase() === 'p' && (tr === 0 || tr === 7)) {
+            const pNorm = (promoPiece && ['q', 'r', 'b', 'n'].includes(String(promoPiece).toLowerCase())) ? String(promoPiece).toLowerCase() : 'q';
+            appliedPromo = pNorm;
+            finalPiece = moverColor === 'white' ? pNorm.toUpperCase() : pNorm;
+        }
+
+        if (isEnPassant) {
             board[fr][tc] = "";
         }
 
@@ -1316,7 +1942,7 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
             enPassantTarget = null;
         }
 
-        if (piece.toLowerCase() === 'k' && Math.abs(tc - fc) === 2) {
+        if (isCastle) {
             if (tc === 6) {
                 board[fr][5] = board[fr][7];
                 board[fr][7] = "";
@@ -1333,53 +1959,38 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
         if (fr === 0 && fc === 0) hasMoved.blackR1 = true;
         if (fr === 0 && fc === 7) hasMoved.blackR8 = true;
 
-        board[tr][tc] = piece;
+        board[tr][tc] = finalPiece;
         board[fr][fc] = "";
         lastMove = { fr, fc, tr, tc };
 
-        // --- DAILY TACTICAL PUZZLE CHECKER ---
+        if (piece.toLowerCase() === 'p' || isCapture) halfMoveClock = 0;
+        else halfMoveClock++;
+
+        // --- DAILY TACTICAL PUZZLE CHECKER (Server-Authoritative - Fix F6) ---
         if (window.isTacticalPuzzleMode && window.activePuzzle) {
             const ap = window.activePuzzle;
             const pStatus = document.getElementById("puzzle-status") || document.getElementById("modal-puzzle-status");
-            if (fr === ap.solution.fr && fc === ap.solution.fc && tr === ap.solution.tr && tc === ap.solution.tc) {
-                if (pStatus) {
-                    pStatus.innerText = "🎉 RICHTIG! Berechne Belohnung...";
-                    pStatus.style.color = "#2ecc71";
-                }
-                if (typeof triggerGoldDustCelebration === 'function') {
-                    triggerGoldDustCelebration();
-                }
-                if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify({
-                        type: 'solve_puzzle',
-                        playerName: getMyName(),
-                        puzzleId: ap.id,
-                        solution: { fr, fc, tr, tc }
-                    }));
-                }
-                window.activePuzzle = null;
+            if (pStatus) {
+                pStatus.innerText = "⏳ Zug wird auf dem Server geprüft...";
+                pStatus.style.color = "#f1c40f";
+            }
+            window.__puzzleAttemptFen = ap.fen;
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'solve_puzzle',
+                    playerName: getMyName(),
+                    puzzleId: ap.id,
+                    move: { fr, fc, tr, tc }
+                }));
             } else {
                 if (pStatus) {
-                    pStatus.innerText = "❌ Falscher Zug! Versuche es noch einmal.";
+                    pStatus.innerText = "❌ Keine Server-Verbindung zur Rätsel-Prüfung.";
                     pStatus.style.color = "#e74c3c";
                 }
-                setTimeout(() => {
-                    if (typeof loadFEN === 'function') {
-                        loadFEN(ap.fen);
-                    }
-                }, 800);
-                draw();
-                return;
             }
+            draw();
+            return;
         }
-
-        try {
-            if (isCapture && sounds && sounds.cap) sounds.cap.play().catch(()=>{});
-            else if (sounds && sounds.move) sounds.move.play().catch(()=>{});
-        } catch(e) {}
-
-        sendeAnAnalyse(fr, fc, tr, tc, piece, isCapture);
-        addMoveToSidebar(fr, fc, tr, tc, piece, isCapture);
 
         if (timeInc > 0 && (!onlineRoom || onlineRoom === 'global' || !socket || socket.readyState !== WebSocket.OPEN)) {
             if (turn === "white") whiteTime += timeInc;
@@ -1388,8 +1999,72 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
 
         turn = turn === "white" ? "black" : "white";
 
-        if (statusEl) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug";
-        
+        const oppKing = findKing(turn);
+        const oppInCheck = oppKing ? isAttacked(oppKing.r, oppKing.c, moverColor) : false;
+        const oppMated = oppInCheck ? isCheckmate(turn) : false;
+        const oppStalemated = !oppInCheck ? isStalemate(turn) : false;
+
+        // Exact SAN notation
+        const notation = getAlgebraicNotation(fr, fc, tr, tc, piece, isCapture, boardBefore, appliedPromo, oppInCheck, oppMated, moverColor);
+        const uciMove = String.fromCharCode(97 + fc) + (8 - fr) + String.fromCharCode(97 + tc) + (8 - tr) + (appliedPromo || '');
+        const currentFen = typeof boardToFEN === 'function' ? boardToFEN() : '';
+
+        moveHistoryLog.push(notation);
+        moveSnapshots.push({
+            board: board.map(r => [...r]),
+            turn,
+            hasMoved: { ...hasMoved },
+            enPassantTarget,
+            halfMoveClock,
+            lastMove: { ...lastMove },
+            san: notation,
+            uci: uciMove,
+            fen: currentFen,
+            evalBefore: currentEvalCp,
+            evalAfter: currentEvalCp,
+            quality: null
+        });
+        viewPly = -1;
+
+        const posKey = getPositionKey();
+        positionHistory[posKey] = (positionHistory[posKey] || 0) + 1;
+
+        // Rich Web Audio Sounds
+        if (!window._suppressEvalAndSound) {
+            if (oppMated) {
+                window.SoundEngine?.playMateSound();
+            } else if (oppInCheck) {
+                window.SoundEngine?.playCheckSound();
+            } else if (isCastle) {
+                window.SoundEngine?.playCastleSound();
+            } else if (appliedPromo) {
+                window.SoundEngine?.playPromoteSound();
+            } else if (isCapture) {
+                window.SoundEngine?.playCaptureSound();
+            } else {
+                window.SoundEngine?.playMoveSound();
+            }
+        }
+
+        drawArrows = [];
+        highlightSquares = {};
+        hintMoveSquares = null;
+
+        if (!window._suppressEvalAndSound) {
+            sendeAnAnalyse(fr, fc, tr, tc, finalPiece, isCapture);
+            renderInteractiveMoveHistory();
+            updateOpeningExplorer();
+            updateCapturedMaterialUI();
+            requestLiveEval(moveSnapshots.length - 1);
+        }
+
+        const sEl = document.getElementById("status-display") || statusEl;
+        if (sEl) {
+            if (oppMated) sEl.textContent = `Schachmatt! ${moverColor === 'white' ? 'Weiß' : 'Schwarz'} gewinnt.`;
+            else if (oppInCheck) sEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " steht im SCHACH!";
+            else sEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug";
+        }
+
         updateTimerUI();
 
         if (broadcast && socket && socket.readyState === WebSocket.OPEN) {
@@ -1397,86 +2072,154 @@ function doMove(fr, fc, tr, tc, broadcast = true) {
                 type: 'move',
                 room: onlineRoom,
                 fr, fc, tr, tc,
-                piece,
+                piece: finalPiece,
+                promotion: appliedPromo,
                 turn,
-                fen: typeof boardToFEN === 'function' ? boardToFEN() : ""
+                fen: currentFen
             }));
         }
 
-        draw();
-
-        const k = typeof findKing === 'function' ? findKing(turn) : (window.findKing ? window.findKing(turn) : null);
-        if (k && isAttacked(k.r, k.c, turn === "white" ? "black" : "white")) {
-            try { if (sounds && sounds.check) sounds.check.play().catch(()=>{}); } catch(e) {}
-            if (statusEl) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " steht im SCHACH!";
+        if (!window._suppressEvalAndSound) {
+            draw();
         }
-        
-        if (isCheckmate(turn)) {
+
+        // Check KOTH victory
+        const kothCenter = (r, c) => (r === 3 || r === 4) && (c === 3 || c === 4);
+        if (activeVariant === 'koth' && piece.toLowerCase() === 'k' && kothCenter(tr, tc)) {
+            gameEnded = true;
             if (timerInterval) clearInterval(timerInterval);
-            const winner = turn === "white" ? "Schwarz" : "Weiß";
+            const winner = moverColor === "white" ? "Weiß" : "Schwarz";
+            window.SoundEngine?.playMateSound();
+            showCheckmateModal(winner, "King of the Hill!");
+            return;
+        }
+
+        // Terminal FIDE checks
+        if (oppMated) {
+            gameEnded = true;
+            if (timerInterval) clearInterval(timerInterval);
+            const winner = moverColor === "white" ? "Weiß" : "Schwarz";
             showCheckmateModal(winner, "Schachmatt!");
-            if (typeof triggerGoldDustCelebration === 'function') {
-                triggerGoldDustCelebration();
-            }
+            if (typeof triggerGoldDustCelebration === 'function') triggerGoldDustCelebration();
             if (broadcast && socket && socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ type: 'game_over', reason: 'checkmate', text: `Schachmatt! ${winner} gewinnt.` }));
-                if ((myColor === "white" && winner === "Weiß") || (myColor === "black" && winner === "Schwarz") || (typeof gameModeSelect !== 'undefined' && gameModeSelect && gameModeSelect.value === 'local')) {
+                if ((myColor === "white" && winner === "Weiß") || (myColor === "black" && winner === "Schwarz") || (gameModeSelect && gameModeSelect.value === 'local')) {
                     const pName = getMyName();
                     if (pName) {
-                        const moves = typeof moveHistoryLog !== 'undefined' ? moveHistoryLog.length : 0;
-                        const mode = gameModeSelect ? gameModeSelect.value : 'local';
-                        socket.send(JSON.stringify({ type: 'win', name: pName, movesCount: moves, gameMode: mode }));
+                        socket.send(JSON.stringify({ type: 'win', name: pName, movesCount: moveHistoryLog.length, gameMode: gameModeSelect ? gameModeSelect.value : 'local' }));
                     }
                 }
             }
-        }
-
-        if (gameModeSelect) {
-            if (gameModeSelect.value === "bot" && turn === "black") {
-                const diffSelect = document.getElementById("botDifficulty");
-                const diffVal = diffSelect ? diffSelect.value : "instant";
-                const fen = typeof boardToFEN === 'function' ? boardToFEN() : "";
-
-                if (diffVal === "10" && typeof stockfishWorker !== 'undefined') {
-                    let stockfishAnswered = false;
-                    const fallbackTimer = setTimeout(() => {
-                        if (!stockfishAnswered && turn === "black" && gameModeSelect && gameModeSelect.value === "bot") {
-                            myEngineWorker.postMessage({ board, turn: "black", fen, difficulty: "10" });
-                        }
-                    }, 1200);
-
-                    stockfishWorker.postMessage('setoption name Skill Level value 20');
-                    stockfishWorker.postMessage(`position fen ${fen}`);
-                    stockfishWorker.postMessage(`go depth 10`);
-                } else {
-                    myEngineWorker.postMessage({ board, turn: "black", fen, difficulty: diffVal });
-                }
+            return;
+        } else if (oppStalemated) {
+            gameEnded = true;
+            if (timerInterval) clearInterval(timerInterval);
+            window.SoundEngine?.playDrawSound();
+            showCheckmateModal("Remis", "Patt (Stalemate)!");
+            if (broadcast && socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'game_over', reason: 'stalemate', text: 'Patt! Die Partie endet unentschieden.' }));
             }
+            return;
+        } else if (isInsufficientMaterial()) {
+            gameEnded = true;
+            if (timerInterval) clearInterval(timerInterval);
+            window.SoundEngine?.playDrawSound();
+            showCheckmateModal("Remis", "Ungenügendes Material!");
+            if (broadcast && socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'game_over', reason: 'insufficient_material', text: 'Remis wegen ungenügenden Materials.' }));
+            }
+            return;
+        } else if (halfMoveClock >= 100) {
+            gameEnded = true;
+            if (timerInterval) clearInterval(timerInterval);
+            window.SoundEngine?.playDrawSound();
+            showCheckmateModal("Remis", "50-Züge-Regel!");
+            return;
+        } else if (positionHistory[posKey] >= 3) {
+            gameEnded = true;
+            if (timerInterval) clearInterval(timerInterval);
+            window.SoundEngine?.playDrawSound();
+            showCheckmateModal("Remis", "Dreifache Stellungswiederholung!");
+            return;
         }
 
-        if (premove && turn === myColor) {
+        // Bot trigger
+        if (!window._suppressEvalAndSound && gameModeSelect && gameModeSelect.value === "bot" && turn === botColor && !gameEnded) {
+            triggerBotMove(currentFen);
+        }
+
+        // Execute Premove if queued
+        if (premove && turn === myColor && !gameEnded) {
             const pm = premove;
             premove = null;
-            if (board[pm.fr] && board[pm.fr][pm.fc] && isOwn(board[pm.fr][pm.fc], turn) && canMoveLogic(pm.fr, pm.fc, pm.tr, pm.tc) && isSafeMove(pm.fr, pm.fc, pm.tr, pm.tc)) {
-                let pPiece = board[pm.fr][pm.fc];
-                if (pPiece.toLowerCase() === 'p' && (pm.tr === 0 || pm.tr === 7)) {
-                    board[pm.fr][pm.fc] = (pPiece === 'P') ? 'Q' : 'q';
-                }
-                setTimeout(() => doMove(pm.fr, pm.fc, pm.tr, pm.tc, true), 10);
+            if (board[pm.fr] && board[pm.fr][pm.fc] && isOwn(board[pm.fr][pm.fc], turn) &&
+                canMoveLogic(pm.fr, pm.fc, pm.tr, pm.tc) && isSafeMove(pm.fr, pm.fc, pm.tr, pm.tc)) {
+                const pPromo = (board[pm.fr][pm.fc].toLowerCase() === 'p' && (pm.tr === 0 || pm.tr === 7)) ? (pm.promo || 'q') : null;
+                setTimeout(() => doMove(pm.fr, pm.fc, pm.tr, pm.tc, true, pPromo), 15);
             } else {
+                window.SoundEngine?.playIllegalSound();
                 draw();
             }
         }
-    }, animationDuration);
+    };
+
+    if (animationDuration > 0) setTimeout(finalizeMove, animationDuration);
+    else finalizeMove();
 }
 
-function resetGame(keepCurrentMode = true) {
+function triggerBotMove(fenOverride = null) {
+    if (gameEnded || !gameModeSelect || gameModeSelect.value !== 'bot' || turn !== botColor) return;
+    const diffSelect = document.getElementById("botDifficulty");
+    const diffVal = diffSelect ? diffSelect.value : "instant";
+    const currentFen = fenOverride || boardToFEN();
+
+    if (window.OpeningBook && moveSnapshots.length <= 10) {
+        const uciSeq = moveSnapshots.slice(1).map(s => s.uci);
+        const bookMoveStr = window.OpeningBook.getBookMove(uciSeq);
+        if (bookMoveStr && bookMoveStr.length >= 4) {
+            const bfc = bookMoveStr.charCodeAt(0) - 97;
+            const bfr = 8 - parseInt(bookMoveStr[1], 10);
+            const btc = bookMoveStr.charCodeAt(2) - 97;
+            const btr = 8 - parseInt(bookMoveStr[3], 10);
+            const bPromo = bookMoveStr[4] ? bookMoveStr[4].toLowerCase() : null;
+            if (canMoveLogic(bfr, bfc, btr, btr >= 0 ? btc : -1, botColor) && isSafeMove(bfr, bfc, btr, btc, botColor)) {
+                setTimeout(() => {
+                    if (!gameEnded && turn === botColor && gameModeSelect.value === 'bot') {
+                        doMove(bfr, bfc, btr, btc, false, bPromo);
+                    }
+                }, 140);
+                return;
+            }
+        }
+    }
+
+    if (diffVal === "10" && typeof stockfishWorker !== 'undefined') {
+        if (pendingStockfishFallbackTimer) clearTimeout(pendingStockfishFallbackTimer);
+        pendingStockfishFallbackTimer = setTimeout(() => {
+            pendingStockfishFallbackTimer = null;
+            if (!gameEnded && turn === botColor && gameModeSelect && gameModeSelect.value === "bot") {
+                myEngineWorker.postMessage({ board, turn: botColor, fen: currentFen, difficulty: "10" });
+            }
+        }, 1200);
+
+        stockfishWorker.postMessage('setoption name Skill Level value 20');
+        stockfishWorker.postMessage(`position fen ${currentFen}`);
+        stockfishWorker.postMessage(`go depth 10`);
+    } else {
+        myEngineWorker.postMessage({ board, turn: botColor, fen: currentFen, difficulty: diffVal });
+    }
+}
+
+function resetGame(keepCurrentMode = true, opts = {}) {
+    if (!opts?.keepReplay) {
+        window.stopReplay?.();
+    }
     if (typeof window.switchSidebarTab === "function") {
         const gameBtn = document.querySelectorAll(".sidebar-tab-btn")[0];
         if (gameBtn) window.switchSidebarTab("tab-game", gameBtn);
     }
-    const gameModeSelect = document.getElementById("gameMode");
-    const currentMode = gameModeSelect ? gameModeSelect.value : "local";
+    const gmSelect = document.getElementById("gameMode");
+    const currentMode = gmSelect ? gmSelect.value : "local";
 
     const botDiff = document.getElementById("bot-difficulty-container");
     if (botDiff) botDiff.style.display = (currentMode === "bot") ? "block" : "none";
@@ -1485,20 +2228,32 @@ function resetGame(keepCurrentMode = true) {
     if (timeCtrl) timeCtrl.style.display = "block";
 
     if (currentMode === "bot") {
-        myColor = "white";
+        const colSel = document.getElementById("botColorSelect");
+        const prefCol = (colSel && colSel.value) || localStorage.getItem('bot_player_color') || 'white';
+        if (prefCol === 'random') {
+            myColor = Math.random() < 0.5 ? 'white' : 'black';
+        } else {
+            myColor = prefCol === 'black' ? 'black' : 'white';
+        }
+        botColor = myColor === 'white' ? 'black' : 'white';
         opponentName = "Computer (KI)";
         onlineRoom = "";
     } else if (currentMode === "local") {
         myColor = "white";
+        botColor = "black";
         opponentName = "Lokaler Spieler";
         onlineRoom = "";
+    } else {
+        botColor = myColor === 'white' ? 'black' : 'white';
     }
 
+    gameEnded = false;
     window.isTacticalPuzzleMode = false;
     const resetPuzzleBtn = document.getElementById("resetPuzzleBtn");
     if (resetPuzzleBtn) resetPuzzleBtn.style.display = "none";
     const puzzleStatus = document.getElementById("puzzle-status");
     if (puzzleStatus) puzzleStatus.innerText = "";
+
     board = [
         ['r','n','b','q','k','b','n','r'],
         ['p','p','p','p','p','p','p','p'],
@@ -1521,81 +2276,99 @@ function resetGame(keepCurrentMode = true) {
     positionHistory = {};
     lastMove = null;
     premove = null;
-    
+    drawArrows = [];
+    highlightSquares = {};
+    hintMoveSquares = null;
+    currentEvalCp = 0.0;
+    currentEvalMate = null;
+    currentOpening = null;
+    viewPly = -1;
+    moveHistoryLog = [];
+    moveSnapshots = [{
+        board: board.map(r => [...r]),
+        turn: 'white',
+        hasMoved: { ...hasMoved },
+        enPassantTarget: null,
+        halfMoveClock: 0,
+        lastMove: null,
+        san: null,
+        uci: null,
+        fen: boardToFEN(),
+        evalBefore: 0,
+        evalAfter: 0,
+        quality: null
+    }];
+    positionHistory[getPositionKey()] = 1;
+
+    isBoardFlipped = (currentMode === 'online' || currentMode === 'random' || currentMode === 'bot') && myColor === 'black';
+
     const tcSelect = document.getElementById("timeControl");
     const tc = tcSelect ? tcSelect.value : "unlimited";
-    
+
     let tSecs = 600;
     timeInc = 0;
     if (tc !== 'unlimited') {
         if (tc.includes('+')) {
             const pts = tc.split('+');
-            tSecs = parseInt(pts[0]) * 60;
-            timeInc = parseInt(pts[1]);
+            tSecs = parseInt(pts[0], 10) * 60;
+            timeInc = parseInt(pts[1], 10) || 0;
         } else {
-            tSecs = parseInt(tc) * 60;
+            tSecs = (parseInt(tc, 10) || 10) * 60;
         }
     } else {
         tSecs = Infinity;
     }
-    
+
     whiteTime = tSecs;
     blackTime = tSecs;
+    updatePlayerNamesBar();
     updateTimerUI();
     startTimer();
+    renderInteractiveMoveHistory();
+    updateOpeningExplorer();
+    updateCapturedMaterialUI();
+    updateEvalBarUI(0, null);
 
-    moveHistoryLog = [];
-    const listEl = document.getElementById('move-history-list');
-    if (listEl) listEl.innerHTML = '';
-
-    const statusEl = document.getElementById('status-display');
+    const sEl = document.getElementById('status-display');
     const liveTitleEl = document.getElementById('match-live-title');
-    if (statusEl) {
+    if (sEl) {
         if (currentMode === "bot") {
-            statusEl.textContent = "🤖 Partie gegen KI - Weiß am Zug";
+            sEl.textContent = "🤖 Partie gegen KI - Weiß am Zug";
             if (liveTitleEl) liveTitleEl.textContent = "🤖 Spiel gegen KI-Bot";
         } else if (currentMode === "online" || currentMode === "random") {
-            statusEl.textContent = "Online gegen " + (opponentName || "Gegner") + " (" + (myColor === "white" ? "Weiß" : "Schwarz") + ")";
+            sEl.textContent = "Online gegen " + (opponentName || "Gegner") + " (" + (myColor === "white" ? "Weiß" : "Schwarz") + ")";
             if (liveTitleEl) liveTitleEl.textContent = "⚔️ Online-Partie";
         } else {
-            statusEl.textContent = "Weiß am Zug";
+            sEl.textContent = "Weiß am Zug";
             if (liveTitleEl) liveTitleEl.textContent = "👥 Lokale Partie";
         }
     }
-    if (typeof draw === "function") draw();
+    applyFlipLayout();
+
+    if (currentMode === 'bot' && turn === botColor && !gameEnded && !opts?.keepReplay) {
+        setTimeout(() => triggerBotMove(), 240);
+    }
 }
 window.resetGame = resetGame;
 
-function makeMove(fromSquare, toSquare) {
+function makeMove(fromSquare, toSquare, promo = null) {
     if (!fromSquare || !toSquare || fromSquare.length < 2 || toSquare.length < 2) return;
+    if (gameEnded || window.isReplayMode) return;
     const fc = fromSquare.charCodeAt(0) - 97;
-    const fr = 8 - parseInt(fromSquare[1]);
+    const fr = 8 - parseInt(fromSquare[1], 10);
     const tc = toSquare.charCodeAt(0) - 97;
-    const tr = 8 - parseInt(toSquare[1]);
-    if (typeof doMove === 'function') {
-        doMove(fr, fc, tr, tc);
+    const tr = 8 - parseInt(toSquare[1], 10);
+    const isLocal = !gameModeSelect || gameModeSelect.value === 'local';
+    if (!isLocal && turn !== myColor) return;
+    if (canMoveLogic(fr, fc, tr, tc) && isSafeMove(fr, fc, tr, tc) && typeof doMove === 'function') {
+        doMove(fr, fc, tr, tc, true, promo);
     }
 }
 window.makeMove = makeMove;
 
-// --- NEU: FEN-GENERATOR ---
+// --- FEN-GENERATOR ---
 function boardToFEN() {
-    let fen = "";
-    for (let r = 0; r < 8; r++) {
-        let empty = 0;
-        for (let c = 0; c < 8; c++) {
-            let p = board[r][c];
-            if (p === "") {
-                empty++;
-            } else {
-                if (empty > 0) { fen += empty; empty = 0; }
-                fen += p;
-            }
-        }
-        if (empty > 0) fen += empty;
-        if (r < 7) fen += "/";
-    }
-    fen += ` ${turn === "white" ? "w" : "b"} `;
+    if (!board) return "";
     let castling = "";
     if (!hasMoved.whiteK) {
         if (!hasMoved.whiteR8) castling += "K";
@@ -1605,27 +2378,75 @@ function boardToFEN() {
         if (!hasMoved.blackR8) castling += "k";
         if (!hasMoved.blackR1) castling += "q";
     }
-    fen += (castling || "-") + " - 0 1";
-    return fen;
+    const epSq = enPassantTarget ? (String.fromCharCode(97 + enPassantTarget.c) + (8 - enPassantTarget.r)) : "-";
+    const fullMoves = Math.floor(moveHistoryLog.length / 2) + 1;
+    if (window.PGNEngine) {
+        return window.PGNEngine.boardToFEN(board, turn, castling || "-", epSq, halfMoveClock, fullMoves);
+    }
+    let fen = "";
+    for (let r = 0; r < 8; r++) {
+        let empty = 0;
+        for (let c = 0; c < 8; c++) {
+            const p = board[r][c];
+            if (p === "") empty++;
+            else { if (empty > 0) { fen += empty; empty = 0; } fen += p; }
+        }
+        if (empty > 0) fen += empty;
+        if (r < 7) fen += "/";
+    }
+    return `${fen} ${turn === "white" ? "w" : "b"} ${castling || "-"} ${epSq} ${halfMoveClock} ${fullMoves}`;
 }
 
-// --- 🐍 PYTHON ANALYSE SCHNITTSTELLE (Optimiert für Ultra-Stats) ---
+// --- 🐍 PYTHON/NODE ANALYSE SCHNITTSTELLE (Optimiert für Ultra-Stats) ---
+let analyseRequestInFlight = false;
+let pendingAnalyseCall = null;
+
 async function sendeAnAnalyse(fr, fc, tr, tc, figur, istSchlag) {
-    // Umwandlung in Schach-Notation (z.B. e2, e4)
+    if (analyseRequestInFlight) {
+        pendingAnalyseCall = [fr, fc, tr, tc, figur, istSchlag];
+        return;
+    }
+    analyseRequestInFlight = true;
+
     const von = String.fromCharCode(97 + fc) + (8 - fr);
     const nach = String.fromCharCode(97 + tc) + (8 - tr);
-    
+    const currentFen = typeof boardToFEN === 'function' ? boardToFEN() : '';
+    const lastSan = moveHistoryLog[moveHistoryLog.length - 1] || `${von}-${nach}`;
+
+    const accDisp = document.getElementById("accuracy-display");
+    const aggroDisp = document.getElementById("aggro-display");
+    const matDisp = document.getElementById("material-display");
+    const eloDisp = document.getElementById("elo-display");
+    const modalAcc = document.getElementById("modal-accuracy-display");
+    const modalAggro = document.getElementById("modal-aggro-display");
+    const modalMat = document.getElementById("modal-material-display");
+    const modalElo = document.getElementById("modal-elo-display");
+
+    if (window.EvalEngine && board) {
+        const matData = window.EvalEngine.getCapturedAndMaterial(board);
+        const matDiff = matData.whiteLead > 0 ? `+${matData.whiteLead} Weiß` : (matData.blackLead > 0 ? `+${matData.blackLead} Schwarz` : 'Ausgeglichen (0)');
+        if (matDisp) matDisp.textContent = `Gewonnenes Material: ${matDiff}`;
+        if (modalMat) modalMat.textContent = matDiff;
+        if (moveSnapshots.length >= 2) {
+            const acc = window.EvalEngine.calculateMatchAccuracy(moveSnapshots.map(s => Number(s.evalAfter ?? 0)));
+            const activeAcc = myColor === 'black' ? acc.blackAccuracy : acc.whiteAccuracy;
+            if (accDisp) accDisp.textContent = `Genauigkeit: ${activeAcc}%`;
+            if (modalAcc) modalAcc.textContent = `${activeAcc}%`;
+        }
+    }
+
     const zugDaten = {
         spieler: getMyName(),
+        fen: currentFen,
+        zug: lastSan,
         von: von,
         nach: nach,
         figur: figur,
-        wert: 100, 
+        wert: 100,
         ist_schlagzug: istSchlag
     };
 
     try {
-        // Ruf an deinen lokalen Express-Server
         const response = await fetch(`${apiBase}/analyse`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1635,34 +2456,38 @@ async function sendeAnAnalyse(fr, fc, tr, tc, figur, istSchlag) {
         if (!response.ok) throw new Error("Server antwortet nicht korrekt");
 
         const ergebnis = await response.json();
-
-        // UI AKTUALISIERUNG (Dashboard-Style) - ANGEPASST AN NEUEN PYTHON CODE
-        const eloDisp = document.getElementById("elo-display");
-        
         const perf = ergebnis.Basis_Werte || ergebnis.Performance_Metriken || {};
         const pos = ergebnis.Positions_Analyse || {};
         const aggro = ergebnis.Aggressivitäts_Index || {};
 
-        if (eloDisp) {
-            const eloVal = perf["Geschätzte_Elo"] || perf["Elo"] || 1200;
-            const rangVal = perf["Rang"] || "Spieler";
-            const accuracyVal = perf["Genauigkeit"] || 75;
-            const classVal = perf["Klassifizierung"] || "Guter Zug";
-            const zentrumVal = pos["Zentrum"] || "Solide";
-            const devVal = pos["Entwicklung"] || "Normal";
-            const materialVal = pos["Material_Vorteil"] || "0";
-            const bestMoveVal = pos["Bester_Zug"] || "-";
-            const aggroVal = aggro["Gesamt"] || 50;
-            const aggroLevel = aggro["Level"] || "Normal";
-            const explanation = ergebnis.Erklaerung || "Ein solider Zug im Partie-Verlauf.";
+        const esc = typeof escapeHtml === 'function' ? escapeHtml : (s => String(s || ''));
+        const eloVal = esc(perf["Geschätzte_Elo"] || perf["Elo"] || 1200);
+        const rangVal = esc(perf["Rang"] || "Spieler");
+        const accuracyVal = esc(perf["Genauigkeit"] || 75);
+        const classVal = esc(perf["Klassifizierung"] || "Guter Zug");
+        const zentrumVal = esc(pos["Zentrum"] || "Solide");
+        const devVal = esc(pos["Entwicklung"] || "Normal");
+        const materialVal = esc(pos["Material_Vorteil"] || "0");
+        const bestMoveVal = esc(pos["Bester_Zug"] || "-");
+        const aggroVal = esc(aggro["Gesamt"] || 50);
+        const aggroLevel = esc(aggro["Level"] || "Normal");
+        const explanation = esc(ergebnis.Erklaerung || "Ein solider Zug im Partie-Verlauf.");
 
+        if (accDisp) accDisp.textContent = `Genauigkeit: ${accuracyVal}%`;
+        if (aggroDisp) aggroDisp.textContent = `Aggressivität: ${aggroLevel} (${aggroVal}%)`;
+        if (matDisp) matDisp.textContent = `Material: ${materialVal}`;
+        if (modalElo) modalElo.textContent = `${eloVal} (${rangVal})`;
+        if (modalAcc) modalAcc.textContent = `${accuracyVal}%`;
+        if (modalAggro) modalAggro.textContent = `${aggroLevel} (${aggroVal}%)`;
+        if (modalMat) modalMat.textContent = materialVal;
+
+        if (eloDisp) {
             eloDisp.innerHTML = `
                 <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 12px; border-left: 5px solid #2ecc71; box-shadow: 0 4px 20px rgba(0,0,0,0.4); font-family: sans-serif;">
                     <div style="font-size: 0.8em; color: #95a5a6; letter-spacing: 1.5px; font-weight: bold; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
-                        <span>🐍 KI-ANALYSE (PYTHON-LABOR)</span>
-                        <span style="background: #2196f3; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8em;">ONLINE</span>
+                        <span>📊 KI-POSITIONSANALYSE</span>
+                        <span style="background: #2196f3; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8em;">AKTIV</span>
                     </div>
-                    
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
                         <div>
                             <div style="font-size: 0.8em; color: #bdc3c7;">Geschätzte Elo:</div>
@@ -1673,15 +2498,13 @@ async function sendeAnAnalyse(fr, fc, tr, tc, figur, istSchlag) {
                             <div style="font-size: 1.4em; font-weight: bold; color: #2ecc71;">${accuracyVal}%</div>
                         </div>
                     </div>
-
                     <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; margin-bottom: 12px; border-left: 3px solid #e74c3c;">
                         <div style="font-size: 0.85em; font-weight: bold; color: #fff; display: flex; justify-content: space-between;">
-                            <span>Letzter Zug: <span style="color: #3498db;">${von}-${nach}</span></span>
+                            <span>Letzter Zug: <span style="color: #3498db;">${esc(lastSan)}</span></span>
                             <span style="color: #f1c40f;">${classVal}</span>
                         </div>
                         <div style="font-size: 0.85em; color: #ecf0f1; margin-top: 4px; line-height: 1.4;">${explanation}</div>
                     </div>
-
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.85em; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
                         <div>💥 Aggro: <b style="color: #e74c3c;">${aggroVal}% (${aggroLevel})</b></div>
                         <div>🏰 Zentrum: <b style="color: #f1c40f;">${zentrumVal}</b></div>
@@ -1694,71 +2517,296 @@ async function sendeAnAnalyse(fr, fc, tr, tc, figur, istSchlag) {
                 </div>
             `;
         }
-        
-        console.log("🐍 Labor-Update erfolgreich:", ergebnis);
-
     } catch (e) {
-        console.error("Python-API Fehler:", e);
-        const eloDisp = document.getElementById("elo-display");
-        if(eloDisp) eloDisp.innerHTML = `<div style="color: #e67e22; font-size: 0.8em;">🐍 Labor berechnet... (Server-Wakeup)</div>`;
+        if (eloDisp) {
+            eloDisp.innerHTML = `<div style="color: #f1c40f; font-size: 0.85em;">Lokale Engine-Bewertung: ${(currentEvalCp > 0 ? '+' : '') + Number(currentEvalCp || 0).toFixed(1)}</div>`;
+        }
+    } finally {
+        analyseRequestInFlight = false;
+        if (pendingAnalyseCall) {
+            const nextArgs = pendingAnalyseCall;
+            pendingAnalyseCall = null;
+            setTimeout(() => {
+                sendeAnAnalyse(...nextArgs);
+            }, 300);
+        }
     }
 }
 
-function getAlgebraicNotation(fr, fc, tr, tc, piece, isCapture) {
+function getAlgebraicNotation(fr, fc, tr, tc, piece, isCapture, boardBefore = null, promoPiece = null, inCheck = false, inMate = false, moverColor = null) {
     const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
     const ranks = ['8', '7', '6', '5', '4', '3', '2', '1'];
-    
-    let pChar = '';
     const type = piece.toLowerCase();
-    if (type === 'k') pChar = 'K';
-    else if (type === 'q') pChar = 'D'; // Dame (D)
-    else if (type === 'r') pChar = 'T'; // Turm (T)
-    else if (type === 'b') pChar = 'L'; // Läufer (L)
-    else if (type === 'n') pChar = 'S'; // Springer (S)
-    
     const toSquare = files[tc] + ranks[tr];
-    
+    const suffix = inMate ? '#' : (inCheck ? '+' : '');
+
+    if (type === 'k' && Math.abs(tc - fc) === 2) {
+        return (tc === 6 ? "O-O" : "O-O-O") + suffix;
+    }
+
+    const promoMap = { q: 'D', r: 'T', b: 'L', n: 'S' };
+    const promoSuffix = promoPiece ? `=${promoMap[promoPiece.toLowerCase()] || 'D'}` : '';
+
     if (type === 'p') {
-        if (isCapture) {
-            const fromFile = files[fc];
-            return fromFile + 'x' + toSquare;
-        } else {
-            return toSquare;
+        return (isCapture ? files[fc] + 'x' : '') + toSquare + promoSuffix + suffix;
+    }
+
+    const pieceMap = { k: 'K', q: 'D', r: 'T', b: 'L', n: 'S' };
+    const pChar = pieceMap[type] || '';
+    let disambig = '';
+
+    if (boardBefore && (type === 'r' || type === 'n' || type === 'b' || type === 'q')) {
+        const sameColor = moverColor || (piece === piece.toUpperCase() ? 'white' : 'black');
+        const savedBoard = board;
+        board = boardBefore;
+        const others = [];
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                if ((r !== fr || c !== fc) && board[r][c] === piece &&
+                    canMoveLogic(r, c, tr, tc, sameColor) && isSafeMove(r, c, tr, tc, sameColor)) {
+                    others.push({ r, c });
+                }
+            }
         }
-    } else {
-        // Check for castling
-        if (type === 'k' && Math.abs(tc - fc) === 2) {
-            if (tc === 6) return "O-O";
-            if (tc === 2) return "O-O-O";
+        board = savedBoard;
+        if (others.length > 0) {
+            const sameFile = others.some(o => o.c === fc);
+            const sameRank = others.some(o => o.r === fr);
+            if (!sameFile) disambig = files[fc];
+            else if (!sameRank) disambig = ranks[fr];
+            else disambig = files[fc] + ranks[fr];
         }
-        return pChar + (isCapture ? 'x' : '') + toSquare;
+    }
+
+    return pChar + disambig + (isCapture ? 'x' : '') + toSquare + suffix;
+}
+
+function renderInteractiveMoveHistory() {
+    const listEl = document.getElementById('move-history-list');
+    if (!listEl) return;
+
+    const totalPlies = Math.max(moveHistoryLog.length, moveSnapshots.length - 1);
+    if (totalPlies === 0) {
+        listEl.innerHTML = '<div style="color:#8c8a87; text-align:center; padding:18px 8px; font-size:0.82rem; font-style:italic;">Noch keine Züge gespielt</div>';
+        return;
+    }
+
+    const activePly = viewPly === -1 ? (moveSnapshots.length - 1) : viewPly;
+    let html = '';
+    for (let i = 0; i < totalPlies; i += 2) {
+        const moveNum = Math.floor(i / 2) + 1;
+        const wPly = i + 1;
+        const bPly = i + 2;
+        const wSan = moveHistoryLog[i] || '';
+        const bSan = moveHistoryLog[i + 1] || '';
+
+        const wQ = moveSnapshots[wPly]?.quality;
+        const bQ = moveSnapshots[bPly]?.quality;
+
+        const badge = (q) => {
+            if (!q || q.type === 'best') return '';
+            return `<span class="move-quality-badge mq-${q.type}" title="${escapeHtml(q.label)}">${escapeHtml(q.glyph)}</span>`;
+        };
+
+        html += `
+            <div class="move-row">
+                <span class="move-num">${moveNum}.</span>
+                <span class="move-ply ${activePly === wPly ? 'active' : ''}" data-action="jumpToMoveIndex" data-arg1="${wPly}">${escapeHtml(wSan)}${badge(wQ)}</span>
+                ${bSan ? `<span class="move-ply ${activePly === bPly ? 'active' : ''}" data-action="jumpToMoveIndex" data-arg1="${bPly}">${escapeHtml(bSan)}${badge(bQ)}</span>` : '<span></span>'}
+            </div>
+        `;
+    }
+    listEl.innerHTML = html;
+    const activeEl = listEl.querySelector('.move-ply.active');
+    if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
+
+    const banner = document.getElementById('replay-review-banner');
+    if (banner) {
+        banner.style.display = (viewPly !== -1 && viewPly < moveSnapshots.length - 1) ? 'block' : 'none';
     }
 }
 
-function addMoveToSidebar(fr, fc, tr, tc, piece, isCapture) {
-    const notation = getAlgebraicNotation(fr, fc, tr, tc, piece, isCapture);
-    moveHistoryLog.push(notation);
-    
-    const listEl = document.getElementById('move-history-list');
-    if (listEl) {
-        listEl.innerHTML = '';
-        let rowHtml = '';
-        for (let i = 0; i < moveHistoryLog.length; i += 2) {
-            const moveNum = Math.floor(i / 2) + 1;
-            const whiteMove = moveHistoryLog[i];
-            const blackMove = moveHistoryLog[i + 1] || '';
-            rowHtml += `
-                <div style="display: flex; justify-content: space-between; padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                    <span style="color: #7f8fa6; width: 30px;">${moveNum}.</span>
-                    <span style="color: #f1c40f; flex-grow: 1; font-weight: bold; text-align: left;">${whiteMove}</span>
-                    <span style="color: #ecf0f1; flex-grow: 1; text-align: left;">${blackMove}</span>
-                </div>
-            `;
-        }
-        listEl.innerHTML = rowHtml;
-        listEl.scrollTop = listEl.scrollHeight;
-    }
+function addMoveToSidebar() {
+    renderInteractiveMoveHistory();
 }
+
+function jumpToMoveIndex(plyIdx) {
+    if (!moveSnapshots || moveSnapshots.length === 0) return;
+    const clamped = Math.max(0, Math.min(moveSnapshots.length - 1, plyIdx));
+    const snap = moveSnapshots[clamped];
+    if (!snap) return;
+
+    if (clamped === moveSnapshots.length - 1) {
+        viewPly = -1;
+    } else {
+        viewPly = clamped;
+    }
+
+    board = snap.board.map(r => [...r]);
+    turn = snap.turn;
+    lastMove = snap.lastMove ? { ...snap.lastMove } : null;
+    hintMoveSquares = null;
+    selected = null;
+
+    if (snap.evalAfter !== undefined) {
+        updateEvalBarUI(snap.evalAfter, snap.mate ?? null);
+    }
+    updateCapturedMaterialUI();
+    renderInteractiveMoveHistory();
+    draw();
+}
+window.jumpToMoveIndex = jumpToMoveIndex;
+
+function stepHistory(delta) {
+    if (!moveSnapshots || moveSnapshots.length <= 1) return;
+    const curr = viewPly === -1 ? (moveSnapshots.length - 1) : viewPly;
+    jumpToMoveIndex(curr + delta);
+}
+window.stepHistory = stepHistory;
+
+function jumpToLive() {
+    if (!moveSnapshots || moveSnapshots.length === 0) return;
+    jumpToMoveIndex(moveSnapshots.length - 1);
+}
+window.jumpToLive = jumpToLive;
+
+window.copyCurrentFEN = function() {
+    const fen = boardToFEN();
+    if (navigator.clipboard && fen) {
+        navigator.clipboard.writeText(fen).then(() => {
+            window.showInAppNotification?.("FEN kopiert", "Aktuelle Brettstellung in Zwischenablage kopiert.", "success");
+        }).catch(() => window.openFenPgnModal?.());
+    } else {
+        window.openFenPgnModal?.();
+    }
+};
+
+window.copyCurrentPGN = function() {
+    const pgn = buildFullPGN();
+    if (navigator.clipboard && pgn) {
+        navigator.clipboard.writeText(pgn).then(() => {
+            window.showInAppNotification?.("PGN kopiert", "Komplette Partie-Notation in Zwischenablage kopiert.", "success");
+        }).catch(() => window.openFenPgnModal?.());
+    } else {
+        window.openFenPgnModal?.();
+    }
+};
+
+function buildFullPGN() {
+    let result = "*";
+    const modalTextEl = document.getElementById('checkmate-winner-text');
+    if (gameEnded && modalTextEl) {
+        const modalText = modalTextEl.innerText || "";
+        if (modalText.includes("Weiß")) result = "1-0";
+        else if (modalText.includes("Schwarz")) result = "0-1";
+        else if (modalText.includes("Remis") || modalText.includes("Unentschieden")) result = "1/2-1/2";
+    }
+    const pName = typeof getMyName === 'function' ? getMyName() : 'Spieler';
+    const opp = opponentName || 'Gegner';
+    const whiteName = myColor === 'white' ? pName : opp;
+    const blackName = myColor === 'black' ? pName : opp;
+    if (window.PGNEngine) {
+        return window.PGNEngine.exportToPGN({
+            event: "Schach Live Match",
+            site: "Schach Live",
+            white: whiteName,
+            black: blackName,
+            result,
+            eco: currentOpening?.eco || "A00",
+            opening: currentOpening?.name || "",
+            moveHistory: moveHistoryLog
+        });
+    }
+    return moveHistoryLog.join(' ');
+}
+
+window.openFenPgnModal = function() {
+    let modal = document.getElementById('fen-pgn-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'fen-pgn-modal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display:none; z-index:100000; background:rgba(0,0,0,0.8); backdrop-filter:blur(8px); justify-content:center; align-items:center; position:fixed; inset:0; padding:15px; box-sizing:border-box;';
+        modal.innerHTML = `
+            <div class="modal-box" style="max-width:500px; width:100%; background:#1e1d1a; border:1px solid rgba(255,255,255,0.15); border-radius:14px; text-align:left; padding:20px; color:white;">
+                <span class="close-modal" data-action="closeFenPgnModal">&times;</span>
+                <h2 style="margin:0 0 12px 0; font-size:1.2rem; color:#f1c40f;">📄 FEN &amp; PGN Import / Export</h2>
+                <label style="font-size:0.82rem; color:#bab8b5; font-weight:bold;">FEN:</label>
+                <input type="text" id="fen-modal-input" style="width:100%; box-sizing:border-box; font-family:monospace; font-size:0.82rem; margin:4px 0 8px 0;" />
+                <button type="button" data-action="applyFenFromModal" class="glass-btn primary" style="width:100%; padding:8px; margin-bottom:12px;">📥 FEN laden</button>
+                <label style="font-size:0.82rem; color:#bab8b5; font-weight:bold;">PGN:</label>
+                <textarea id="pgn-modal-input" rows="4" style="width:100%; box-sizing:border-box; font-family:monospace; font-size:0.82rem; margin:4px 0 8px 0;"></textarea>
+                <button type="button" data-action="applyPgnFromModal" class="glass-btn success" style="width:100%; padding:8px;">📥 PGN laden</button>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+    const fenInp = document.getElementById('fen-modal-input');
+    const pgnInp = document.getElementById('pgn-modal-input');
+    if (fenInp) fenInp.value = boardToFEN();
+    if (pgnInp) pgnInp.value = buildFullPGN();
+    modal.style.display = 'flex';
+};
+
+window.closeFenPgnModal = function() {
+    const modal = document.getElementById('fen-pgn-modal');
+    if (modal) modal.style.display = 'none';
+};
+
+window.applyFenFromModal = function() {
+    const fenInp = document.getElementById('fen-modal-input');
+    const fen = fenInp ? fenInp.value.trim() : '';
+    if (!fen) return;
+    if (window.PGNEngine && !window.PGNEngine.parseFEN(fen)) {
+        window.showInAppNotification?.("Ungültige FEN", "Bitte prüfe das FEN-Format.", "warning");
+        return;
+    }
+    const gmSelect = document.getElementById("gameMode");
+    if (gmSelect) gmSelect.value = "local";
+    loadFEN(fen);
+    window.closeFenPgnModal();
+    window.showInAppNotification?.("FEN geladen", "Stellung wurde erfolgreich auf das Brett übernommen.", "success");
+};
+
+window.applyPgnFromModal = function() {
+    const pgnInp = document.getElementById('pgn-modal-input');
+    const raw = pgnInp ? pgnInp.value.trim() : '';
+    if (!raw || !window.PGNEngine) return;
+    const parsed = window.PGNEngine.parsePGN(raw);
+    if (!parsed || !parsed.moves || parsed.moves.length === 0) {
+        window.showInAppNotification?.("Ungültige PGN", "Keine gültigen Züge in der PGN gefunden.", "warning");
+        return;
+    }
+    const gmSelect = document.getElementById("gameMode");
+    if (gmSelect) gmSelect.value = "local";
+    resetGame(true);
+    let played = 0;
+    for (const sanToken of parsed.moves) {
+        const cleanSan = sanToken.replace(/[+#!?]+$/g, '').replace(/0-0-0/g, 'O-O-O').replace(/0-0/g, 'O-O');
+        const legal = getAllLegalMoves(turn);
+        let matched = null;
+        for (const m of legal) {
+            const p = board[m.fr][m.fc];
+            const isCap = board[m.tr][m.tc] !== "" || (p.toLowerCase() === 'p' && enPassantTarget && m.tr === enPassantTarget.r && m.tc === enPassantTarget.c);
+            const promoMatch = cleanSan.match(/=([QRBNDTLS])/i);
+            const promoMapDe = { D: 'q', Q: 'q', T: 'r', R: 'r', L: 'b', B: 'b', S: 'n', N: 'n' };
+            const promoP = promoMatch ? promoMapDe[promoMatch[1].toUpperCase()] : null;
+            const genDe = getAlgebraicNotation(m.fr, m.fc, m.tr, m.tc, p, isCap, board, promoP, false, false, turn);
+            const genEn = genDe.replace('D', 'Q').replace('T', 'R').replace('L', 'B').replace('S', 'N').replace('=D', '=Q').replace('=T', '=R').replace('=L', '=B').replace('=S', '=N');
+            if (genDe === cleanSan || genEn === cleanSan) {
+                matched = { ...m, promoP };
+                break;
+            }
+        }
+        if (!matched) break;
+        // Apply immediately synchronously without animation
+        window._lastMoveWasDrag = true;
+        doMove(matched.fr, matched.fc, matched.tr, matched.tc, false, matched.promoP);
+        played++;
+    }
+    window.closeFenPgnModal();
+    window.showInAppNotification?.("PGN importiert", `${played} Züge wurden geladen.`, "success");
+};
 // --- 2. CHAT & SYSTEM ---
 function formatSystemMessage(text) {
     if (!text) return "";
@@ -1793,8 +2841,8 @@ function formatSystemMessage(text) {
 
     // Format Code pills: `code`
     escaped = escaped.replace(/`([^`\n]+?)`/g, function(match, cmdContent) {
-        const safeAttr = cmdContent.replace(/"/g, '&quot;').replace(/'/g, "\\'");
-        return `<code class="admin-cmd-pill" title="Klicken zum Einfügen in den Chat" onclick="insertAdminCommand('${safeAttr}')">${cmdContent}</code>`;
+        const safeAttr = cmdContent.replace(/"/g, '&quot;');
+        return `<code class="admin-cmd-pill" title="Klicken zum Einfügen in den Chat" data-insert-cmd="${safeAttr}">${cmdContent}</code>`;
     });
 
     // Replace newlines with <br>, avoiding unwanted breaks directly around block tags
@@ -1907,7 +2955,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 }
                 addChat("System", "Raum '" + roomId + "' beigetreten. Warte auf Mitspieler...", "system");
             } else {
-                alert("Bitte eine Raum-ID eingeben.");
+                window.showInAppNotification?.("Fehlende Raum-ID", "Bitte eine Raum-ID eingeben.", "warning");
             }
         };
     }
@@ -1948,10 +2996,10 @@ window.addEventListener('DOMContentLoaded', () => {
             navigator.clipboard.writeText(inviteUrl).then(() => {
                 showInviteFeedback("✅ Einladungs-Link kopiert! Sende ihn an deine Freunde.");
             }).catch(() => {
-                prompt("Kopiere deinen Einladungslink:", inviteUrl);
+                window.showInAppPrompt?.("Einladungslink", "Kopiere deinen Einladungslink:", inviteUrl, () => {});
             });
         } else {
-            prompt("Kopiere deinen Einladungslink:", inviteUrl);
+            window.showInAppPrompt?.("Einladungslink", "Kopiere deinen Einladungslink:", inviteUrl, () => {});
         }
         if (typeof addChat === 'function') {
             addChat("System", `🔗 Einladungs-Link für Raum '${rId}' kopiert! Warte auf Gegner...`, "system");
@@ -1973,11 +3021,58 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     window.quickNativeShare = quickNativeShare;
 
+    window.openShareModal = function(title, plainText, whatsappUrl) {
+        let modal = document.getElementById('share-link-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'share-link-modal';
+            modal.className = 'modal-overlay';
+            modal.style.cssText = 'display:none; position:fixed; inset:0; background:rgba(0,0,0,0.78); backdrop-filter:blur(6px); z-index:100000; justify-content:center; align-items:center; padding:16px;';
+            modal.innerHTML = `
+                <div class="modal-box" style="max-width:440px; width:100%; background:#1e1d1a; border:1px solid rgba(255,255,255,0.16); border-radius:14px; padding:20px; color:#fff; text-align:left;">
+                    <span class="close-modal" data-action="closeShareModal">&times;</span>
+                    <h3 id="share-modal-title" style="margin:0 0 10px 0; color:#f1c40f;"></h3>
+                    <textarea id="share-modal-textarea" rows="4" readonly style="width:100%; box-sizing:border-box; border-radius:8px; padding:10px; background:#141310; color:#e6e6e6; border:1px solid rgba(255,255,255,0.15); font-size:0.86rem; resize:none; margin-bottom:12px;"></textarea>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button type="button" data-action="copyShareModalText" class="glass-btn primary" style="flex:1; padding:9px 12px; font-weight:bold;">📋 Text kopieren</button>
+                        <a id="share-whatsapp-anchor" href="#" target="_blank" rel="noopener noreferrer" class="glass-btn success" style="flex:1; padding:9px 12px; font-weight:bold; text-align:center; text-decoration:none;">💬 WhatsApp öffnen</a>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+        const tEl = document.getElementById('share-modal-title');
+        const txtEl = document.getElementById('share-modal-textarea');
+        const waEl = document.getElementById('share-whatsapp-anchor');
+        if (tEl) tEl.textContent = title || 'Teilen';
+        if (txtEl) txtEl.value = plainText || '';
+        if (waEl) waEl.href = whatsappUrl || 'https://api.whatsapp.com/';
+        modal.style.display = 'flex';
+    };
+
+    window.copyShareModalText = function() {
+        const txtEl = document.getElementById('share-modal-textarea');
+        const text = txtEl ? txtEl.value : '';
+        if (!text) return;
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text).then(() => {
+                window.showInAppNotification?.('Kopiert', 'Nachricht in Zwischenablage kopiert.', 'success');
+            }).catch(() => {});
+        }
+    };
+
     function shareVictoryWhatsApp() {
         const origin = window.location.origin + window.location.pathname;
         const myName = getMyName ? getMyName() : 'Ich';
-        const msg = encodeURIComponent(`🏆 ${myName} hat gerade eine spannende Schachpartie mit Schachmatt gewonnen!\n\nTraust du dich gegen mich anzutreten? Klick hier und spiel direkt im Browser:\n${origin}`);
-        window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
+        const plain = `🏆 ${myName} hat gerade eine spannende Schachpartie mit Schachmatt gewonnen!\n\nTraust du dich gegen mich anzutreten? Klick hier und spiel direkt im Browser:\n${origin}`;
+        const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(plain)}`;
+        if (navigator.share) {
+            navigator.share({ title: 'Schach-Sieg teilen', text: plain, url: origin }).catch(() => {
+                window.openShareModal('🏆 Sieg teilen', plain, waUrl);
+            });
+        } else {
+            window.openShareModal('🏆 Sieg teilen', plain, waUrl);
+        }
     }
     window.shareVictoryWhatsApp = shareVictoryWhatsApp;
 
@@ -1994,11 +3089,10 @@ window.addEventListener('DOMContentLoaded', () => {
     if (inviteFriendBtn) {
         inviteFriendBtn.onclick = () => {
             const { inviteUrl, rId } = getActiveInviteUrl();
-            const shareText = encodeURIComponent(`⚔️ Schach-Duell!\n\nIch fordere dich zu einer Partie Schach heraus! Klick hier, um sofort gegen mich anzutreten:\n${inviteUrl}`);
-            
-            // Öffne WhatsApp direkt für maximale virale Verbreitung
-            window.open(`https://api.whatsapp.com/send?text=${shareText}`, '_blank');
-            showInviteFeedback(`💬 WhatsApp geöffnet! Warte auf Raum '${rId}'...`);
+            const plain = `⚔️ Schach-Duell!\n\nIch fordere dich zu einer Partie Schach heraus! Klick hier, um sofort gegen mich anzutreten:\n${inviteUrl}`;
+            const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(plain)}`;
+            window.openShareModal('⚔️ Freund einladen', plain, waUrl);
+            showInviteFeedback(`💬 Einladung für Raum '${rId}' erstellt!`);
             if (typeof addChat === 'function') {
                 addChat("System", `🔗 Einladungs-Link für Raum '${rId}' erstellt! Warte auf deinen Freund...`, "system");
             }
@@ -2041,7 +3135,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 }
                 addChat("System", "Turnier '" + tName + "' erstellt.", "system");
             } else {
-                alert("Bitte einen Turniernamen eingeben.");
+                window.showInAppNotification?.("Fehlender Name", "Bitte einen Turniernamen eingeben.", "warning");
             }
         };
     }
@@ -2386,6 +3480,9 @@ socket.onmessage = (e) => {
 
             if (data.timeWhite !== undefined && data.timeWhite !== null) whiteTime = data.timeWhite;
             if (data.timeBlack !== undefined && data.timeBlack !== null) blackTime = data.timeBlack;
+            isBoardFlipped = (myColor === 'black');
+            applyFlipLayout();
+            updatePlayerNamesBar();
             updateTimerUI();
             startTimer();
 
@@ -2404,6 +3501,7 @@ socket.onmessage = (e) => {
             onlineRoom = data.room;
             myColor = data.color || 'white';
             opponentName = data.opponent || 'Gegner';
+            gameEnded = false;
             if (gameModeSelect) gameModeSelect.value = "online";
 
             localStorage.setItem('active_game_room', onlineRoom);
@@ -2412,13 +3510,39 @@ socket.onmessage = (e) => {
 
             if (data.board) board = data.board;
             if (data.turn) turn = data.turn;
+            if (data.timeWhite !== undefined && data.timeWhite !== null) whiteTime = data.timeWhite;
+            if (data.timeBlack !== undefined && data.timeBlack !== null) blackTime = data.timeBlack;
+
+            isBoardFlipped = (myColor === 'black');
+            if (!moveSnapshots || moveSnapshots.length === 0) {
+                moveSnapshots = [{
+                    board: board.map(r => [...r]),
+                    turn,
+                    hasMoved: { ...hasMoved },
+                    enPassantTarget,
+                    halfMoveClock,
+                    lastMove: null,
+                    san: null,
+                    uci: null,
+                    fen: boardToFEN(),
+                    evalBefore: 0,
+                    evalAfter: 0,
+                    quality: null
+                }];
+            }
 
             const statusEl = document.getElementById('status-display');
             if (statusEl) {
                 statusEl.textContent = "Online gegen " + (opponentName || "Gegner") + " (" + (myColor === "white" ? "Weiß" : "Schwarz") + ")";
             }
 
-            draw();
+            applyFlipLayout();
+            updatePlayerNamesBar();
+            updateTimerUI();
+            startTimer();
+            updateCapturedMaterialUI();
+            updateOpeningExplorer();
+            requestLiveEval(moveSnapshots.length - 1);
 
             if (typeof window.showInAppNotification === 'function') {
                 window.showInAppNotification(
@@ -2438,14 +3562,21 @@ socket.onmessage = (e) => {
             return;
         }
         if (data.type === 'game_over') {
+            gameEnded = true;
             localStorage.removeItem('active_game_room');
             localStorage.removeItem('my_color');
             localStorage.removeItem('opponent_name');
             const statusEl = document.getElementById('status-display');
             if (statusEl && data.text) statusEl.textContent = data.text;
             addChat("System", data.text || "Spiel beendet.", "system");
-            showCheckmateModal("Gegner", data.text || "Spiel beendet!");
+            if (data.text && (data.text.includes('Remis') || data.text.includes('Patt') || data.text.includes('Unentschieden'))) {
+                window.SoundEngine?.playDrawSound();
+            } else {
+                window.SoundEngine?.playMateSound();
+            }
+            showCheckmateModal("Partie beendet", data.text || "Spiel beendet!");
             if (timerInterval) clearInterval(timerInterval);
+            updateTimerUI();
             return;
         }
         if (data.type === 'admin_users_update') {
@@ -2543,18 +3674,31 @@ socket.onmessage = (e) => {
                 hasMoved = lastState.hasMoved || hasMoved;
                 enPassantTarget = lastState.enPassantTarget || null;
                 halfMoveClock = lastState.halfMoveClock || 0;
+                if (moveHistoryLog.length > 0) moveHistoryLog.pop();
+                if (moveSnapshots.length > 1) moveSnapshots.pop();
+                lastMove = moveSnapshots.length > 0 ? moveSnapshots[moveSnapshots.length - 1].lastMove : null;
+                viewPly = -1;
+                gameEnded = false;
                 if (statusEl) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug (Rückgängig)";
+                renderInteractiveMoveHistory();
+                updateCapturedMaterialUI();
+                updateOpeningExplorer();
+                requestLiveEval(moveSnapshots.length - 1);
+                updateTimerUI();
                 draw();
             }
             return;
         }
         if (data.type === 'draw_accepted') {
+            gameEnded = true;
             localStorage.removeItem('active_game_room');
             localStorage.removeItem('my_color');
             localStorage.removeItem('opponent_name');
             addChat("System", "Remis (Draw) wurde akzeptiert. Das Spiel endet unentschieden.", "system");
+            window.SoundEngine?.playDrawSound();
             showCheckmateModal("Remis", "Das Spiel endete unentschieden.");
             if (timerInterval) clearInterval(timerInterval);
+            updateTimerUI();
             return;
         }
         if (data.type === 'spectate_init' || data.type === 'spectator_join_success') {
@@ -2619,21 +3763,28 @@ socket.onmessage = (e) => {
         
         
         if (data.type === 'player_profile_data') {
-            document.getElementById('ppm-elo').textContent = "Elo: " + (data.elo || 1200);
-            document.getElementById('ppm-level').textContent = "Level: " + (data.level || 1);
-            document.getElementById('ppm-role').textContent = "Rolle: " + (data.role || 'Gast');
+            const eloEl = document.getElementById('ppm-elo');
+            const levelEl = document.getElementById('ppm-level');
+            const roleEl = document.getElementById('ppm-role');
+            if (eloEl) eloEl.textContent = "Elo: " + (Number(data.elo) || 1200);
+            if (levelEl) levelEl.textContent = "Level: " + (Number(data.level) || 1);
+            if (roleEl) roleEl.textContent = "Siege: " + (Number(data.wins) || 0);
             
             const histEl = document.getElementById('ppm-history');
-            if (data.recentWins && data.recentWins.length > 0) {
-                histEl.innerHTML = data.recentWins.map(w => {
-                    const dateStr = new Date(w.time).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
-                    return '<div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:5px; font-size:0.9em;">' +
-                           '<div style="color:#2ecc71; font-weight:bold;">Sieg vs ' + (w.opp || 'Unbekannt') + '</div>' +
-                           '<div style="color:#aaa; font-size:0.8em;">' + dateStr + ' - ' + w.reason + '</div>' +
-                           '</div>';
-                }).join('');
-            } else {
-                histEl.innerHTML = '<div style="color:#888; font-style:italic;">Keine Siege gefunden.</div>';
+            if (histEl) {
+                if (data.recentWins && data.recentWins.length > 0) {
+                    histEl.innerHTML = data.recentWins.map(w => {
+                        const dateStr = escapeHtml(new Date(w.time).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }));
+                        const safeOpp = escapeHtml(w.opp || 'Unbekannt');
+                        const safeReason = escapeHtml(w.reason || 'checkmate');
+                        return '<div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:5px; font-size:0.9em;">' +
+                               '<div style="color:#2ecc71; font-weight:bold;">Sieg vs ' + safeOpp + '</div>' +
+                               '<div style="color:#aaa; font-size:0.8em;">' + dateStr + ' - ' + safeReason + '</div>' +
+                               '</div>';
+                    }).join('');
+                } else {
+                    histEl.innerHTML = '<div style="color:#888; font-style:italic;">Keine Siege gefunden.</div>';
+                }
             }
             return;
         }
@@ -2736,10 +3887,9 @@ socket.onmessage = (e) => {
         }
         if (data.type === 'admin_login_success' || (data.type === 'login_success' && data.role === 'admin')) {
             const adminName = data.name || data.playerName || 'Max';
-            localStorage.setItem("isAdmin", "true");
             localStorage.setItem("playerName", adminName);
             localStorage.setItem("customUsername", adminName);
-            window.isAdmin = true;
+            window.__serverVerifiedAdmin = true;
 
             // Reflect username in URL
             try {
@@ -2771,6 +3921,7 @@ socket.onmessage = (e) => {
             if (modal) modal.style.display = 'none';
 
             addChat("System", "👑 " + (data.message || "Willkommen zurück, Administrator!"), "system");
+            window.refreshFriendsList?.();
             return;
         }
         if (data.type === 'login_success') {
@@ -2780,8 +3931,7 @@ socket.onmessage = (e) => {
                 const pInput = document.getElementById('playerName');
                 if (pInput) pInput.value = data.name;
                 localStorage.setItem("playerName", data.name);
-                localStorage.removeItem("isAdmin");
-                window.isAdmin = false;
+                window.__serverVerifiedAdmin = false;
 
                 // Reflect username in URL
                 try {
@@ -2826,6 +3976,7 @@ socket.onmessage = (e) => {
 
                 // Versuche automatisch ein aktives Spiel wiederzubetreten
                 setTimeout(attemptGameRejoin, 300);
+                window.refreshFriendsList?.();
             }
             return;
         }
@@ -2870,6 +4021,12 @@ socket.onmessage = (e) => {
         }
         
         if (data.type === 'puzzle_success') {
+            window.SoundEngine?.playPromoteSound();
+            if (typeof triggerGoldDustCelebration === 'function') triggerGoldDustCelebration();
+            window.activePuzzle = null;
+            window.isTacticalPuzzleMode = false;
+            window.__puzzleAttemptFen = null;
+
             const statusEl = document.getElementById("puzzle-status") || document.getElementById("modal-puzzle-status");
             if (statusEl) {
                 statusEl.innerText = data.text;
@@ -2877,8 +4034,6 @@ socket.onmessage = (e) => {
             }
             if (typeof window.showInAppNotification === 'function') {
                 window.showInAppNotification("Rätsel gelöst!", data.text, "success");
-            } else {
-                alert(data.text);
             }
             
             // Re-fetch puzzle state to update solved indicator
@@ -2888,7 +4043,24 @@ socket.onmessage = (e) => {
             return;
         }
 
+        if (data.type === 'puzzle_wrong') {
+            window.SoundEngine?.playIllegalSound();
+            const statusEl = document.getElementById("puzzle-status") || document.getElementById("modal-puzzle-status");
+            if (statusEl) {
+                statusEl.innerText = data.text || "❌ Falscher Zug! Versuche es noch einmal.";
+                statusEl.style.color = "#e74c3c";
+            }
+            const resetFen = data.fen || (window.activePuzzle && window.activePuzzle.fen) || window.__puzzleAttemptFen;
+            if (resetFen) {
+                setTimeout(() => {
+                    if (typeof loadFEN === 'function') loadFEN(resetFen);
+                }, 700);
+            }
+            return;
+        }
+
         if (data.type === 'puzzle_info') {
+            window.__puzzleAttemptFen = null;
             const statusEl = document.getElementById("puzzle-status") || document.getElementById("modal-puzzle-status");
             if (statusEl) {
                 statusEl.innerText = data.text;
@@ -2896,8 +4068,6 @@ socket.onmessage = (e) => {
             }
             if (typeof window.showInAppNotification === 'function') {
                 window.showInAppNotification("Rätsel Info", data.text, "info");
-            } else {
-                alert(data.text);
             }
             return;
         }
@@ -2912,13 +4082,20 @@ socket.onmessage = (e) => {
             }
             return;
         }
+        if (data.type === 'sync_board') {
+            if (data.fen && typeof loadFEN === 'function') loadFEN(data.fen);
+            window.SoundEngine?.playIllegalSound();
+            window.showInAppNotification?.('Synchronisation', data.reason || 'Brett wurde mit dem Server synchronisiert.', 'warning');
+            return;
+        }
         if (data.type === 'move') {
             const fr = data.fr !== undefined ? data.fr : (data.move ? data.move.fr : undefined);
             const fc = data.fc !== undefined ? data.fc : (data.move ? data.move.fc : undefined);
             const tr = data.tr !== undefined ? data.tr : (data.move ? data.move.tr : undefined);
             const tc = data.tc !== undefined ? data.tc : (data.move ? data.move.tc : undefined);
+            const promo = data.promotion || (data.move ? data.move.promotion : null);
             if (fr !== undefined && fc !== undefined && tr !== undefined && tc !== undefined) {
-                doMove(fr, fc, tr, tc, false);
+                doMove(fr, fc, tr, tc, false, promo);
             }
             return;
         }
@@ -2976,7 +4153,7 @@ socket.onmessage = (e) => {
                         let color = i === 0 ? '#f1c40f' : i === 1 ? '#bdc3c7' : i === 2 ? '#cd7f32' : 'rgba(255,255,255,0.7)';
                         let bg = i === 0 ? 'linear-gradient(135deg, rgba(241,196,15,0.2) 0%, rgba(0,0,0,0) 100%)' : 'rgba(255,255,255,0.03)';
                         return `
-                        <div style="background: ${bg}; padding: 12px; border-radius: 10px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; transition: 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+                        <div data-view-profile="${encodeURIComponent(p.name || '')}" class="leaderboard-player-row" style="cursor: pointer; background: ${bg}; padding: 12px; border-radius: 10px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; transition: 0.2s;">
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <div style="width: 24px; text-align: center; font-weight: bold; color: ${color}; font-size: 1.1em;">
                                     ${badge || `#${i + 1}`}
@@ -3008,7 +4185,7 @@ socket.onmessage = (e) => {
                                 <span style="font-weight: bold; color: #f1c40f;">Raum ${escapeHtml(g.room)}</span>
                                 <span style="color: #ccc;">⚪ ${escapeHtml(g.whitePlayer)} vs ⚫ ${escapeHtml(g.blackPlayer)}</span>
                             </div>
-                            <button onclick="joinSpectate(decodeURIComponent('${encodeURIComponent(g.room || '')}'))" style="background: #3498db; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.85em;">👁️ Zuschauen</button>
+                            <button type="button" data-spectate-room="${encodeURIComponent(g.room || '')}" style="background: #3498db; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 0.85em;">👁️ Zuschauen</button>
                         </div>
                     `).join('');
                 }
@@ -3107,7 +4284,7 @@ socket.onmessage = (e) => {
         }
 
         if (data.type === 'challenge_error') {
-            alert(data.text || "Herausforderung nicht mehr verfügbar.");
+            window.showInAppNotification?.("Herausforderung", data.text || "Herausforderung nicht mehr verfügbar.", "warning");
             return;
         }
     } catch(err) {
@@ -3125,20 +4302,25 @@ function renderOpenChallenges(challenges) {
     }
 
     const myName = getMyName();
+    const safeEscape = typeof escapeHtml === 'function' ? escapeHtml : (str => String(str || '').replace(/[<>&"']/g, ''));
+
     listEl.innerHTML = challenges.map(ch => {
+        const safeCreator = safeEscape(ch.creator || 'Gast');
+        const safeId = safeEscape(ch.id || '');
+        const safeElo = parseInt(ch.creatorElo, 10) || 1200;
         const isMyChallenge = ch.creator === myName;
         const colorIcon = ch.color === 'white' ? '⚪ Weiß' : ch.color === 'black' ? '⚫ Schwarz' : '🎲 Zufall';
-        const tcLabel = ch.timeControl === 'unlimited' ? 'Unbegrenzt' : `${ch.timeControl} min`;
+        const tcLabel = ch.timeControl === 'unlimited' ? 'Unbegrenzt' : `${safeEscape(ch.timeControl)} min`;
 
         return `
             <div style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
                 <div style="display: flex; flex-direction: column;">
-                    <strong style="color: #f1c40f; font-size: 0.95em;">${ch.creator} <span style="font-size: 0.8em; color: #aaa;">(${ch.creatorElo} ELO)</span></strong>
+                    <strong style="color: #f1c40f; font-size: 0.95em;">${safeCreator} <span style="font-size: 0.8em; color: #aaa;">(${safeElo} ELO)</span></strong>
                     <span style="font-size: 0.8em; color: #bdc3c7;">⏱️ ${tcLabel} • ${colorIcon}</span>
                 </div>
                 ${isMyChallenge ? 
-                    `<button onclick="cancelOpenChallenge('${ch.id}')" class="glass-btn danger" style="padding: 4px 8px; font-size: 0.8em; cursor: pointer;">Abbrechen</button>` :
-                    `<button onclick="joinOpenChallenge('${ch.id}')" class="glass-btn success" style="padding: 6px 12px; font-size: 0.85em; font-weight: bold; cursor: pointer;">⚔️ Annehmen</button>`
+                    `<button data-challenge-action="cancel" data-challenge-id="${safeId}" class="glass-btn danger open-challenge-action-btn" style="padding: 4px 8px; font-size: 0.8em; cursor: pointer;">Abbrechen</button>` :
+                    `<button data-challenge-action="join" data-challenge-id="${safeId}" class="glass-btn success open-challenge-action-btn" style="padding: 6px 12px; font-size: 0.85em; font-weight: bold; cursor: pointer;">⚔️ Annehmen</button>`
                 }
             </div>
         `;
@@ -3267,6 +4449,88 @@ socket.onopen = () => {
     if (window.initFeatures) window.initFeatures(socket, savedName);
 };
 
+function getActivePieceTheme() {
+    const raw = localStorage.getItem('piece_theme') || 'classic';
+    const map = { neo: 'classic', wood: 'vintage', pixel: 'classic' };
+    const resolved = map[raw] || raw;
+    return (typeof PIECE_THEMES !== 'undefined' && PIECE_THEMES[resolved]) ? PIECE_THEMES[resolved] : PIECES;
+}
+
+function renderBoardArrowsSvg() {
+    const wrapper = document.getElementById('board-wrapper');
+    if (!wrapper) return;
+
+    let svg = document.getElementById('board-arrows-svg');
+    if (!svg) {
+        svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.id = 'board-arrows-svg';
+        svg.setAttribute("viewBox", "0 0 100 100");
+        svg.style.cssText = "position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:40;";
+        wrapper.appendChild(svg);
+    } else if (!svg.getAttribute("viewBox")) {
+        svg.setAttribute("viewBox", "0 0 100 100");
+    }
+
+    const colorMap = {
+        green: "rgba(105, 190, 80, 0.85)",
+        red: "rgba(235, 97, 80, 0.88)",
+        blue: "rgba(82, 176, 220, 0.85)",
+        yellow: "rgba(247, 198, 49, 0.88)",
+        premove: "rgba(231, 76, 60, 0.9)"
+    };
+
+    const defsHtml = Object.entries(colorMap).map(([key, col]) =>
+        `<marker id="cc-arrow-${key}" markerWidth="4" markerHeight="4" refX="2.5" refY="2" orient="auto">
+            <polygon points="0 0, 3.6 2, 0 4" fill="${col}" />
+        </marker>`
+    ).join('');
+
+    const sqCenter = (r, c) => {
+        const vr = isBoardFlipped ? 7 - r : r;
+        const vc = isBoardFlipped ? 7 - c : c;
+        return { x: (vc + 0.5) * 12.5, y: (vr + 0.5) * 12.5 };
+    };
+
+    let shapes = '';
+    if (typeof premove !== 'undefined' && premove) {
+        const p1 = sqCenter(premove.fr, premove.fc);
+        const p2 = sqCenter(premove.tr, premove.tc);
+        shapes += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="${colorMap.premove}" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="2.5,1.8" marker-end="url(#cc-arrow-premove)" />`;
+    }
+
+    if (Array.isArray(drawArrows)) {
+        for (const arr of drawArrows) {
+            const cName = colorMap[arr.color] ? arr.color : 'green';
+            const col = colorMap[cName];
+            const p1 = sqCenter(arr.fr, arr.fc);
+            const p2 = sqCenter(arr.tr, arr.tc);
+            const dr = Math.abs(arr.tr - arr.fr);
+            const dc = Math.abs(arr.tc - arr.fc);
+            if ((dr === 2 && dc === 1) || (dr === 1 && dc === 2)) {
+                // Knight L-shape arrow like Chess.com
+                const elbow = dr === 2 ? { x: p1.x, y: p2.y } : { x: p2.x, y: p1.y };
+                const dx = p2.x - elbow.x;
+                const dy = p2.y - elbow.y;
+                const len = Math.hypot(dx, dy) || 1;
+                const ex = p2.x - (dx / len) * 2.2;
+                const ey = p2.y - (dy / len) * 2.2;
+                shapes += `<polyline points="${p1.x},${p1.y} ${elbow.x},${elbow.y} ${ex},${ey}" fill="none" stroke="${col}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#cc-arrow-${cName})" />`;
+            } else {
+                const dx = p2.x - p1.x;
+                const dy = p2.y - p1.y;
+                const len = Math.hypot(dx, dy) || 1;
+                const sx = p1.x + (dx / len) * 1.5;
+                const sy = p1.y + (dy / len) * 1.5;
+                const ex = p2.x - (dx / len) * 2.4;
+                const ey = p2.y - (dy / len) * 2.4;
+                shapes += `<line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="${col}" stroke-width="2.2" stroke-linecap="round" marker-end="url(#cc-arrow-${cName})" />`;
+            }
+        }
+    }
+
+    svg.innerHTML = `<defs>${defsHtml}</defs>${shapes}`;
+}
+
 function draw() {
     const currentBoardEl = document.getElementById("chess-board") || boardEl;
     if (!currentBoardEl) return;
@@ -3275,166 +4539,104 @@ function draw() {
     const inCheck = k ? isAttacked(k.r, k.c, turn === "white" ? "black" : "white") : false;
 
     let possibleMoves = [];
+    let selectedPieceObj = null;
     if (selected && board[selected.r] && board[selected.r][selected.c]) {
-        const originalTurn = turn;
-        const selectedPiece = board[selected.r][selected.c];
-        const selectedPieceColor = isOwn(selectedPiece, "white") ? "white" : "black";
-        turn = selectedPieceColor; // Temporarily evaluate using piece owner color
+        selectedPieceObj = board[selected.r][selected.c];
+        const selectedPieceColor = isOwn(selectedPieceObj, "white") ? "white" : "black";
         for (let r = 0; r < 8; r++) {
             for (let c = 0; c < 8; c++) {
-                if (canMoveLogic(selected.r, selected.c, r, c) && isSafeMove(selected.r, selected.c, r, c)) {
-                    possibleMoves.push({r, c});
+                if (canMoveLogic(selected.r, selected.c, r, c, selectedPieceColor) && isSafeMove(selected.r, selected.c, r, c, selectedPieceColor)) {
+                    possibleMoves.push({ r, c });
                 }
             }
         }
-        turn = originalTurn; // Restore original turn
     }
 
-    board.forEach((row, r) => {
-        row.forEach((p, c) => {
+    const themePieces = getActivePieceTheme();
+
+    for (let vr = 0; vr < 8; vr++) {
+        for (let vc = 0; vc < 8; vc++) {
+            const r = isBoardFlipped ? 7 - vr : vr;
+            const c = isBoardFlipped ? 7 - vc : vc;
+            const p = (board[r] && board[r][c]) ? board[r][c] : "";
+
             const d = document.createElement("div");
-            d.className = `square ${(r + c) % 2 ? "black-sq" : "white-sq"}`;
+            const isDarkSq = (r + c) % 2 === 1;
+            d.className = `square ${isDarkSq ? "black-sq" : "white-sq"}`;
+            d.dataset.r = r;
+            d.dataset.c = c;
+            d.dataset.vr = vr;
+            d.dataset.vc = vc;
             d.style.position = "relative";
-            
-            // Add Rank labels (8-1) on the left-most column
-            if (c === 0) {
+
+            // Rank label (8-1) on leftmost visual column
+            if (vc === 0) {
                 const rankLabel = document.createElement("span");
                 rankLabel.className = "board-label";
                 rankLabel.innerText = 8 - r;
-                rankLabel.style.position = "absolute";
-                rankLabel.style.top = "2px";
-                rankLabel.style.left = "4px";
-                rankLabel.style.fontSize = "10px";
-                rankLabel.style.fontWeight = "bold";
-                rankLabel.style.pointerEvents = "none";
-                rankLabel.style.color = (r + c) % 2 ? "#f0d9b5" : "#b58863";
+                rankLabel.style.cssText = `position:absolute; top:2px; left:4px; font-size:10px; font-weight:700; pointer-events:none; user-select:none; color:${isDarkSq ? 'var(--board-white, #eeeed2)' : 'var(--board-black, #769656)'};`;
                 d.appendChild(rankLabel);
             }
 
-            // Add File labels (a-h) on the bottom-most row
-            if (r === 7) {
+            // File label (a-h) on bottom visual row
+            if (vr === 7) {
                 const fileLabel = document.createElement("span");
                 fileLabel.className = "board-label";
                 fileLabel.innerText = String.fromCharCode(97 + c);
-                fileLabel.style.position = "absolute";
-                fileLabel.style.bottom = "2px";
-                fileLabel.style.right = "4px";
-                fileLabel.style.fontSize = "10px";
-                fileLabel.style.fontWeight = "bold";
-                fileLabel.style.pointerEvents = "none";
-                fileLabel.style.color = (r + c) % 2 ? "#f0d9b5" : "#b58863";
+                fileLabel.style.cssText = `position:absolute; bottom:2px; right:4px; font-size:10px; font-weight:700; pointer-events:none; user-select:none; color:${isDarkSq ? 'var(--board-white, #eeeed2)' : 'var(--board-black, #769656)'};`;
                 d.appendChild(fileLabel);
             }
-            
-            if (typeof lastMove !== 'undefined' && lastMove && 
+
+            if (typeof lastMove !== 'undefined' && lastMove &&
                 ((r === lastMove.fr && c === lastMove.fc) || (r === lastMove.tr && c === lastMove.tc))) {
                 d.classList.add("last-move");
             }
 
-            if (typeof premove !== 'undefined' && premove && 
+            if (typeof premove !== 'undefined' && premove &&
                 ((r === premove.fr && c === premove.fc) || (r === premove.tr && c === premove.tc))) {
                 d.classList.add("premove");
             }
 
-            if(selected && selected.r === r && selected.c === c) d.classList.add("selected");
-            if(inCheck && p && p.toLowerCase() === 'k' && isOwn(p, turn)) d.classList.add("in-check");
+            const hlColor = highlightSquares && highlightSquares[`${r},${c}`];
+            if (hlColor) {
+                d.classList.add(`sq-hl-${hlColor}`);
+            }
+
+            if (hintMoveSquares) {
+                if (hintMoveSquares.fr === r && hintMoveSquares.fc === c) d.classList.add("sq-hint-from");
+                if (hintMoveSquares.tr === r && hintMoveSquares.tc === c) d.classList.add("sq-hint-to");
+            }
+
+            if (selected && selected.r === r && selected.c === c) d.classList.add("selected");
+            if (inCheck && p && p.toLowerCase() === 'k' && isOwn(p, turn)) d.classList.add("in-check");
 
             if (possibleMoves.some(m => m.r === r && m.c === c)) {
                 const dot = document.createElement("div");
                 dot.className = "move-dot";
-                // Wenn sich eine Figur auf dem Feld befindet, handelt es sich um einen Schlagzug!
-                if (p) {
+                const isEpCap = selectedPieceObj && selectedPieceObj.toLowerCase() === 'p' && enPassantTarget && r === enPassantTarget.r && c === enPassantTarget.c;
+                if (p || isEpCap) {
                     dot.classList.add("capture-dot");
                 }
                 d.appendChild(dot);
             }
 
-            if(p) {
-                const img = document.createElement("img"); 
-                const currentPieceTheme = localStorage.getItem('piece_theme') || 'classic';
-                const themePieces = (typeof PIECE_THEMES !== 'undefined' && PIECE_THEMES[currentPieceTheme]) ? PIECE_THEMES[currentPieceTheme] : PIECES;
+            if (p) {
+                const img = document.createElement("img");
                 img.src = themePieces[p] || PIECES[p];
-                img.style.width = "85%"; 
+                img.dataset.pieceColor = isOwn(p, 'white') ? 'white' : 'black';
+                img.draggable = false;
+                img.style.width = "85%";
+                if (activeVariant === 'blindfold') {
+                    img.style.opacity = '0';
+                }
                 d.appendChild(img);
             }
 
-            d.onclick = () => handleSquareClick(r, c);
-
-            d.oncontextmenu = (e) => {
-                e.preventDefault();
-                if (typeof premove !== 'undefined' && premove) {
-                    premove = null;
-                    selected = null;
-                    draw();
-                }
-            };
-
             currentBoardEl.appendChild(d);
-        });
-    });
-
-    // Premove als roten Leuchtpfad zeichnen (SVG Overlay)
-    if (typeof premove !== 'undefined' && premove) {
-        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        svg.setAttribute("class", "board-overlay-svg premove-overlay-svg");
-        svg.style.position = "absolute";
-        svg.style.top = "0";
-        svg.style.left = "0";
-        svg.style.width = "100%";
-        svg.style.height = "100%";
-        svg.style.pointerEvents = "none";
-        svg.style.zIndex = "12";
-        
-        const x1 = (premove.fc + 0.5) * 12.5;
-        const y1 = (premove.fr + 0.5) * 12.5;
-        const x2 = (premove.tc + 0.5) * 12.5;
-        const y2 = (premove.tr + 0.5) * 12.5;
-        
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        path.setAttribute("d", `M ${x1}% ${y1}% L ${x2}% ${y2}%`);
-        path.setAttribute("stroke", "rgba(231, 76, 60, 0.9)"); // Roter Premove-Pfad
-        path.setAttribute("stroke-width", "3.5");
-        path.setAttribute("stroke-linecap", "round");
-        path.setAttribute("fill", "none");
-        path.style.strokeDasharray = "6, 4";
-        path.style.animation = "dash 15s linear infinite";
-        path.setAttribute("filter", "drop-shadow(0px 0px 6px rgba(231, 76, 60, 0.95))");
-        
-        svg.appendChild(path);
-        currentBoardEl.appendChild(svg);
+        }
     }
 
-    // Letzten Zug als dezenten Leuchtpfad zeichnen (SVG Overlay)
-    if (typeof lastMove !== 'undefined' && lastMove) {
-        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        svg.setAttribute("class", "board-overlay-svg");
-        svg.style.position = "absolute";
-        svg.style.top = "0";
-        svg.style.left = "0";
-        svg.style.width = "100%";
-        svg.style.height = "100%";
-        svg.style.pointerEvents = "none";
-        svg.style.zIndex = "10"; // Über dem Feld-Hintergrund, aber unter den Figuren
-        
-        const x1 = (lastMove.fc + 0.5) * 12.5;
-        const y1 = (lastMove.fr + 0.5) * 12.5;
-        const x2 = (lastMove.tc + 0.5) * 12.5;
-        const y2 = (lastMove.tr + 0.5) * 12.5;
-        
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        path.setAttribute("d", `M ${x1}% ${y1}% L ${x2}% ${y2}%`);
-        path.setAttribute("stroke", "rgba(241, 196, 15, 0.45)"); // Goldener Lichtpfad
-        path.setAttribute("stroke-width", "3");
-        path.setAttribute("stroke-linecap", "round");
-        path.setAttribute("fill", "none");
-        
-        path.style.strokeDasharray = "8, 6";
-        path.style.animation = "dash 30s linear infinite";
-        path.setAttribute("filter", "drop-shadow(0px 0px 4px rgba(241, 196, 15, 0.8))");
-        
-        svg.appendChild(path);
-        currentBoardEl.appendChild(svg);
-    }
+    renderBoardArrowsSvg();
 }
 window.draw = draw;
 window.resetGame = resetGame;
@@ -3442,6 +4644,287 @@ window.doMove = doMove;
 window.canMoveLogic = canMoveLogic;
 window.isSafeMove = isSafeMove;
 window.isAttacked = isAttacked;
+
+function closePromotionPicker() {
+    const picker = document.getElementById('promotion-picker');
+    if (picker) {
+        picker.style.display = 'none';
+        picker.innerHTML = '';
+    }
+    window._promoCallback = null;
+}
+window.closePromotionPicker = closePromotionPicker;
+
+function openPromotionPicker(fr, fc, tr, tc, color, callback) {
+    const picker = document.getElementById('promotion-picker');
+    if (!picker) {
+        callback('q');
+        return;
+    }
+
+    const themePieces = getActivePieceTheme();
+    const isWhite = color === 'white';
+    const options = isWhite ? ['Q', 'R', 'B', 'N'] : ['q', 'r', 'b', 'n'];
+    const vr = isBoardFlipped ? 7 - tr : tr;
+    const vc = isBoardFlipped ? 7 - tc : tc;
+
+    picker.innerHTML = '';
+    picker.style.left = `${vc * 12.5}%`;
+    if (vr <= 3) {
+        picker.style.top = '0';
+        picker.style.bottom = 'auto';
+    } else {
+        picker.style.bottom = '0';
+        picker.style.top = 'auto';
+    }
+
+    window._promoCallback = callback;
+    options.forEach(code => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'promo-option';
+        btn.title = code.toUpperCase();
+        const img = document.createElement('img');
+        img.src = themePieces[code] || PIECES[code];
+        img.draggable = false;
+        btn.appendChild(img);
+        btn.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+        });
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const cb = window._promoCallback;
+            closePromotionPicker();
+            if (typeof cb === 'function') cb(code.toLowerCase());
+        });
+        picker.appendChild(btn);
+    });
+
+    picker.style.display = 'flex';
+}
+
+function getSquareFromClientXY(clientX, clientY) {
+    const bEl = document.getElementById('chess-board');
+    if (!bEl) return null;
+    const rect = bEl.getBoundingClientRect();
+    if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+        return null;
+    }
+    const vc = Math.min(7, Math.max(0, Math.floor(((clientX - rect.left) / rect.width) * 8)));
+    const vr = Math.min(7, Math.max(0, Math.floor(((clientY - rect.top) / rect.height) * 8)));
+    const r = isBoardFlipped ? 7 - vr : vr;
+    const c = isBoardFlipped ? 7 - vc : vc;
+    return { r, c, vr, vc, rect };
+}
+
+function initBoardPointerInteractions() {
+    const bEl = document.getElementById('chess-board');
+    if (!bEl || bEl.dataset.pointerBound === '1') return;
+    bEl.dataset.pointerBound = '1';
+
+    let rightDragStart = null;
+    let dragState = null;
+
+    bEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+    });
+
+    bEl.addEventListener('pointerdown', (e) => {
+        const sq = getSquareFromClientXY(e.clientX, e.clientY);
+        if (!sq) return;
+
+        // Right mouse button: highlight square or draw SVG arrow
+        if (e.button === 2) {
+            e.preventDefault();
+            let col = 'green';
+            if (e.shiftKey) col = 'red';
+            else if (e.altKey) col = 'blue';
+            else if (e.ctrlKey || e.metaKey) col = 'yellow';
+            rightDragStart = { r: sq.r, c: sq.c, color: col };
+            return;
+        }
+
+        if (e.button !== 0) return;
+
+        // Close open promotion picker if clicking elsewhere on board
+        closePromotionPicker();
+
+        // Left click clears right-click arrows/highlights immediately
+        if ((drawArrows && drawArrows.length > 0) || (highlightSquares && Object.keys(highlightSquares).length > 0)) {
+            drawArrows = [];
+            highlightSquares = {};
+        }
+
+        if (gameEnded || isSpectatorMode || isAnimating || window.isReplayMode) return;
+
+        const piece = board[sq.r] ? board[sq.r][sq.c] : '';
+        const isLocal = gameModeSelect && gameModeSelect.value === 'local';
+        const controllableColor = isLocal ? turn : myColor;
+        const canPickForDrag = piece && isOwn(piece, controllableColor);
+
+        if (canPickForDrag && viewPly === -1) {
+            dragState = {
+                pointerId: e.pointerId,
+                fr: sq.r,
+                fc: sq.c,
+                piece,
+                startX: e.clientX,
+                startY: e.clientY,
+                sqWidth: sq.rect.width / 8,
+                active: false,
+                ghost: null,
+                lastHoverSq: null
+            };
+            try { bEl.setPointerCapture(e.pointerId); } catch (err) {}
+        } else {
+            dragState = {
+                pointerId: e.pointerId,
+                fr: sq.r,
+                fc: sq.c,
+                piece: '',
+                startX: e.clientX,
+                startY: e.clientY,
+                active: false,
+                ghost: null,
+                tapOnly: true
+            };
+        }
+    });
+
+    bEl.addEventListener('pointermove', (e) => {
+        if (!dragState || dragState.pointerId !== e.pointerId || dragState.tapOnly) return;
+        const dist = Math.hypot(e.clientX - dragState.startX, e.clientY - dragState.startY);
+
+        if (!dragState.active && dist >= 6) {
+            dragState.active = true;
+            selected = { r: dragState.fr, c: dragState.fc };
+            draw();
+
+            const originEl = bEl.querySelector(`[data-r="${dragState.fr}"][data-c="${dragState.fc}"]`);
+            if (originEl) originEl.classList.add('dragging-origin');
+
+            const themePieces = getActivePieceTheme();
+            const ghost = document.createElement('img');
+            ghost.src = themePieces[dragState.piece] || PIECES[dragState.piece];
+            ghost.className = 'drag-ghost-piece';
+            ghost.style.width = `${Math.max(36, dragState.sqWidth * 0.92)}px`;
+            ghost.style.height = `${Math.max(36, dragState.sqWidth * 0.92)}px`;
+            ghost.style.left = `${e.clientX}px`;
+            ghost.style.top = `${e.clientY}px`;
+            document.body.appendChild(ghost);
+            dragState.ghost = ghost;
+        }
+
+        if (dragState.active && dragState.ghost) {
+            dragState.ghost.style.left = `${e.clientX}px`;
+            dragState.ghost.style.top = `${e.clientY}px`;
+
+            if (dragState.lastHoverSq) {
+                dragState.lastHoverSq.classList.remove('drag-over');
+                dragState.lastHoverSq = null;
+            }
+            const hoverSq = getSquareFromClientXY(e.clientX, e.clientY);
+            if (hoverSq) {
+                const el = bEl.querySelector(`[data-r="${hoverSq.r}"][data-c="${hoverSq.c}"]`);
+                if (el) {
+                    el.classList.add('drag-over');
+                    dragState.lastHoverSq = el;
+                }
+            }
+        }
+    });
+
+    const finishLeftPointer = (e, cancelled) => {
+        if (!dragState || dragState.pointerId !== e.pointerId) return;
+        const st = dragState;
+        dragState = null;
+
+        if (st.ghost && st.ghost.parentNode) st.ghost.parentNode.removeChild(st.ghost);
+        bEl.querySelectorAll('.dragging-origin, .drag-over').forEach(el => el.classList.remove('dragging-origin', 'drag-over'));
+        try { if (bEl.hasPointerCapture(e.pointerId)) bEl.releasePointerCapture(e.pointerId); } catch (err) {}
+
+        if (cancelled) {
+            draw();
+            return;
+        }
+
+        if (!st.active) {
+            const tapSq = getSquareFromClientXY(e.clientX, e.clientY) || { r: st.fr, c: st.fc };
+            handleSquareClick(tapSq.r, tapSq.c);
+            return;
+        }
+
+        const dropSq = getSquareFromClientXY(e.clientX, e.clientY);
+        if (!dropSq || (dropSq.r === st.fr && dropSq.c === st.fc)) {
+            draw();
+            return;
+        }
+
+        const isLocal = gameModeSelect && gameModeSelect.value === 'local';
+        if (!isLocal && turn !== myColor) {
+            // Queue premove via drag
+            if (canMoveLogic(st.fr, st.fc, dropSq.r, dropSq.c, myColor) || st.fr !== dropSq.r || st.fc !== dropSq.c) {
+                premove = { fr: st.fr, fc: st.fc, tr: dropSq.r, tc: dropSq.c };
+                selected = null;
+            }
+            draw();
+            return;
+        }
+
+        if (canMoveLogic(st.fr, st.fc, dropSq.r, dropSq.c) && isSafeMove(st.fr, st.fc, dropSq.r, dropSq.c)) {
+            const movingP = board[st.fr][st.fc];
+            selected = null;
+            if (movingP && movingP.toLowerCase() === 'p' && (dropSq.r === 0 || dropSq.r === 7)) {
+                draw();
+                openPromotionPicker(st.fr, st.fc, dropSq.r, dropSq.c, turn, (choice) => {
+                    window._lastMoveWasDrag = true;
+                    doMove(st.fr, st.fc, dropSq.r, dropSq.c, true, choice);
+                });
+            } else {
+                window._lastMoveWasDrag = true;
+                doMove(st.fr, st.fc, dropSq.r, dropSq.c, true, null);
+            }
+        } else {
+            window.SoundEngine?.playIllegalSound();
+            draw();
+        }
+    };
+
+    bEl.addEventListener('pointerup', (e) => {
+        if (e.button === 2 && rightDragStart) {
+            const toggle = document.getElementById('arrowToggle');
+            const endSq = getSquareFromClientXY(e.clientX, e.clientY);
+            if (endSq && rightDragStart.r === endSq.r && rightDragStart.c === endSq.c) {
+                if (typeof premove !== 'undefined' && premove) {
+                    premove = null;
+                    selected = null;
+                } else if (!toggle || toggle.checked) {
+                    const key = `${endSq.r},${endSq.c}`;
+                    if (highlightSquares[key] === rightDragStart.color) delete highlightSquares[key];
+                    else highlightSquares[key] = rightDragStart.color;
+                }
+                draw();
+            } else if (endSq && (!toggle || toggle.checked)) {
+                const idx = drawArrows.findIndex(a => a.fr === rightDragStart.r && a.fc === rightDragStart.c && a.tr === endSq.r && a.tc === endSq.c);
+                if (idx >= 0) {
+                    drawArrows.splice(idx, 1);
+                } else {
+                    drawArrows.push({ fr: rightDragStart.r, fc: rightDragStart.c, tr: endSq.r, tc: endSq.c, color: rightDragStart.color });
+                }
+                renderBoardArrowsSvg();
+            }
+            rightDragStart = null;
+            return;
+        }
+        finishLeftPointer(e, false);
+    });
+
+    bEl.addEventListener('pointercancel', (e) => {
+        rightDragStart = null;
+        finishLeftPointer(e, true);
+    });
+}
+
 function startGeneration() {
     const myName = getMyName();
     const promptInput = document.getElementById('videoPrompt');
@@ -3450,7 +4933,7 @@ function startGeneration() {
     if (!promptInput) return;
     const promptText = promptInput.value.trim();
     if (promptText === "") {
-        alert("Bitte beschreibe zuerst, was im Video passieren soll!");
+        window.showInAppNotification?.("Eingabe fehlt", "Bitte beschreibe zuerst, was im Video passieren soll!", "warning");
         return;
     }
 
@@ -3466,54 +4949,65 @@ function startGeneration() {
         if (statusEl) statusEl.innerHTML = "<span style='color:red;'>❌ Fehler: Server nicht verbunden!</span>";
     }
 }
+window.startGeneration = startGeneration;
+
 function handleSquareClick(r, c) {
-    if (isSpectatorMode || isAnimating) return;
+    if (gameEnded || isSpectatorMode || isAnimating || window.isReplayMode) return;
+    if (viewPly !== -1) {
+        jumpToLive();
+        return;
+    }
+
     const isLocal = gameModeSelect && gameModeSelect.value === "local";
     if (!isLocal && turn !== myColor) {
         if (selected) {
             if (board[r] && board[r][c] && isOwn(board[r][c], myColor)) {
-                if (selected.r === r && selected.c === c) {
-                    selected = null; // Klick auf selbe Figur hebt Auswahl auf
-                } else {
-                    selected = { r, c }; // Klick auf andere eigene Figur wechselt Auswahl
-                }
+                selected = (selected.r === r && selected.c === c) ? null : { r, c };
             } else {
-                // Klick auf Zielfeld setzt Premove
                 premove = { fr: selected.r, fc: selected.c, tr: r, tc: c };
                 selected = null;
-                console.log("⚡ Premove gesetzt:", premove);
             }
         } else {
             if (board[r] && board[r][c] && isOwn(board[r][c], myColor)) {
                 selected = { r, c };
                 premove = null;
             } else if (premove) {
-                // Klick auf leeres Feld bricht bestehenden Premove ab
                 premove = null;
             }
         }
-        draw(); 
+        draw();
         return;
     }
 
-    if(selected) {
-        if(canMoveLogic(selected.r, selected.c, r, c) && isSafeMove(selected.r, selected.c, r, c)) {
-            let piece = board[selected.r][selected.c];
-            
-            if (piece.toLowerCase() === 'p' && (r === 0 || r === 7)) {
-                let choice = prompt("Bauernumwandlung! Wähle: Q (Dame), R (Turm), B (Läufer), N (Springer)", "Q") || "Q";
-                choice = choice.toUpperCase();
-                if (!['Q','R','B','N'].includes(choice)) choice = 'Q';
-                board[selected.r][selected.c] = (piece === 'P') ? choice : choice.toLowerCase();
-            }
-            
-            doMove(selected.r, selected.c, r, c);
+    if (selected) {
+        if (selected.r === r && selected.c === c) {
             selected = null;
-        } else {
-            selected = (board[r][c] && isOwn(board[r][c], turn)) ? {r, c} : null;
+            draw();
+            return;
         }
-    } else if(board[r][c] && isOwn(board[r][c], turn)) {
-        selected = {r, c};
+        if (canMoveLogic(selected.r, selected.c, r, c) && isSafeMove(selected.r, selected.c, r, c)) {
+            const fr = selected.r;
+            const fc = selected.c;
+            const piece = board[fr][fc];
+            selected = null;
+
+            if (piece && piece.toLowerCase() === 'p' && (r === 0 || r === 7)) {
+                draw();
+                openPromotionPicker(fr, fc, r, c, turn, (choice) => {
+                    doMove(fr, fc, r, c, true, choice);
+                });
+                return;
+            }
+            doMove(fr, fc, r, c, true, null);
+        } else {
+            if (board[r][c] && isOwn(board[r][c], turn)) {
+                selected = { r, c };
+            } else {
+                selected = null;
+            }
+        }
+    } else if (board[r][c] && isOwn(board[r][c], turn)) {
+        selected = { r, c };
     }
     draw();
 }
@@ -3528,15 +5022,32 @@ if (undoBtn) {
             }
             return;
         }
-        
+
         if (history.length > 0) {
-            const lastState = history.pop();
-            board = lastState.board;
-            turn = lastState.turn;
-            hasMoved = lastState.hasMoved || hasMoved;
-            enPassantTarget = lastState.enPassantTarget || null;
-            halfMoveClock = lastState.halfMoveClock || 0;
-            if (statusEl) statusEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug (Rückgängig)";
+            const isBot = gameModeSelect && gameModeSelect.value === 'bot';
+            const steps = (isBot && turn === myColor && history.length >= 2) ? 2 : 1;
+            for (let i = 0; i < steps && history.length > 0; i++) {
+                const lastState = history.pop();
+                board = lastState.board;
+                turn = lastState.turn;
+                hasMoved = lastState.hasMoved || hasMoved;
+                enPassantTarget = lastState.enPassantTarget || null;
+                halfMoveClock = lastState.halfMoveClock || 0;
+                if (moveHistoryLog.length > 0) moveHistoryLog.pop();
+                if (moveSnapshots.length > 1) moveSnapshots.pop();
+            }
+            lastMove = moveSnapshots.length > 0 ? moveSnapshots[moveSnapshots.length - 1].lastMove : null;
+            viewPly = -1;
+            gameEnded = false;
+            selected = null;
+            premove = null;
+            const sEl = document.getElementById("status-display") || statusEl;
+            if (sEl) sEl.textContent = (turn === "white" ? "Weiß" : "Schwarz") + " am Zug (Rückgängig)";
+            renderInteractiveMoveHistory();
+            updateCapturedMaterialUI();
+            updateOpeningExplorer();
+            requestLiveEval(moveSnapshots.length - 1);
+            updateTimerUI();
             draw();
         }
     };
@@ -3551,45 +5062,63 @@ if (offerDrawBtn) {
                 addChat("System", "Remis (Draw) angeboten...", "system");
             }
         } else {
-            alert("Remis ist nur in Multiplayer-Partien verfügbar.");
+            window.showInAppNotification?.("Remis-Hinweis", "Remis-Angebote an Gegner sind nur in Online-Partien verfügbar.", "info");
         }
     };
 }
 
 const resetBtn = document.getElementById("resetBtn");
-if (resetBtn) resetBtn.onclick = resetGame;
+if (resetBtn && !resetBtn.hasAttribute('data-action') && !resetBtn.getAttribute('onclick')) resetBtn.onclick = () => resetGame(true);
 
 const resignBtn = document.getElementById("resignBtn");
 if (resignBtn) {
     resignBtn.onclick = () => {
-        if (confirm("Möchtest du wirklich aufgeben?")) {
-            if (socket.readyState === 1 && onlineRoom) {
-                socket.send(JSON.stringify({ 
-                    type: 'resign', 
-                    room: onlineRoom, 
-                    sender: getMyName() 
+        if (gameEnded) return;
+        const performResign = () => {
+            gameEnded = true;
+            if (timerInterval) clearInterval(timerInterval);
+            if (socket && socket.readyState === 1 && onlineRoom) {
+                socket.send(JSON.stringify({
+                    type: 'resign',
+                    room: onlineRoom,
+                    sender: getMyName()
                 }));
             }
-            addChat("System", "Du hast das Spiel aufgegeben.", "system");
-            resetGame();
+            addChat("System", "Du hast die Partie aufgegeben.", "system");
+            const winner = (gameModeSelect && gameModeSelect.value === 'local')
+                ? (turn === 'white' ? 'Schwarz' : 'Weiß')
+                : (myColor === 'white' ? 'Schwarz' : 'Weiß');
+            window.SoundEngine?.playMateSound();
+            showCheckmateModal(winner, "Aufgabe!");
+            updateTimerUI();
+        };
+
+        if (typeof window.showGameRequestModal === 'function') {
+            window.showGameRequestModal(
+                "🚩",
+                "Partie aufgeben?",
+                "Möchtest du die laufende Partie wirklich aufgeben?",
+                "🚩 Ja, aufgeben",
+                "Weiterspielen",
+                performResign,
+                () => {}
+            );
+        } else {
+            performResign();
         }
     };
 }
 
 myEngineWorker.onmessage = (e) => {
-    if (e.data && turn === "black" && gameModeSelect && gameModeSelect.value === "bot") {
-        const { fr, fc, tr, tc } = e.data;
+    if (e.data && turn === botColor && gameModeSelect && gameModeSelect.value === "bot" && !gameEnded) {
+        const { fr, fc, tr, tc, promotion } = e.data;
         const diffSelect = document.getElementById("botDifficulty");
         const isInstant = diffSelect && (diffSelect.value === "instant" || diffSelect.value === "1");
         const delay = isInstant ? 50 : 180;
         setTimeout(() => {
-            if (board && board[fr] && board[fr][fc]) {
-                const p = board[fr][fc];
-                if (p.toLowerCase() === 'p' && (tr === 0 || tr === 7)) {
-                    board[fr][fc] = p === 'P' ? 'Q' : 'q';
-                }
+            if (!gameEnded && turn === botColor && board && board[fr] && board[fr][fc]) {
+                doMove(fr, fc, tr, tc, false, promotion || null);
             }
-            doMove(fr, fc, tr, tc, false);
         }, delay);
     }
 };
@@ -3597,20 +5126,23 @@ myEngineWorker.onmessage = (e) => {
 stockfishWorker.onmessage = (e) => {
     const line = e.data;
     if (typeof line === 'string' && line.includes("bestmove")) {
+        if (pendingStockfishFallbackTimer) {
+            clearTimeout(pendingStockfishFallbackTimer);
+            pendingStockfishFallbackTimer = null;
+        }
         const match = line.match(/bestmove\s([a-h][1-8])([a-h][1-8])(q|r|b|n)?/);
-        if (match && turn === "black" && gameModeSelect && gameModeSelect.value === "bot") {
+        if (match && turn === botColor && gameModeSelect && gameModeSelect.value === "bot" && !gameEnded) {
             const cols = "abcdefgh";
-            const fr = 8 - parseInt(match[1][1]);
+            const fr = 8 - parseInt(match[1][1], 10);
             const fc = cols.indexOf(match[1][0]);
-            const tr = 8 - parseInt(match[2][1]);
+            const tr = 8 - parseInt(match[2][1], 10);
             const tc = cols.indexOf(match[2][0]);
-            const prom = match[3];
+            const prom = match[3] || null;
             setTimeout(() => {
-                if (prom && board && board[fr] && board[fr][fc]) {
-                    board[fr][fc] = board[fr][fc] === 'P' ? prom.toUpperCase() : prom.toLowerCase();
+                if (!gameEnded && turn === botColor) {
+                    doMove(fr, fc, tr, tc, false, prom);
                 }
-                doMove(fr, fc, tr, tc, false);
-            }, 100);
+            }, 80);
         }
     }
 };
@@ -3734,35 +5266,79 @@ resetGame();
 // --- NEW: FEN PARSER / LOADER ---
 function loadFEN(fen) {
     if (!fen) return;
-    const parts = fen.split(" ");
-    const boardPart = parts[0];
-    const rows = boardPart.split("/");
-    
-    board = [];
-    for (let r = 0; r < 8; r++) {
-        const row = [];
-        const fenRow = rows[r];
-        if (!fenRow) continue;
-        for (let i = 0; i < fenRow.length; i++) {
-            const char = fenRow[i];
-            if (/\d/.test(char)) {
-                const num = parseInt(char);
-                for (let j = 0; j < num; j++) {
-                    row.push("");
-                }
-            } else {
-                row.push(char);
-            }
+    if (window.PGNEngine && typeof window.PGNEngine.parseFEN === 'function') {
+        const parsed = window.PGNEngine.parseFEN(fen);
+        if (!parsed) {
+            window.showInAppNotification?.("Ungültige FEN", "Die FEN-Zeichenkette konnte nicht gelesen werden.", "warning");
+            return;
         }
-        board.push(row);
+        board = parsed.board;
+        turn = parsed.turn;
+        const cas = parsed.castling || '-';
+        hasMoved = {
+            whiteK: !(cas.includes('K') || cas.includes('Q')),
+            whiteR8: !cas.includes('K'),
+            whiteR1: !cas.includes('Q'),
+            blackK: !(cas.includes('k') || cas.includes('q')),
+            blackR8: !cas.includes('k'),
+            blackR1: !cas.includes('q')
+        };
+        enPassantTarget = parsed.epTarget;
+        halfMoveClock = parsed.halfMoveClock || 0;
+    } else {
+        const parts = fen.split(" ");
+        const boardPart = parts[0];
+        const rows = boardPart.split("/");
+        board = [];
+        for (let r = 0; r < 8; r++) {
+            const row = [];
+            const fenRow = rows[r] || "";
+            for (let i = 0; i < fenRow.length; i++) {
+                const char = fenRow[i];
+                if (/\d/.test(char)) {
+                    for (let j = 0; j < parseInt(char, 10); j++) row.push("");
+                } else {
+                    row.push(char);
+                }
+            }
+            board.push(row);
+        }
+        turn = (parts[1] === "b") ? "black" : "white";
+        enPassantTarget = null;
+        halfMoveClock = 0;
     }
-    
-    turn = (parts[1] === "b") ? "black" : "white";
+
     selected = null;
     history = [];
+    moveHistoryLog = [];
     lastMove = null;
     premove = null;
-    
+    drawArrows = [];
+    highlightSquares = {};
+    viewPly = -1;
+    gameEnded = false;
+    positionHistory = {};
+    positionHistory[getPositionKey()] = 1;
+    moveSnapshots = [{
+        board: board.map(r => [...r]),
+        turn,
+        hasMoved: { ...hasMoved },
+        enPassantTarget,
+        halfMoveClock,
+        lastMove: null,
+        san: null,
+        uci: null,
+        fen: boardToFEN(),
+        evalBefore: 0,
+        evalAfter: 0,
+        quality: null
+    }];
+
+    renderInteractiveMoveHistory();
+    updateCapturedMaterialUI();
+    updateOpeningExplorer();
+    updateTimerUI();
+    requestLiveEval(0);
     if (typeof draw === "function") draw();
 }
 window.loadFEN = loadFEN;
@@ -3775,34 +5351,30 @@ function initPuzzleControls() {
     if (loadPuzzleBtn) {
         loadPuzzleBtn.addEventListener("click", () => {
             if (socket && socket.readyState === WebSocket.OPEN) {
-                // Request the daily puzzle
                 socket.send(JSON.stringify({ type: 'get_daily_puzzle' }));
-                
-                // Show status feedback
                 const pStatus = document.getElementById("puzzle-status") || document.getElementById("modal-puzzle-status");
                 if (pStatus) {
                     pStatus.innerText = "Lade Position...";
                     pStatus.style.color = "#bdc3c7";
                 }
-                
-                // Activate puzzle load delay
                 setTimeout(() => {
                     if (window.activePuzzle) {
                         window.isTacticalPuzzleMode = true;
                         loadFEN(window.activePuzzle.fen);
                         myColor = window.activePuzzle.color;
-                        
+                        isBoardFlipped = (myColor === 'black');
+                        applyFlipLayout();
+
                         const pStat = document.getElementById("puzzle-status") || document.getElementById("modal-puzzle-status");
                         if (pStat) {
                             pStat.innerText = "Rätsel aktiv! Mache deinen Zug.";
                             pStat.style.color = "#f1c40f";
                         }
-                        
                         if (resetPuzzleBtn) resetPuzzleBtn.style.display = "block";
                     }
                 }, 600);
             } else {
-                alert("Verbindung zum Server wird benötigt, um das Tägliche Rätsel zu laden.");
+                window.showInAppNotification?.("Offline", "Verbindung zum Server wird benötigt, um das Tägliche Rätsel zu laden.", "warning");
             }
         });
     }
@@ -3820,6 +5392,31 @@ function initPuzzleControls() {
         });
     }
 }
+
+window.startModalPuzzle = function() {
+    const pModal = document.getElementById("puzzle-modal");
+    if (pModal) pModal.style.display = "none";
+    const loadBtn = document.getElementById("loadPuzzleBtn");
+    if (loadBtn) {
+        loadBtn.click();
+        return;
+    }
+    if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'get_daily_puzzle' }));
+        setTimeout(() => {
+            if (window.activePuzzle) {
+                window.isTacticalPuzzleMode = true;
+                loadFEN(window.activePuzzle.fen);
+                myColor = window.activePuzzle.color;
+                isBoardFlipped = (myColor === 'black');
+                applyFlipLayout();
+                window.showInAppNotification?.("Taktik-Rätsel", "Rätsel aktiv! Mache deinen Zug.", "info");
+            }
+        }, 400);
+    } else {
+        window.showInAppNotification?.("Offline", "Verbindung zum Server wird benötigt, um das Tägliche Rätsel zu laden.", "warning");
+    }
+};
 
 // --- FULLSCREEN CONTROLS ---
 function initFullscreenControls() {
@@ -3893,17 +5490,19 @@ function initCustomizationControls() {
     // Read from localStorage on boot
     const savedBoardTheme = localStorage.getItem("board_theme") || "classic";
     const savedPieceTheme = localStorage.getItem("piece_theme") || "classic";
-    const savedColorWhite = localStorage.getItem("color_white") || "#f0d9b5";
-    const savedColorBlack = localStorage.getItem("color_black") || "#b58863";
-    const savedColorMoveDot = localStorage.getItem("color_move_dot") || "#f1c40f";
+    const savedColorWhite = localStorage.getItem("color_white") || "#eeeed2";
+    const savedColorBlack = localStorage.getItem("color_black") || "#769656";
+    const savedColorMoveDot = localStorage.getItem("color_move_dot");
     
     // Load and apply custom colors on boot
     if (cpWhite) cpWhite.value = savedColorWhite;
     if (cpBlack) cpBlack.value = savedColorBlack;
-    if (cpMoveDot) cpMoveDot.value = savedColorMoveDot;
+    if (cpMoveDot && savedColorMoveDot) cpMoveDot.value = savedColorMoveDot;
     document.documentElement.style.setProperty('--board-white', savedColorWhite);
     document.documentElement.style.setProperty('--board-black', savedColorBlack);
-    document.documentElement.style.setProperty('--move-dot-color', savedColorMoveDot);
+    if (savedColorMoveDot) {
+        document.documentElement.style.setProperty('--move-dot-color', savedColorMoveDot);
+    }
     
     if (cpMoveDot) {
         cpMoveDot.addEventListener("input", () => {
@@ -3973,6 +5572,12 @@ function initCustomizationControls() {
             }
         });
     }
+
+    const pieceSetSelect = document.getElementById("pieceSetSelect");
+    if (pieceSetSelect) {
+        const revMap = { classic: 'neo', vintage: 'wood', pixel: 'pixel' };
+        if (revMap[savedPieceTheme]) pieceSetSelect.value = revMap[savedPieceTheme];
+    }
     
     // Apply initial themes
     applyThemes(savedBoardTheme, savedPieceTheme);
@@ -3986,78 +5591,146 @@ function applyThemes(boardTheme, pieceTheme) {
     if (boardTheme && boardTheme !== 'classic') {
         boardEl.classList.add(`theme-${boardTheme}`);
     }
+
+    const pTheme = pieceTheme || localStorage.getItem('piece_theme') || 'classic';
+    boardEl.classList.remove('piece-goldsilver', 'piece-neon', 'piece-vintage', 'piece-pixel');
+    if (pTheme === 'goldsilver') boardEl.classList.add('piece-goldsilver');
+    else if (pTheme === 'neon') boardEl.classList.add('piece-neon');
+    else if (pTheme === 'vintage' || pTheme === 'wood') boardEl.classList.add('piece-vintage');
+    else if (pTheme === 'pixel') boardEl.classList.add('piece-pixel');
     
     if (typeof draw === 'function') draw();
 }
 window.applyThemes = applyThemes;
 
 window.changePieceSet = function(theme) {
+    const map = { neo: 'classic', wood: 'vintage', pixel: 'pixel' };
+    const normalized = map[theme] || theme || 'classic';
+    localStorage.setItem('piece_theme', normalized);
+    const pieceThemeSelect = document.getElementById('pieceThemeSelect');
+    if (pieceThemeSelect && Array.from(pieceThemeSelect.options).some(o => o.value === normalized)) {
+        pieceThemeSelect.value = normalized;
+    }
     if (typeof applyThemes === 'function') {
-        applyThemes(localStorage.getItem('board_theme') || 'classic', theme);
-        localStorage.setItem('piece_theme', theme);
+        applyThemes(localStorage.getItem('board_theme') || 'classic', normalized);
     }
 };
 
 window.changeSoundPack = function(pack) {
     localStorage.setItem('sound_pack', pack);
-    if (pack === 'arcade') {
-        if (sounds) sounds.move = new Audio('https://s3.amazonaws.com/freecodecamp/simonSound1.mp3');
-        if (sounds) sounds.cap = new Audio('https://s3.amazonaws.com/freecodecamp/simonSound2.mp3');
-    } else {
-        if (sounds) sounds.move = new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/move-self.mp3');
-        if (sounds) sounds.cap = new Audio('https://images.chesscomfiles.com/chess-themes/pieces/neo/sounds/capture.mp3');
+    if (window.SoundEngine && typeof window.SoundEngine.setSoundPack === 'function') {
+        window.SoundEngine.setSoundPack(pack);
+        window.SoundEngine.playMoveSound();
+    } else if (typeof playMoveSound === 'function') {
+        playMoveSound();
     }
-    if (typeof playMoveSound === 'function') playMoveSound();
 };
 
+function generateChess960BackRank() {
+    const rank = Array(8).fill('');
+    const even = [0, 2, 4, 6];
+    const odd = [1, 3, 5, 7];
+    rank[even[Math.floor(Math.random() * even.length)]] = 'B';
+    rank[odd[Math.floor(Math.random() * odd.length)]] = 'B';
+    const placeEmpty = (piece) => {
+        const empty = rank.map((v, i) => v === '' ? i : -1).filter(i => i >= 0);
+        rank[empty[Math.floor(Math.random() * empty.length)]] = piece;
+    };
+    placeEmpty('Q');
+    placeEmpty('N');
+    placeEmpty('N');
+    const rem = rank.map((v, i) => v === '' ? i : -1).filter(i => i >= 0);
+    rank[rem[0]] = 'R';
+    rank[rem[1]] = 'K';
+    rank[rem[2]] = 'R';
+    return rank;
+}
+
 window.startVariantGame = function() {
-    const variant = document.getElementById('variantSelect').value;
-    document.getElementById('features-modal').style.display = 'none';
-    if (variant === 'blindfold') {
-        document.getElementById('chess-board').style.opacity = '0.1'; // simple hack for blindfold
-    } else {
-        document.getElementById('chess-board').style.opacity = '1';
+    const sel = document.getElementById('variantSelect');
+    const variant = sel ? sel.value : 'standard';
+    activeVariant = variant;
+    const fModal = document.getElementById('features-modal');
+    if (fModal) fModal.style.display = 'none';
+
+    resetGame(true);
+    if (variant === 'chess960') {
+        const back = generateChess960BackRank();
+        board[7] = [...back];
+        board[0] = back.map(p => p.toLowerCase());
+        hasMoved = { whiteK: true, whiteR1: true, whiteR8: true, blackK: true, blackR1: true, blackR8: true };
+        if (moveSnapshots.length > 0) {
+            moveSnapshots[0].board = board.map(r => [...r]);
+            moveSnapshots[0].fen = boardToFEN();
+        }
     }
-    window.showInAppNotification("Spiel", "Neue Variante gestartet: " + variant, "info");
-    if (socket && socket.readyState === 1) {
-        socket.send(JSON.stringify({ type: 'find_random', playerName: getMyName(), timeControl: '10+0', variant: variant }));
-    }
+    draw();
+    window.showInAppNotification?.("Spielvariante", "Gestartet: " + variant, "info");
 };
 
 window.startPassAndPlay = function() {
-    document.getElementById('features-modal').style.display = 'none';
-    game = new Chess();
-    if (typeof draw === 'function') draw();
-    window.showInAppNotification("Lokal", "Pass & Play Modus gestartet", "success");
-    // disconnect socket temporarily for local play
-    if (socket) socket.close();
+    const fModal = document.getElementById('features-modal');
+    if (fModal) fModal.style.display = 'none';
+    const gmSelect = document.getElementById('gameMode');
+    if (gmSelect) gmSelect.value = 'local';
+    activeVariant = 'standard';
+    resetGame(true);
+    window.showInAppNotification?.("Lokal", "Pass & Play Modus (2 Spieler) gestartet", "success");
 };
 
 let keyboardMoveInput = "";
 window.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+    const promoPicker = document.getElementById('promotion-picker');
+    if (promoPicker && promoPicker.style.display === 'flex') {
+        const keyMap = { q: 'Q', d: 'Q', r: 'R', t: 'R', b: 'B', l: 'B', n: 'N', s: 'N' };
+        const targetTitle = keyMap[e.key.toLowerCase()];
+        if (targetTitle) {
+            const btn = promoPicker.querySelector(`.promo-option[title="${targetTitle}"]`);
+            if (btn) { e.preventDefault(); btn.click(); return; }
+        }
+        if (e.key === 'Escape') { e.preventDefault(); closePromotionPicker(); return; }
+    }
+
+    if (window.isReplayMode && e.code === 'Space') {
+        e.preventDefault();
+        window.toggleReplayPause?.();
+        return;
+    }
+
+    // Navigation & Board flip shortcuts (Chess.com standard)
+    if (e.key === 'ArrowLeft') { e.preventDefault(); stepHistory(-1); return; }
+    if (e.key === 'ArrowRight') { e.preventDefault(); stepHistory(1); return; }
+    if (e.key === 'Home') { e.preventDefault(); jumpToMoveIndex(0); return; }
+    if (e.key === 'End') { e.preventDefault(); jumpToLive(); return; }
+    if (e.key.toLowerCase() === 'f' && !(document.getElementById('keyboardToggle')?.checked)) {
+        flipBoard();
+        return;
+    }
+
     const kbdToggle = document.getElementById('keyboardToggle');
     if (!kbdToggle || !kbdToggle.checked) return;
-    
-    // exclude input fields
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
     if (e.key.length === 1 && /[a-h1-8]/.test(e.key.toLowerCase())) {
         keyboardMoveInput += e.key.toLowerCase();
-        
         const statusEl = document.getElementById('voice-move-status');
         if (statusEl) statusEl.textContent = "Tastatur: " + keyboardMoveInput;
 
         if (keyboardMoveInput.length === 4) {
             const from = keyboardMoveInput.substring(0, 2);
             const to = keyboardMoveInput.substring(2, 4);
-            const move = game.move({ from, to, promotion: 'q' });
             keyboardMoveInput = "";
-            
-            if (move) {
+            const fc = from.charCodeAt(0) - 97;
+            const fr = 8 - parseInt(from[1], 10);
+            const tc = to.charCodeAt(0) - 97;
+            const tr = 8 - parseInt(to[1], 10);
+
+            if (canMoveLogic(fr, fc, tr, tc) && isSafeMove(fr, fc, tr, tc)) {
+                doMove(fr, fc, tr, tc, true, null);
                 if (statusEl) statusEl.textContent = "Gezogen: " + from + "-" + to;
-                if (typeof draw === 'function') draw();
-                if (typeof handleUserMove === 'function') handleUserMove(move);
             } else {
+                window.SoundEngine?.playIllegalSound();
                 if (statusEl) {
                     statusEl.textContent = "Ungültiger Zug: " + from + "-" + to;
                     setTimeout(() => { statusEl.textContent = ""; }, 2000);
@@ -4068,117 +5741,6 @@ window.addEventListener('keydown', (e) => {
         keyboardMoveInput = "";
         const statusEl = document.getElementById('voice-move-status');
         if (statusEl) statusEl.textContent = "";
-    }
-});
-
-// Arrow drawing using SVG
-const arrowSvgId = "board-arrows-svg";
-let startSquare = null;
-
-function setupArrows() {
-    const wrapper = document.getElementById('board-wrapper');
-    if (!wrapper) return;
-    
-    let svg = document.getElementById(arrowSvgId);
-    if (!svg) {
-        svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        svg.id = arrowSvgId;
-        svg.style.position = "absolute";
-        svg.style.top = "0";
-        svg.style.left = "0";
-        svg.style.width = "100%";
-        svg.style.height = "100%";
-        svg.style.pointerEvents = "none";
-        svg.style.zIndex = "50";
-        
-        const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
-        const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
-        marker.setAttribute("id", "arrowhead");
-        marker.setAttribute("markerWidth", "10");
-        marker.setAttribute("markerHeight", "7");
-        marker.setAttribute("refX", "9");
-        marker.setAttribute("refY", "3.5");
-        marker.setAttribute("orient", "auto");
-        const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-        polygon.setAttribute("points", "0 0, 10 3.5, 0 7");
-        polygon.setAttribute("fill", "rgba(231, 76, 60, 0.8)");
-        marker.appendChild(polygon);
-        defs.appendChild(marker);
-        svg.appendChild(defs);
-        
-        wrapper.appendChild(svg);
-    }
-}
-
-document.addEventListener('contextmenu', (e) => {
-    const toggle = document.getElementById('arrowToggle');
-    if (!toggle || !toggle.checked) return;
-    
-    const board = document.getElementById('chess-board');
-    if (board && board.contains(e.target)) {
-        e.preventDefault();
-    }
-});
-
-document.addEventListener('mousedown', (e) => {
-    const toggle = document.getElementById('arrowToggle');
-    if (!toggle || !toggle.checked) return;
-    
-    if (e.button === 2) { 
-        const board = document.getElementById('chess-board');
-        if (!board) return;
-        
-        const rect = board.getBoundingClientRect();
-        if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-            setupArrows();
-            const sqSize = rect.width / 8;
-            let col = Math.floor((e.clientX - rect.left) / sqSize);
-            let row = Math.floor((e.clientY - rect.top) / sqSize);
-            
-            if (myColor === 'black') {
-                col = 7 - col;
-                row = 7 - row;
-            }
-            
-            startSquare = { x: e.clientX - rect.left, y: e.clientY - rect.top, col, row };
-        } else {
-            const svg = document.getElementById(arrowSvgId);
-            if (svg) svg.innerHTML = '<defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="rgba(231, 76, 60, 0.8)"></polygon></marker></defs>';
-        }
-    } else if (e.button === 0) {
-        const svg = document.getElementById(arrowSvgId);
-        if (svg) svg.innerHTML = '<defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="rgba(231, 76, 60, 0.8)"></polygon></marker></defs>';
-    }
-});
-
-document.addEventListener('mouseup', (e) => {
-    const toggle = document.getElementById('arrowToggle');
-    if (!toggle || !toggle.checked) return;
-
-    if (e.button === 2 && startSquare) {
-        const board = document.getElementById('chess-board');
-        if (!board) return;
-        
-        const rect = board.getBoundingClientRect();
-        if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
-            const endX = e.clientX - rect.left;
-            const endY = e.clientY - rect.top;
-            
-            const svg = document.getElementById(arrowSvgId);
-            if (svg) {
-                const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                line.setAttribute("x1", startSquare.x);
-                line.setAttribute("y1", startSquare.y);
-                line.setAttribute("x2", endX);
-                line.setAttribute("y2", endY);
-                line.setAttribute("stroke", "rgba(231, 76, 60, 0.8)");
-                line.setAttribute("stroke-width", "8");
-                line.setAttribute("stroke-linecap", "round");
-                line.setAttribute("marker-end", "url(#arrowhead)");
-                svg.appendChild(line);
-            }
-        }
-        startSquare = null;
     }
 });
 
@@ -4278,11 +5840,36 @@ function leaveSpectate() {
 window.leaveSpectate = leaveSpectate;
 
 // Initialize all controls on DOM load
+function initAllProBoardUI() {
+    initBoardPointerInteractions();
+    if (typeof renderInteractiveMoveHistory === 'function') renderInteractiveMoveHistory();
+    if (typeof updateCapturedMaterialUI === 'function') updateCapturedMaterialUI();
+    if (typeof updatePlayerNamesBar === 'function') updatePlayerNamesBar();
+    if (typeof applyFlipLayout === 'function') applyFlipLayout();
+}
+
 window.addEventListener('DOMContentLoaded', () => {
     initPuzzleControls();
     initFullscreenControls();
     initCustomizationControls();
     initSpectatorControls();
+    initAllProBoardUI();
+    syncSoundButtonUI();
+
+    const trainerSel = document.getElementById('trainer-repertoire-select');
+    if (trainerSel && window.OpeningTrainer) {
+        const reps = window.OpeningTrainer.getAvailableRepertoires();
+        trainerSel.innerHTML = reps.map(r => `<option value="${escapeHtml(r.id)}">${escapeHtml(r.name)} (${r.side === 'white' ? 'Weiß' : 'Schwarz'})</option>`).join('');
+        if (reps.some(r => r.id === trainerRepertoireId)) trainerSel.value = trainerRepertoireId;
+        trainerSel.addEventListener('change', () => {
+            trainerRepertoireId = trainerSel.value;
+            try { localStorage.setItem('trainer_repertoire_id', trainerRepertoireId); } catch (e) {}
+            if (trainerActive) {
+                trainerActive = false;
+                window.toggleOpeningTrainer();
+            }
+        });
+    }
     
     // Pull active games list on load
     setTimeout(() => {
@@ -4291,6 +5878,9 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     }, 1500);
 });
+if (document.readyState !== 'loading') {
+    initAllProBoardUI();
+}
 
 // Pure Canvas particle physics engine for Gold Dust explosion / celebration
 function triggerGoldDustCelebration() {
@@ -4428,56 +6018,25 @@ window.triggerGoldDustCelebration = triggerGoldDustCelebration;
 
 window.shareGameForAnalysis = function() {
     if (!moveHistoryLog || moveHistoryLog.length === 0) {
-        alert("Keine Züge zum Analysieren vorhanden!");
+        if (window.showInAppNotification) {
+            window.showInAppNotification("Analyse", "Keine Züge zum Analysieren vorhanden!", "warning");
+        }
         return;
     }
-    
-    // Result determination
-    let result = "*";
-    const modalTextEl = document.getElementById('checkmate-winner-text');
-    if (modalTextEl) {
-        const modalText = modalTextEl.innerText || "";
-        if (modalText.includes("Weiß gewinnt")) {
-            result = "1-0";
-        } else if (modalText.includes("Schwarz gewinnt")) {
-            result = "0-1";
-        } else if (modalText.includes("Unentschieden") || modalText.includes("Remis")) {
-            result = "1/2-1/2";
-        }
-    }
-    
-    const today = new Date();
-    const dateStr = today.getFullYear() + "." + String(today.getMonth() + 1).padStart(2, '0') + "." + String(today.getDate()).padStart(2, '0');
-    
-    let pgn = `[Event "Online Match"]\n`;
-    pgn += `[Site "Schach Live App"]\n`;
-    pgn += `[Date "${dateStr}"]\n`;
-    pgn += `[Round "1"]\n`;
-    pgn += `[White "Player 1"]\n`;
-    pgn += `[Black "Player 2"]\n`;
-    pgn += `[Result "${result}"]\n\n`;
-    
-    let movePairs = [];
-    for (let i = 0; i < moveHistoryLog.length; i += 2) {
-        const moveNum = Math.floor(i / 2) + 1;
-        const whiteMove = moveHistoryLog[i];
-        const blackMove = moveHistoryLog[i + 1] || "";
-        movePairs.push(`${moveNum}. ${whiteMove} ${blackMove}`.trim());
-    }
-    
-    pgn += movePairs.join(" ") + (result !== "*" ? " " + result : "");
-    
+
+    const pgn = (typeof buildFullPGN === 'function') ? buildFullPGN() : moveHistoryLog.join(" ");
+
     const form = document.createElement('form');
     form.method = 'POST';
     form.action = 'https://lichess.org/api/import';
     form.target = '_blank';
-    
+
     const pgnInput = document.createElement('input');
     pgnInput.type = 'hidden';
     pgnInput.name = 'pgn';
     pgnInput.value = pgn;
     form.appendChild(pgnInput);
-    
+
     document.body.appendChild(form);
     form.submit();
     document.body.removeChild(form);
@@ -4485,57 +6044,19 @@ window.shareGameForAnalysis = function() {
 
 function downloadReplay() {
     if (!moveHistoryLog || moveHistoryLog.length === 0) {
-        alert("Keine Züge zum Herunterladen vorhanden!");
+        if (window.showInAppNotification) {
+            window.showInAppNotification("Replay", "Keine Züge zum Herunterladen vorhanden!", "warning");
+        }
         return;
     }
-    
-    let pName = "Gast";
-    if (typeof getMyName === 'function') {
-        pName = getMyName();
-    }
-    
-    let oppName = "Gegner";
-    if (typeof opponentName !== 'undefined' && opponentName) {
-        oppName = opponentName;
-    }
-    
+
+    let pName = (typeof getMyName === 'function') ? getMyName() : "Gast";
+    let oppName = (typeof opponentName !== 'undefined' && opponentName) ? opponentName : "Gegner";
     const whiteName = (typeof myColor !== 'undefined' && myColor === "white") ? pName : oppName;
     const blackName = (typeof myColor !== 'undefined' && myColor === "black") ? pName : oppName;
-    
-    // Result determination
-    let result = "*";
-    const modalTextEl = document.getElementById('checkmate-winner-text');
-    if (modalTextEl) {
-        const modalText = modalTextEl.innerText || "";
-        if (modalText.includes("Weiß gewinnt")) {
-            result = "1-0";
-        } else if (modalText.includes("Schwarz gewinnt")) {
-            result = "0-1";
-        } else if (modalText.includes("Unentschieden") || modalText.includes("Remis")) {
-            result = "1/2-1/2";
-        }
-    }
-    
-    const today = new Date();
-    const dateStr = today.getFullYear() + "." + String(today.getMonth() + 1).padStart(2, '0') + "." + String(today.getDate()).padStart(2, '0');
-    
-    let pgn = `[Event "Online Match"]\n`;
-    pgn += `[Site "Schach Live App"]\n`;
-    pgn += `[Date "${dateStr}"]\n`;
-    pgn += `[Round "1"]\n`;
-    pgn += `[White "${whiteName}"]\n`;
-    pgn += `[Black "${blackName}"]\n`;
-    pgn += `[Result "${result}"]\n\n`;
-    
-    let movePairs = [];
-    for (let i = 0; i < moveHistoryLog.length; i += 2) {
-        const moveNum = Math.floor(i / 2) + 1;
-        const whiteMove = moveHistoryLog[i];
-        const blackMove = moveHistoryLog[i + 1] || "";
-        movePairs.push(`${moveNum}. ${whiteMove} ${blackMove}`.trim());
-    }
-    pgn += movePairs.join(" ") + ` ${result}`;
-    
+
+    const pgn = (typeof buildFullPGN === 'function') ? buildFullPGN() : moveHistoryLog.join(" ");
+
     try {
         const blob = new Blob([pgn], { type: "application/x-chess-pgn;charset=utf-8" });
         const url = URL.createObjectURL(blob);
@@ -4546,9 +6067,14 @@ function downloadReplay() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+        if (window.showInAppNotification) {
+            window.showInAppNotification("PGN Export", "Partie wurde als PGN-Datei heruntergeladen.", "success");
+        }
     } catch(e) {
         console.error("Fehler beim Herunterladen des Replays:", e);
-        alert("Es gab einen Fehler beim Herunterladen des Replays.");
+        if (window.showInAppNotification) {
+            window.showInAppNotification("Fehler", "Es gab einen Fehler beim Herunterladen des Replays.", "error");
+        }
     }
 }
 window.downloadReplay = downloadReplay;
@@ -4661,11 +6187,11 @@ window.renderAdminUsers = function(users) {
                 ${isBanned ? `<div style="font-size: 0.75em; color: #ff8888; font-style: italic;">Grund: ${escapeHtml(banReason)}</div>` : ''}
                 <div style="display: flex; gap: 6px; margin-top: 4px; justify-content: flex-end;">
                     ${isBanned ? `
-                        <button onclick="window.unbanUser(decodeURIComponent('${encodeURIComponent(name)}'))" class="glass-btn success" style="padding: 3px 8px; font-size: 0.75em; cursor: pointer; background: rgba(46,204,113,0.25); border: 1px solid #2ecc71; color: #a3e4d7;">
+                        <button type="button" data-admin-action="unban-user" data-target="${encodeURIComponent(name)}" class="glass-btn success" style="padding: 3px 8px; font-size: 0.75em; cursor: pointer; background: rgba(46,204,113,0.25); border: 1px solid #2ecc71; color: #a3e4d7;">
                             🔓 Entbannen
                         </button>
                     ` : `
-                        <button onclick="window.banUser(decodeURIComponent('${encodeURIComponent(name)}'))" class="glass-btn danger" style="padding: 3px 8px; font-size: 0.75em; cursor: pointer; background: rgba(231,76,60,0.25); border: 1px solid #e74c3c; color: #f5b7b1;">
+                        <button type="button" data-admin-action="ban-user" data-target="${encodeURIComponent(name)}" class="glass-btn danger" style="padding: 3px 8px; font-size: 0.75em; cursor: pointer; background: rgba(231,76,60,0.25); border: 1px solid #e74c3c; color: #f5b7b1;">
                             🔨 Bannen
                         </button>
                     `}
@@ -4677,66 +6203,76 @@ window.renderAdminUsers = function(users) {
     listContainer.innerHTML = html;
 };
 
-window.unbanUser = async function(encodedTarget) {
+window.unbanUser = function(encodedTarget) {
     const target = decodeURIComponent(encodedTarget);
     if (!target) return;
 
-    if (!confirm(`Möchtest du '${target}' wirklich entsperren/entbannen?`)) return;
+    const performUnban = async () => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+                type: 'admin_unban_user',
+                target: target
+            }));
+        }
 
-    if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({
-            type: 'admin_unban_user',
-            target: target
-        }));
-    }
-
-    try {
-        const res = await fetch('/api/admin/unban-user', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ target: target })
-        });
-        const data = await res.json();
-        if (data.success) {
-            if (window.showInAppNotification) {
+        try {
+            const res = await fetch('/api/admin/unban-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target: target })
+            });
+            const data = await res.json();
+            if (data.success && window.showInAppNotification) {
                 window.showInAppNotification("🔓 Spieler Entbannt", `Spieler '${target}' wurde erfolgreich entsperrt.`, "success");
             }
+        } catch (e) {
+            console.error("Unban user error:", e);
         }
-    } catch (e) {
-        console.error("Unban user error:", e);
-    }
 
-    setTimeout(() => {
-        window.requestAdminUsersRefresh();
-        window.requestAdminTicketsRefresh();
-    }, 400);
+        setTimeout(() => {
+            window.requestAdminUsersRefresh();
+            window.requestAdminTicketsRefresh();
+        }, 400);
+    };
+
+    if (typeof window.showGameRequestModal === 'function') {
+        window.showGameRequestModal("🔓", "Spieler entsperren", `Möchtest du '${target}' wirklich entsperren/entbannen?`, "Entsperren", "Abbrechen", performUnban, () => {});
+    } else {
+        performUnban();
+    }
 };
 
-window.banUser = async function(encodedTarget) {
+window.banUser = function(encodedTarget) {
     const target = decodeURIComponent(encodedTarget);
     if (!target) return;
 
-    const reason = prompt(`Grund für den Bann von '${target}':`, "Admin-Entscheidung");
-    if (reason === null) return;
+    const performBan = async (reason) => {
+        if (reason === null) return;
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+                type: 'chat',
+                text: `/ban "${target}" "${reason || 'Admin-Entscheidung'}"`
+            }));
+        }
 
-    if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({
-            type: 'chat',
-            text: `/ban "${target}" "${reason || 'Admin-Entscheidung'}"`
-        }));
+        try {
+            await fetch('/api/admin/ban-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target: target, reason: reason })
+            });
+        } catch (e) {}
+
+        setTimeout(() => {
+            window.requestAdminUsersRefresh();
+        }, 400);
+    };
+
+    if (typeof window.showInAppPrompt === 'function') {
+        window.showInAppPrompt("Spieler bannen", `Grund für den Bann von '${target}':`, "Admin-Entscheidung", performBan);
+    } else {
+        performBan("Admin-Entscheidung");
     }
-
-    try {
-        await fetch('/api/admin/ban-user', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ target: target, reason: reason })
-        });
-    } catch (e) {}
-
-    setTimeout(() => {
-        window.requestAdminUsersRefresh();
-    }, 400);
 };
 
 // ==========================================
@@ -4789,11 +6325,11 @@ window.renderAdminTickets = function(tickets, supportEmail) {
                     <span>${escapeHtml(t.createdAt || '')}</span>
                     <div style="display: flex; gap: 4px;">
                         ${!isResolved ? `
-                            <button onclick="window.unbanTicket(decodeURIComponent('${encodeURIComponent(t.id || '')}'))" class="glass-btn success" style="padding: 2px 6px; font-size: 0.75em; cursor: pointer; background: rgba(46,204,113,0.25); border: 1px solid #2ecc71; color: #a3e4d7;">
-                                🔓 Entbannen & Genehmigen
+                            <button type="button" data-admin-action="unban-ticket" data-ticket-id="${encodeURIComponent(t.id || '')}" data-target="${encodeURIComponent(user || '')}" class="glass-btn success" style="padding: 2px 6px; font-size: 0.75em; cursor: pointer; background: rgba(46,204,113,0.25); border: 1px solid #2ecc71; color: #a3e4d7;">
+                                🔓 Entbannen &amp; Genehmigen
                             </button>
                         ` : `
-                            <button onclick="window.unbanTicket(decodeURIComponent('${encodeURIComponent(t.id || '')}'))" class="glass-btn" style="padding: 2px 6px; font-size: 0.75em; cursor: pointer;">
+                            <button type="button" data-admin-action="unban-ticket" data-ticket-id="${encodeURIComponent(t.id || '')}" data-target="${encodeURIComponent(user || '')}" class="glass-btn" style="padding: 2px 6px; font-size: 0.75em; cursor: pointer;">
                                 🔄 Erneut Freischalten
                             </button>
                         `}
@@ -4806,40 +6342,45 @@ window.renderAdminTickets = function(tickets, supportEmail) {
     container.innerHTML = html;
 };
 
-window.unbanTicket = async function(ticketId) {
+window.unbanTicket = function(ticketId) {
     if (!ticketId) return;
 
-    const replyText = prompt("Nachricht/Grund für Entbannung:", "Entbannungsantrag genehmigt! Dein Account/IP wurde freigeschaltet.");
-    if (replyText === null) return;
+    const executeTicketUnban = async (replyText) => {
+        if (replyText === null) return;
 
-    if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({
-            type: 'admin_unban_ticket',
-            ticketId: ticketId,
-            reply: replyText
-        }));
-    }
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+                type: 'admin_unban_ticket',
+                ticketId: ticketId,
+                reply: replyText
+            }));
+        }
 
-    try {
-        const res = await fetch('/api/admin/unban-ticket', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ticketId: ticketId, reply: replyText })
-        });
-        const data = await res.json();
-        if (data.success) {
-            if (window.showInAppNotification) {
+        try {
+            const res = await fetch('/api/admin/unban-ticket', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticketId: ticketId, reply: replyText })
+            });
+            const data = await res.json();
+            if (data.success && window.showInAppNotification) {
                 window.showInAppNotification("🔓 Ticket Entbannt", data.message || "Ticket erfolgreich entbannt.", "success");
             }
+        } catch (e) {
+            console.error("Unban ticket error:", e);
         }
-    } catch (e) {
-        console.error("Unban ticket error:", e);
-    }
 
-    setTimeout(() => {
-        window.requestAdminTicketsRefresh();
-        window.requestAdminUsersRefresh();
-    }, 400);
+        setTimeout(() => {
+            window.requestAdminTicketsRefresh();
+            window.requestAdminUsersRefresh();
+        }, 400);
+    };
+
+    if (typeof window.showInAppPrompt === 'function') {
+        window.showInAppPrompt("Ticket genehmigen", "Nachricht/Grund für Entbannung:", "Entbannungsantrag genehmigt! Dein Account/IP wurde freigeschaltet.", executeTicketUnban);
+    } else {
+        executeTicketUnban("Entbannungsantrag genehmigt! Dein Account/IP wurde freigeschaltet.");
+    }
 };
 
 // ==========================================
@@ -4913,10 +6454,8 @@ window.renderAdminElixir = function(queue) {
 };
 
 // --- SAVED GAMES LOGIC ---
-window.saveCurrentGame = function() {
-    const gameName = prompt("Gib einen Namen für die Partie ein:", "Partie " + new Date().toLocaleString());
-    if (!gameName) return;
-
+function persistSavedGameWithName(rawName) {
+    const gameName = (rawName || "").trim() || ("Partie " + new Date().toLocaleString());
     const gameData = {
         id: Date.now().toString(),
         name: gameName,
@@ -4925,6 +6464,9 @@ window.saveCurrentGame = function() {
         turn: turn,
         history: JSON.parse(JSON.stringify(history)),
         moveHistoryLog: JSON.parse(JSON.stringify(moveHistoryLog)),
+        moveSnapshots: JSON.parse(JSON.stringify(moveSnapshots || [])),
+        currentOpening: currentOpening ? JSON.parse(JSON.stringify(currentOpening)) : null,
+        gameEnded: !!gameEnded,
         hasMoved: JSON.parse(JSON.stringify(hasMoved)),
         enPassantTarget: JSON.parse(JSON.stringify(enPassantTarget)),
         halfMoveClock: halfMoveClock,
@@ -4935,70 +6477,131 @@ window.saveCurrentGame = function() {
         myColor: myColor
     };
 
-    let savedGames = JSON.parse(localStorage.getItem('saved_chess_games') || '[]');
+    const savedGames = JSON.parse(localStorage.getItem('saved_chess_games') || '[]');
     savedGames.push(gameData);
     localStorage.setItem('saved_chess_games', JSON.stringify(savedGames));
 
-    window.showInAppNotification("Gespeichert", `Partie "${gameName}" wurde erfolgreich gesichert!`, "success");
+    if (window.showInAppNotification) {
+        window.showInAppNotification("Gespeichert", `Partie "${gameName}" wurde erfolgreich gesichert!`, "success");
+    }
     window.renderSavedGamesList();
+}
+
+window.closeSaveGameModal = function() {
+    const modal = document.getElementById('save-game-modal');
+    if (modal) modal.style.display = 'none';
+};
+
+window.confirmSaveCurrentGame = function() {
+    const input = document.getElementById('save-game-name-input');
+    const name = input ? input.value : '';
+    window.closeSaveGameModal();
+    persistSavedGameWithName(name);
+};
+
+window.saveCurrentGame = function() {
+    const defaultName = "Partie " + new Date().toLocaleString();
+    const modal = document.getElementById('save-game-modal');
+    const input = document.getElementById('save-game-name-input');
+    if (modal && input) {
+        input.value = defaultName;
+        modal.style.display = 'flex';
+        setTimeout(() => { input.focus(); input.select(); }, 30);
+        return;
+    }
+    if (typeof window.showInAppPrompt === 'function') {
+        window.showInAppPrompt("Partie speichern", "Gib einen Namen für die Partie ein:", defaultName, (name) => {
+            if (name !== null) persistSavedGameWithName(name);
+        });
+    } else {
+        persistSavedGameWithName(defaultName);
+    }
 };
 
 window.loadSavedGame = function(id) {
-    let savedGames = JSON.parse(localStorage.getItem('saved_chess_games') || '[]');
+    const savedGames = JSON.parse(localStorage.getItem('saved_chess_games') || '[]');
     const gameData = savedGames.find(g => g.id === id);
     if (!gameData) return;
 
-    if (!confirm(`Möchtest du die Partie "${gameData.name}" wirklich laden? Dein aktuelles Spiel geht verloren, wenn es nicht gespeichert ist.`)) return;
+    const performLoad = () => {
+        window.stopReplay?.();
+        const gameModeSelect = document.getElementById("gameMode");
+        if (gameModeSelect) {
+            gameModeSelect.value = "local";
+            const botDiff = document.getElementById("bot-difficulty-container");
+            if (botDiff) botDiff.style.display = "none";
+        }
 
-    // Stop current game connections if any
-    const gameModeSelect = document.getElementById("gameMode");
-    if (gameModeSelect) {
-        gameModeSelect.value = "local"; // fallback to local mode
-        const botDiff = document.getElementById("bot-difficulty-container");
-        if (botDiff) botDiff.style.display = "none";
-    }
-    
-    if (typeof socket !== 'undefined' && socket && socket.readyState === 1) {
-        socket.close();
-    }
+        board = JSON.parse(JSON.stringify(gameData.board));
+        turn = gameData.turn || "white";
+        history = JSON.parse(JSON.stringify(gameData.history || []));
+        moveHistoryLog = JSON.parse(JSON.stringify(gameData.moveHistoryLog || []));
+        moveSnapshots = JSON.parse(JSON.stringify(gameData.moveSnapshots || []));
+        currentOpening = gameData.currentOpening || null;
+        gameEnded = !!gameData.gameEnded;
+        hasMoved = JSON.parse(JSON.stringify(gameData.hasMoved || { whiteK: false, whiteR1: false, whiteR8: false, blackK: false, blackR1: false, blackR8: false }));
+        enPassantTarget = JSON.parse(JSON.stringify(gameData.enPassantTarget || null));
+        halfMoveClock = gameData.halfMoveClock || 0;
+        positionHistory = JSON.parse(JSON.stringify(gameData.positionHistory || {}));
+        whiteTime = gameData.whiteTime ?? 600;
+        blackTime = gameData.blackTime ?? 600;
+        opponentName = gameData.opponentName || "Lokal";
+        myColor = gameData.myColor || "white";
+        isBoardFlipped = (myColor === "black");
+        viewPly = -1;
+        selected = null;
+        premove = null;
+        drawArrows = [];
+        highlightSquares = {};
+        hintMoveSquares = null;
 
-    // Restore state
-    board = JSON.parse(JSON.stringify(gameData.board));
-    turn = gameData.turn;
-    history = JSON.parse(JSON.stringify(gameData.history || []));
-    moveHistoryLog = JSON.parse(JSON.stringify(gameData.moveHistoryLog || []));
-    hasMoved = JSON.parse(JSON.stringify(gameData.hasMoved));
-    enPassantTarget = JSON.parse(JSON.stringify(gameData.enPassantTarget || null));
-    halfMoveClock = gameData.halfMoveClock || 0;
-    positionHistory = JSON.parse(JSON.stringify(gameData.positionHistory || {}));
-    whiteTime = gameData.whiteTime || 600;
-    blackTime = gameData.blackTime || 600;
-    opponentName = gameData.opponentName || "Unbekannt";
-    myColor = gameData.myColor || "white";
-    
-    selected = null;
-    lastMove = null;
-    premove = null;
+        const lastSnap = moveSnapshots.length > 0 ? moveSnapshots[moveSnapshots.length - 1] : null;
+        lastMove = lastSnap ? lastSnap.lastMove : null;
 
-    if (typeof draw === 'function') draw();
-    if (typeof updateStatus === 'function') updateStatus();
-    if (typeof updateTimerUI === 'function') updateTimerUI();
-    
-    // Switch to game tab
-    if (typeof window.switchSidebarTab === "function") {
-        const gameBtn = document.querySelectorAll(".sidebar-tab-btn")[0];
-        if (gameBtn) window.switchSidebarTab("tab-game", gameBtn);
+        if (typeof applyFlipLayout === 'function') applyFlipLayout();
+        if (typeof draw === 'function') draw();
+        const sEl = document.getElementById('status-display');
+        if (sEl) sEl.textContent = (turn === 'white' ? 'Weiß' : 'Schwarz') + ' am Zug';
+        if (typeof updateTimerUI === 'function') updateTimerUI();
+        if (typeof renderInteractiveMoveHistory === 'function') renderInteractiveMoveHistory();
+        if (typeof updateCapturedMaterialUI === 'function') updateCapturedMaterialUI();
+        if (typeof updateOpeningExplorer === 'function') updateOpeningExplorer();
+        if (typeof updatePlayerNamesBar === 'function') updatePlayerNamesBar();
+        if (typeof requestLiveEval === 'function') requestLiveEval(Math.max(0, moveSnapshots.length - 1));
+
+        if (typeof window.switchSidebarTab === "function") {
+            const gameBtn = document.querySelectorAll(".sidebar-tab-btn")[0];
+            if (gameBtn) window.switchSidebarTab("tab-game", gameBtn);
+        }
+
+        if (window.showInAppNotification) {
+            window.showInAppNotification("Geladen", `Partie "${gameData.name}" geladen.`, "success");
+        }
+    };
+
+    if (typeof window.showGameRequestModal === 'function') {
+        window.showGameRequestModal("📂", "Partie laden", `Möchtest du die Partie "${gameData.name}" wirklich laden? Dein aktuelles ungespeichertes Spiel geht verloren.`, "Laden", "Abbrechen", performLoad, () => {});
+    } else {
+        performLoad();
     }
-    
-    window.showInAppNotification("Geladen", `Partie "${gameData.name}" geladen.`, "success");
 };
 
 window.deleteSavedGame = function(id) {
-    if (!confirm("Möchtest du diese Partie wirklich löschen?")) return;
-    let savedGames = JSON.parse(localStorage.getItem('saved_chess_games') || '[]');
-    savedGames = savedGames.filter(g => g.id !== id);
-    localStorage.setItem('saved_chess_games', JSON.stringify(savedGames));
-    window.renderSavedGamesList();
+    const performDelete = () => {
+        let savedGames = JSON.parse(localStorage.getItem('saved_chess_games') || '[]');
+        savedGames = savedGames.filter(g => g.id !== id);
+        localStorage.setItem('saved_chess_games', JSON.stringify(savedGames));
+        window.renderSavedGamesList();
+        if (window.showInAppNotification) {
+            window.showInAppNotification("Gelöscht", "Gespeicherte Partie wurde entfernt.", "info");
+        }
+    };
+
+    if (typeof window.showGameRequestModal === 'function') {
+        window.showGameRequestModal("🗑️", "Partie löschen", "Möchtest du diese gespeicherte Partie wirklich unwiderruflich löschen?", "Löschen", "Abbrechen", performDelete, () => {});
+    } else {
+        performDelete();
+    }
 };
 
 window.renderSavedGamesList = function() {
@@ -5021,8 +6624,8 @@ window.renderSavedGamesList = function() {
                 <span style="font-size: 0.75em; color: #888;">${escapeHtml(new Date(game.date).toLocaleString())} | Züge: ${game.history ? Number(game.history.length) : 0}</span>
             </div>
             <div style="display: flex; gap: 4px; flex-shrink: 0;">
-                <button onclick="loadSavedGame(decodeURIComponent('${encGameId}'))" class="glass-btn success" style="padding: 4px 8px; font-size: 0.8em; border-radius: 4px; border: none; cursor: pointer;">Laden</button>
-                <button onclick="deleteSavedGame(decodeURIComponent('${encGameId}'))" class="glass-btn danger" style="padding: 4px 8px; font-size: 0.8em; border-radius: 4px; border: none; cursor: pointer;">X</button>
+                <button type="button" data-saved-action="load" data-game-id="${encGameId}" class="glass-btn success" style="padding: 4px 8px; font-size: 0.8em; border-radius: 4px; border: none; cursor: pointer;">Laden</button>
+                <button type="button" data-saved-action="delete" data-game-id="${encGameId}" class="glass-btn danger" style="padding: 4px 8px; font-size: 0.8em; border-radius: 4px; border: none; cursor: pointer;">X</button>
             </div>
         </div>
     `;

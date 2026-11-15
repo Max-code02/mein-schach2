@@ -15,9 +15,13 @@ try {
     }
 } catch (e) {}
 
-function renderAdminLoginPage(errorMessage = '') {
+function renderAdminLoginPage(errorMessage = '', nonce = '') {
     const safeError = errorMessage ? String(errorMessage).replace(/[<>&"']/g, '') : '';
-    const fbConfigJson = JSON.stringify(firebaseConfig);
+    const safeNonce = String(nonce || '').replace(/[^a-zA-Z0-9+/=_-]/g, '');
+    const fbConfigJson = JSON.stringify(firebaseConfig)
+        .replace(/</g, '\\u003c')
+        .replace(/>/g, '\\u003e')
+        .replace(/&/g, '\\u0026');
 
     return `<!DOCTYPE html>
 <html lang="de">
@@ -234,7 +238,7 @@ function renderAdminLoginPage(errorMessage = '') {
         </div>
 
         <!-- Master Password Form -->
-        <form id="adminPassForm" onsubmit="handlePasswordLogin(event)">
+        <form id="adminPassForm">
             <div class="form-group">
                 <label for="adminPass">Administrator-Passwort</label>
                 <input type="password" id="adminPass" class="form-input" placeholder="••••••••••••" required autocomplete="current-password">
@@ -251,7 +255,7 @@ function renderAdminLoginPage(errorMessage = '') {
     </div>
 
     <!-- Firebase SDK for Google Auth -->
-    <script type="module">
+    <script type="module" nonce="${safeNonce}">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -300,7 +304,7 @@ function renderAdminLoginPage(errorMessage = '') {
         });
     </script>
 
-    <script>
+    <script nonce="${safeNonce}">
         async function handlePasswordLogin(e) {
             e.preventDefault();
             const passInput = document.getElementById('adminPass');
@@ -337,14 +341,19 @@ function renderAdminLoginPage(errorMessage = '') {
                 submitBtn.disabled = false;
             }
         }
+        const adminPassForm = document.getElementById('adminPassForm');
+        if (adminPassForm) {
+            adminPassForm.addEventListener('submit', handlePasswordLogin);
+        }
     </script>
 </body>
 </html>`;
 }
 
-function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, bannedPlayersList) {
+function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, bannedPlayersList, nonce = '') {
     const safeAdminName = String(adminInfo.adminName || 'Admin').replace(/[<>&"']/g, '');
     const safeAdminEmail = String(adminInfo.email || '').replace(/[<>&"']/g, '');
+    const safeNonce = String(nonce || '').replace(/[^a-zA-Z0-9+/=_-]/g, '');
 
     const safeJsonEmbed = (val) => JSON.stringify(val)
         .replace(/</g, '\\u003c')
@@ -701,9 +710,9 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
             </div>
         </div>
         <div class="header-actions">
-            <button class="btn-nav" onclick="refreshData()">🔄 Aktualisieren</button>
-            <a href="/" class="btn-nav" target="_blank">🎮 Zum Schachspiel</a>
-            <a href="/handy" class="btn-nav" target="_blank">📱 Handy-Version</a>
+            <button type="button" id="refreshDataBtn" class="btn-nav">🔄 Aktualisieren</button>
+            <a href="/" class="btn-nav" target="_blank" rel="noopener noreferrer">🎮 Zum Schachspiel</a>
+            <a href="/handy" class="btn-nav" target="_blank" rel="noopener noreferrer">📱 Handy-Version</a>
             <a href="/admin/logout" class="btn-nav btn-logout">🚪 Abmelden</a>
         </div>
     </header>
@@ -740,10 +749,10 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
 
         <!-- Navigation Tabs -->
         <div class="tabs-nav">
-            <button class="tab-btn active" onclick="switchTab('usersTab', this)">👥 Spieler & Rollen</button>
-            <button class="tab-btn" onclick="switchTab('bansTab', this)">🔨 Bann-Zentrale & IPs</button>
-            <button class="tab-btn" onclick="switchTab('ticketsTab', this)">📩 Support-Tickets (${tickets.length})</button>
-            <button class="tab-btn" onclick="switchTab('actionsTab', this)">📢 Server-Befehle & Chat</button>
+            <button type="button" class="tab-btn active" data-tab="usersTab">👥 Spieler & Rollen</button>
+            <button type="button" class="tab-btn" data-tab="bansTab">🔨 Bann-Zentrale & IPs</button>
+            <button type="button" class="tab-btn" data-tab="ticketsTab">📩 Support-Tickets (${tickets.length})</button>
+            <button type="button" class="tab-btn" data-tab="actionsTab">📢 Server-Befehle & Chat</button>
         </div>
 
         <!-- TAB 1: USERS -->
@@ -751,7 +760,7 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
             <div class="card">
                 <div class="card-header">
                     <h2>👥 Alle Spieler & Konten</h2>
-                    <input type="text" id="userSearchInput" class="search-box" placeholder="🔍 Spieler suchen (Name, IP, Rolle)..." oninput="filterUsersTable()">
+                    <input type="text" id="userSearchInput" class="search-box" placeholder="🔍 Spieler suchen (Name, IP, Rolle)...">
                 </div>
                 <div class="table-responsive">
                     <table id="usersTable">
@@ -783,7 +792,7 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
                 <div style="display: flex; gap: 12px; flex-wrap: wrap;">
                     <input type="text" id="manualBanTarget" class="search-box" placeholder="Spielername oder IP-Adresse" style="flex: 1;">
                     <input type="text" id="manualBanReason" class="search-box" placeholder="Grund für Sperrung..." style="flex: 2;">
-                    <button class="btn-action ban" style="padding: 10px 18px;" onclick="submitManualBan()">🔨 Sperren</button>
+                    <button type="button" id="submitManualBanBtn" class="btn-action ban" style="padding: 10px 18px;">🔨 Sperren</button>
                 </div>
             </div>
 
@@ -861,7 +870,7 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
                 <div style="display: flex; gap: 12px; margin-bottom: 16px;">
                     <input type="text" id="broadcastTitle" class="search-box" placeholder="Titel (z.B. Wartungsankündigung)" style="flex: 1;">
                     <input type="text" id="broadcastMsg" class="search-box" placeholder="Nachricht an alle Spieler..." style="flex: 3;">
-                    <button class="btn-action role" style="padding: 10px 18px;" onclick="sendBroadcast()">📢 Senden</button>
+                    <button type="button" id="sendBroadcastBtn" class="btn-action role" style="padding: 10px 18px;">📢 Senden</button>
                 </div>
             </div>
 
@@ -873,7 +882,7 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
                     <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 14px;">
                         Löscht alle bisherigen globalen Chatnachrichten auf dem Server.
                     </p>
-                    <button class="btn-action ban" style="padding: 10px 16px;" onclick="clearServerChat()">🧹 Globalen Chat leeren</button>
+                    <button type="button" id="clearServerChatBtn" class="btn-action ban" style="padding: 10px 16px;">🧹 Globalen Chat leeren</button>
                 </div>
 
                 <div class="card">
@@ -883,7 +892,7 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
                     <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 14px;">
                         Erstellt sofort ein vollständiges Backup aller Spielerprofile, Elo-Werte und Statistiken.
                     </p>
-                    <button class="btn-action unban" style="padding: 10px 16px;" onclick="triggerServerBackup()">💾 Backup jetzt ausführen</button>
+                    <button type="button" id="triggerServerBackupBtn" class="btn-action unban" style="padding: 10px 16px;">💾 Backup jetzt ausführen</button>
                 </div>
             </div>
         </div>
@@ -891,7 +900,7 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
 
     <div id="toast"></div>
 
-    <script>
+    <script nonce="${safeNonce}">
         let currentUsers = ${usersJson};
         let currentTickets = ${ticketsJson};
         let currentBannedIPs = ${bannedIPsJson};
@@ -950,13 +959,13 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
                         <td><code>\${safeIP}</code></td>
                         <td>
                             <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                                <button class="btn-action role" onclick="toggleRole(decodeURIComponent('\${encName}'), '\${isAdmin ? 'user' : 'admin'}')">
+                                <button type="button" class="btn-action role" data-admin-action="toggleRole" data-target="\${encName}" data-role="\${isAdmin ? 'user' : 'admin'}">
                                     \${isAdmin ? '👤 Zu User' : '👑 Zu Admin'}
                                 </button>
-                                \${isOnline ? \`<button class="btn-action kick" onclick="kickUser(decodeURIComponent('\${encName}'))">⚡ Kick</button>\` : ''}
+                                \${isOnline ? \`<button type="button" class="btn-action kick" data-admin-action="kickUser" data-target="\${encName}">⚡ Kick</button>\` : ''}
                                 \${isBanned 
-                                    ? \`<button class="btn-action unban" onclick="unbanUser(decodeURIComponent('\${encName}'))">✅ Entbannen</button>\`
-                                    : \`<button class="btn-action ban" onclick="banUser(decodeURIComponent('\${encName}'))">🔨 Bannen</button>\`
+                                    ? \`<button type="button" class="btn-action unban" data-admin-action="unbanUser" data-target="\${encName}">✅ Entbannen</button>\`
+                                    : \`<button type="button" class="btn-action ban" data-admin-action="banUser" data-target="\${encName}">🔨 Bannen</button>\`
                                 }
                             </div>
                         </td>
@@ -978,7 +987,7 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
                         return \`
                         <tr>
                             <td><strong>\${safeP}</strong></td>
-                            <td style="text-align: right;"><button class="btn-action unban" onclick="unbanUser(decodeURIComponent('\${encP}'))">✅ Entsperren</button></td>
+                            <td style="text-align: right;"><button type="button" class="btn-action unban" data-admin-action="unbanUser" data-target="\${encP}">✅ Entsperren</button></td>
                         </tr>
                     \`;}).join('');
             }
@@ -992,7 +1001,7 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
                         return \`
                         <tr>
                             <td><code>\${safeIP}</code></td>
-                            <td style="text-align: right;"><button class="btn-action unban" onclick="unbanUser(decodeURIComponent('\${encIP}'))">✅ Entsperren</button></td>
+                            <td style="text-align: right;"><button type="button" class="btn-action unban" data-admin-action="unbanUser" data-target="\${encIP}">✅ Entsperren</button></td>
                         </tr>
                     \`;}).join('');
             }
@@ -1026,7 +1035,7 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
                         </td>
                         <td>
                             \${isPending ? \`
-                                <button class="btn-action unban" onclick="resolveTicket(decodeURIComponent('\${encId}'))">✅ Entbannen & Schließen</button>
+                                <button type="button" class="btn-action unban" data-admin-action="resolveTicket" data-target="\${encId}">✅ Entbannen & Schließen</button>
                             \` : '<span style="color: #7f8c8d; font-size: 0.8rem;">Erledigt</span>'}
                         </td>
                     </tr>
@@ -1220,6 +1229,31 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
                 showToast("Fehler beim Backup", false);
             }
         }
+
+        // CSP-compliant event bindings and delegation
+        document.getElementById('refreshDataBtn')?.addEventListener('click', refreshData);
+        document.getElementById('userSearchInput')?.addEventListener('input', filterUsersTable);
+        document.getElementById('submitManualBanBtn')?.addEventListener('click', submitManualBan);
+        document.getElementById('sendBroadcastBtn')?.addEventListener('click', sendBroadcast);
+        document.getElementById('clearServerChatBtn')?.addEventListener('click', clearServerChat);
+        document.getElementById('triggerServerBackupBtn')?.addEventListener('click', triggerServerBackup);
+
+        document.querySelectorAll('.tab-btn[data-tab]').forEach(btn => {
+            btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab'), btn));
+        });
+
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-admin-action]');
+            if (!btn) return;
+            const action = btn.getAttribute('data-admin-action');
+            const target = decodeURIComponent(btn.getAttribute('data-target') || '');
+            const role = btn.getAttribute('data-role') || 'user';
+            if (action === 'toggleRole') toggleRole(target, role);
+            else if (action === 'kickUser') kickUser(target);
+            else if (action === 'banUser') banUser(target);
+            else if (action === 'unbanUser') unbanUser(target);
+            else if (action === 'resolveTicket') resolveTicket(target);
+        });
 
         // Initial render
         renderUsers(currentUsers);

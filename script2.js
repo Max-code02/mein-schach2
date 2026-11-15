@@ -220,7 +220,7 @@ async function initFirebase() {
                         const safeName = escapeHtml(p.name);
                         const encName = encodeURIComponent(p.name || '');
                         return `
-                        <div onclick="viewPlayerProfile(decodeURIComponent('${encName}'))" style="cursor: pointer; background: ${bg}; padding: 12px; border-radius: 10px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; transition: 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+                        <div data-view-profile="${encName}" class="leaderboard-player-row" style="cursor: pointer; background: ${bg}; padding: 12px; border-radius: 10px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; transition: 0.2s;">
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <div style="width: 24px; text-align: center; font-weight: bold; color: ${color}; font-size: 1.1em;">
                                     ${badge || `#${i + 1}`}
@@ -479,7 +479,6 @@ async function initFirebase() {
                         updateProfileDisplay("Gastspieler", 1200, 0, 0, 1, 0, []);
                         localStorage.removeItem('playerName');
                         localStorage.removeItem('firebaseUid');
-                        localStorage.removeItem('isAdmin');
                         
                         const openAuthBtn = document.getElementById('openAuthBtn');
                         const logoutBtn = document.getElementById('logoutBtn');
@@ -490,7 +489,6 @@ async function initFirebase() {
                     const adminPanel = document.getElementById('admin-panel');
                     if (adminPanel) adminPanel.style.display = 'none';
                     window.__serverVerifiedAdmin = false;
-                    window.isAdmin = false;
                 }
             });
             
@@ -507,17 +505,24 @@ async function initFirebase() {
             window.banUserAdmin = function(username) {
                 if (window.openBanReasonModal) {
                     window.openBanReasonModal(username);
-                } else {
-                    const reason = prompt(`Bitte gib einen Grund für den permanenten Bann von '${username}' ein:`, "Admin-Entscheidung");
-                    if (reason !== null) {
-                        const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
-                        if (ws && ws.readyState === WebSocket.OPEN) {
-                            ws.send(JSON.stringify({ type: 'admin_ban_user', target: username, reason: reason }));
-                            ws.send(JSON.stringify({ type: 'chat', text: `/ban "${username}" ${reason}` }));
-                        } else {
-                            alert("Du bist nicht mit dem Server verbunden!");
+                } else if (typeof window.showInAppPrompt === 'function') {
+                    window.showInAppPrompt(
+                        '🔨 Spieler bannen',
+                        `Bitte gib einen Grund für den permanenten Bann von '${username}' ein:`,
+                        'Admin-Entscheidung',
+                        (reason) => {
+                            if (reason === null) return;
+                            const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+                            if (ws && ws.readyState === WebSocket.OPEN) {
+                                ws.send(JSON.stringify({ type: 'admin_ban_user', target: username, reason: reason || 'Admin-Entscheidung' }));
+                                ws.send(JSON.stringify({ type: 'chat', text: `/ban "${username}" ${reason || 'Admin-Entscheidung'}` }));
+                            } else {
+                                window.showInAppNotification?.('Verbindungsfehler', 'Du bist nicht mit dem Server verbunden!', 'error');
+                            }
                         }
-                    }
+                    );
+                } else {
+                    window.showInAppNotification?.('Fehler', 'Bann-Dialog konnte nicht geöffnet werden.', 'warning');
                 }
             };
             
@@ -526,7 +531,6 @@ async function initFirebase() {
                 localStorage.removeItem('playerName');
                 localStorage.removeItem('customUsername');
                 localStorage.removeItem('firebaseUid');
-                localStorage.removeItem('isAdmin');
                 try {
                     if (window.history && window.history.replaceState) {
                         window.history.replaceState(null, '', window.location.pathname);
@@ -539,8 +543,8 @@ async function initFirebase() {
                         console.error("Fehler beim Abmelden", e);
                     }
                 }
-                alert("Du wurdest erfolgreich abgemeldet.");
-                window.location.reload();
+                window.showInAppNotification?.('Abgemeldet', 'Du wurdest erfolgreich abgemeldet.', 'info');
+                setTimeout(() => window.location.reload(), 450);
             };
             
             const lBtn = document.getElementById('logoutBtn');
@@ -799,7 +803,7 @@ window.submitAuthGoogle = async function() {
                         1. Öffne <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer" style="color: #3498db; text-decoration: underline;">Firebase Console</a> &gt; Authentication &gt; Settings &gt; Authorized Domains.<br>
                         2. Füge <code>${currentHost}</code> als Domain hinzu.<br><br>
                         <strong>Alternative:</strong> Spiele direkt ohne Google-Anmeldung als Gast:
-                        <button onclick="playAsGuest()" style="margin-top: 8px; width: 100%; background: #2ecc71; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                        <button data-action="playAsGuest" style="margin-top: 8px; width: 100%; background: #2ecc71; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
                             👤 Jetzt als Gast weiterspielen
                         </button>
                     </div>
@@ -814,7 +818,7 @@ window.submitAuthGoogle = async function() {
 
 window.openNameModal = function() {
     if (!fbAuth || !fbAuth.currentUser) {
-        alert("Bitte logge dich zuerst ein.");
+        window.showInAppNotification?.('Anmeldung erforderlich', 'Bitte logge dich zuerst ein.', 'warning');
         return;
     }
     const modal = document.getElementById('name-modal');
@@ -922,7 +926,21 @@ function updateProfileDisplay(name, elo, wins, losses = 0, level = 1, xp = 0, ac
     const logoutBtn = document.getElementById('logoutBtn');
     const adminPanel = document.getElementById('admin-panel');
 
-    const isAdmin = window.__serverVerifiedAdmin === true || (typeof window.isAdmin === 'boolean' && window.isAdmin && localStorage.getItem('isAdmin') === 'true');
+    const isAdmin = window.__serverVerifiedAdmin === true;
+
+    // Define profile modal helpers on window (Fix F7.1)
+    if (typeof window.openProfileModal !== 'function') {
+        window.openProfileModal = function() {
+            const modal = document.getElementById('profile-modal');
+            if (modal) modal.style.display = 'flex';
+        };
+    }
+    if (typeof window.closeProfileModal !== 'function') {
+        window.closeProfileModal = function() {
+            const modal = document.getElementById('profile-modal');
+            if (modal) modal.style.display = 'none';
+        };
+    }
 
     // Sync Chess.com Collapsible Sidebar User Card
     const sbName = document.getElementById('sidebar-user-name');
@@ -1111,7 +1129,7 @@ window.addEventListener('load', () => {
                                 const safeName = escapeHtml(p.name);
                                 const encName = encodeURIComponent(p.name || '');
                                 return `
-                                <div onclick="viewPlayerProfile(decodeURIComponent('${encName}'))" style="cursor: pointer; background: ${bg}; padding: 12px; border-radius: 10px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; transition: 0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
+                                <div data-view-profile="${encName}" class="leaderboard-player-row" style="cursor: pointer; background: ${bg}; padding: 12px; border-radius: 10px; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; transition: 0.2s;">
                                     <div style="display: flex; align-items: center; gap: 10px;">
                                         <div style="width: 24px; text-align: center; font-weight: bold; color: ${color}; font-size: 1.1em;">
                                             ${badge || `#${i + 1}`}
@@ -1143,12 +1161,6 @@ window.addEventListener('load', () => {
                         // Show admin panel ONLY if verified by server
                         const isServerAdmin = data.role === 'admin' && (data.isAdmin === true || data.type === 'admin_login_success');
                         window.__serverVerifiedAdmin = isServerAdmin;
-                        window.isAdmin = isServerAdmin;
-                        if (isServerAdmin) {
-                            localStorage.setItem('isAdmin', 'true');
-                        } else {
-                            localStorage.removeItem('isAdmin');
-                        }
                         const adminPanel = document.getElementById('admin-panel');
                         if (adminPanel) {
                             adminPanel.style.display = isServerAdmin ? 'block' : 'none';
@@ -1194,37 +1206,52 @@ window.addEventListener('load', () => {
    GUEST AUTH FALLBACK
    ========================================================================== */
 window.playAsGuest = function() {
-    let savedGuest = localStorage.getItem('guestName');
-    if (!savedGuest) {
-        const defaultGuestName = "Gast_" + Math.floor(1000 + Math.random() * 9000);
-        const input = prompt("Wähle einen Gast-Namen:", defaultGuestName);
-        savedGuest = (input ? input.trim() : defaultGuestName) || defaultGuestName;
-        savedGuest = savedGuest.replace(/[^a-zA-Z0-9_.-]/g, '');
-        if (!savedGuest) savedGuest = defaultGuestName;
-        localStorage.setItem('guestName', savedGuest);
+    const finalizeGuest = (guestName) => {
+        const cleaned = (guestName || '').trim().replace(/[^a-zA-Z0-9_.-]/g, '') || ('Gast_' + Math.floor(1000 + Math.random() * 9000));
+        localStorage.setItem('guestName', cleaned);
+        localStorage.setItem('playerName', cleaned);
+        if (typeof updateProfileDisplay === 'function') {
+            updateProfileDisplay(cleaned, 1200, 0, 0, 1, 0, []);
+        }
+
+        const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'login_attempt',
+                playerName: cleaned,
+                password: 'guest-mode'
+            }));
+        }
+
+        const modal = document.getElementById('auth-modal');
+        if (modal) modal.style.display = 'none';
+
+        const openAuthBtn = document.getElementById('openAuthBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (openAuthBtn) openAuthBtn.style.display = 'none';
+        if (logoutBtn) logoutBtn.style.display = 'block';
+    };
+
+    const savedGuest = localStorage.getItem('guestName');
+    if (savedGuest) {
+        finalizeGuest(savedGuest);
+        return;
     }
-    
-    localStorage.setItem('playerName', savedGuest);
-    if (typeof updateProfileDisplay === 'function') {
-        updateProfileDisplay(savedGuest, 1200, 0, 0, 1, 0, []);
+
+    const defaultGuestName = 'Gast_' + Math.floor(1000 + Math.random() * 9000);
+    if (typeof window.showInAppPrompt === 'function') {
+        window.showInAppPrompt(
+            '👤 Als Gast spielen',
+            'Wähle einen Gast-Namen für deine Sitzung:',
+            defaultGuestName,
+            (val) => {
+                if (val === null) return;
+                finalizeGuest(val || defaultGuestName);
+            }
+        );
+    } else {
+        finalizeGuest(defaultGuestName);
     }
-    
-    const ws = window.socket || (typeof socket !== 'undefined' ? socket : null);
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-            type: 'login_attempt',
-            playerName: savedGuest,
-            password: 'guest-mode'
-        }));
-    }
-    
-    const modal = document.getElementById('auth-modal');
-    if (modal) modal.style.display = 'none';
-    
-    const openAuthBtn = document.getElementById('openAuthBtn');
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (openAuthBtn) openAuthBtn.style.display = 'none';
-    if (logoutBtn) logoutBtn.style.display = 'block';
 };
 
 /* ==========================================================================
@@ -1500,9 +1527,9 @@ window.viewPlayerProfile = async function(name) {
                 const levelEl = document.getElementById('ppm-level');
                 const roleEl = document.getElementById('ppm-role');
 
-                if (eloEl) eloEl.textContent = `Elo: ${p.elo || 1200}`;
-                if (levelEl) levelEl.textContent = `Level: ${p.level || 1} (XP: ${p.xp || 0})`;
-                if (roleEl) roleEl.textContent = p.role === 'admin' ? '👑 Admin' : (p.role === 'moderator' ? '🛡️ Moderator' : 'Gast');
+                if (eloEl) eloEl.textContent = `Elo: ${Number(p.elo) || 1200}`;
+                if (levelEl) levelEl.textContent = `Level: ${Number(p.level) || 1} (XP: ${Number(p.xp) || 0})`;
+                if (roleEl) roleEl.textContent = `Partien: ${Number(p.totalGames) || ((Number(p.wins) || 0) + (Number(p.losses) || 0))}`;
 
                 if (historyEl) {
                     const winrate = typeof escapeHtml === 'function' ? escapeHtml(p.winrate || '0%') : String(p.winrate || '0%').replace(/[<>&"']/g, '');
@@ -1515,7 +1542,7 @@ window.viewPlayerProfile = async function(name) {
                             </div>
                             <div style="display: flex; justify-content: space-between; font-size: 0.85em; color: #aaa; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px;">
                                 <span>💰 Vorhersage-Coins: <strong style="color: #f39c12;">${Number(p.coins) || 1000}</strong></span>
-                                <span>${p.is_online ? '<span style="color: #2ecc71;">🟢 Online</span>' : '<span style="color: #888;">⚪ Offline</span>'}</span>
+                                <span>🎖️ Level ${Number(p.level) || 1}</span>
                             </div>
                         </div>
                     `;

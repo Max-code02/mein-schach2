@@ -203,10 +203,25 @@ function createHttpRateLimiter({ maxRequests, windowMs, message }) {
         let timestamps = httpRateBuckets.get(key) || [];
         timestamps = timestamps.filter(t => now - t < windowMs);
         if (timestamps.length >= maxRequests) {
-            return res.status(429).json({ success: false, error: message || 'Zu viele Anfragen. Bitte warte kurz.', message: message || 'Zu viele Anfragen. Bitte warte kurz.' });
+            const oldest = timestamps[0] || now;
+            const resetMs = Math.max(1000, windowMs - (now - oldest));
+            const resetSec = Math.ceil(resetMs / 1000);
+            res.setHeader('Retry-After', String(resetSec));
+            res.setHeader('RateLimit-Limit', String(maxRequests));
+            res.setHeader('RateLimit-Remaining', '0');
+            res.setHeader('RateLimit-Reset', String(resetSec));
+            return res.status(429).json({ 
+                success: false, 
+                error: message || 'Zu viele Anfragen. Bitte warte kurz.', 
+                message: message || 'Zu viele Anfragen. Bitte warte kurz.',
+                retryAfter: resetSec
+            });
         }
         timestamps.push(now);
         httpRateBuckets.set(key, timestamps);
+        const remaining = Math.max(0, maxRequests - timestamps.length);
+        res.setHeader('RateLimit-Limit', String(maxRequests));
+        res.setHeader('RateLimit-Remaining', String(remaining));
         if (httpRateBuckets.size > 5000) {
             for (const [k, list] of httpRateBuckets.entries()) {
                 if (!list.length || now - list[list.length - 1] > windowMs) httpRateBuckets.delete(k);
@@ -216,31 +231,124 @@ function createHttpRateLimiter({ maxRequests, windowMs, message }) {
     };
 }
 
-const authFailTracker = new Map();
-function isAuthLockedOut(ip) {
-    const rec = authFailTracker.get(ip);
-    if (!rec) return false;
-    if (rec.lockedUntil && Date.now() < rec.lockedUntil) return true;
-    if (rec.lockedUntil && Date.now() >= rec.lockedUntil) {
-        authFailTracker.delete(ip);
-    }
-    return false;
+function sanitizePlayerName(raw) {
+    return String(raw || '')
+        .replace(/[<>"'&/\\`\x00-\x1F\x7F]/g, '')
+        .trim()
+        .slice(0, 25);
 }
-function recordAuthFailure(ip) {
+
+const authFailTracker = new Map();
+const AUTH_LOCKOUT_STAGES = [
+    { threshold: 5, durationMs: 60 * 1000 },
+    { threshold: 8, durationMs: 5 * 60 * 1000 },
+    { threshold: 12, durationMs: 15 * 60 * 1000 }
+];
+
+function buildAuthLockoutKey(bucket, ip, identifier = '') {
+    const cleanBucket = String(bucket || 'default');
+    const cleanIP = String(ip || '127.0.0.1');
+    const cleanId = identifier ? ':' + String(identifier).toLowerCase().trim().slice(0, 64) : '';
+    return `${cleanBucket}:${cleanIP}${cleanId}`;
+}
+
+function getAuthLockoutRemaining(bucket, ip, identifier = '') {
+    const key = buildAuthLockoutKey(bucket, ip, identifier);
+    const rec = authFailTracker.get(key);
+    if (!rec || !rec.lockedUntil) return 0;
+    if (Date.now() >= rec.lockedUntil) {
+        authFailTracker.delete(key);
+        return 0;
+    }
+    return Math.max(1, Math.ceil((rec.lockedUntil - Date.now()) / 1000));
+}
+
+function getAuthRateLimitMeta(bucket, ip, identifier = '') {
+    const key = buildAuthLockoutKey(bucket, ip, identifier);
+    const rec = authFailTracker.get(key);
+    const maxAttempts = 5;
+    const count = rec ? rec.count : 0;
+    return {
+        limit: maxAttempts,
+        remaining: Math.max(0, maxAttempts - count)
+    };
+}
+
+function isAuthLockedOut(bucket, ip, identifier = '') {
+    return getAuthLockoutRemaining(bucket, ip, identifier) > 0;
+}
+
+function notifyAdminsOfLockout(bucket, ip, count, lockSec) {
+    const alertPayload = {
+        id: 'lockout_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        event: 'Sustained-Auth-Lockout',
+        type: 'Security-Alert',
+        timestamp: new Date().toISOString(),
+        formattedTime: new Date().toLocaleString('de-DE'),
+        executorId: 'Security-Monitor',
+        executorName: 'Auth-Limiter',
+        targetAdminId: bucket,
+        targetAdminName: bucket,
+        reason: `${count} fehlgeschlagene Versuche im Zweig '${bucket}' (IP: ${ip}, Sperre: ${lockSec}s)`,
+        details: `Anhaltende Anmelde-Fehlversuche erkannt (${bucket}).`
+    };
+    console.warn(`🚨 SECURITY ALERT: ${alertPayload.reason}`);
+    if (typeof adminBanLogs !== 'undefined' && Array.isArray(adminBanLogs)) {
+        adminBanLogs.unshift(alertPayload);
+        if (adminBanLogs.length > 200) adminBanLogs.length = 200;
+    }
+    if (typeof wss !== 'undefined' && wss && wss.clients) {
+        const msgStr = JSON.stringify({
+            type: 'in_app_notification',
+            title: '🚨 Sicherheitswarnung: Login-Sperre',
+            message: alertPayload.reason,
+            level: 'warning'
+        });
+        wss.clients.forEach(c => {
+            if (c.readyState === 1 && c.isAdmin === true) {
+                try { c.send(msgStr); } catch (e) {}
+            }
+        });
+    }
+}
+
+function recordAuthFailure(bucket, ip, identifier = '') {
+    const key = buildAuthLockoutKey(bucket, ip, identifier);
     const now = Date.now();
-    const rec = authFailTracker.get(ip) || { count: 0, firstAt: now, lockedUntil: 0 };
+    const rec = authFailTracker.get(key) || { count: 0, firstAt: now, lockedUntil: 0 };
     if (now - rec.firstAt > 15 * 60 * 1000) {
         rec.count = 0;
         rec.firstAt = now;
+        rec.lockedUntil = 0;
     }
     rec.count += 1;
-    if (rec.count >= 8) {
-        rec.lockedUntil = now + 15 * 60 * 1000;
+
+    let appliedDurationMs = 0;
+    for (const stage of AUTH_LOCKOUT_STAGES) {
+        if (rec.count >= stage.threshold) {
+            appliedDurationMs = stage.durationMs;
+        }
     }
-    authFailTracker.set(ip, rec);
+    if (appliedDurationMs > 0) {
+        rec.lockedUntil = now + appliedDurationMs;
+    }
+    authFailTracker.set(key, rec);
+
+    if (rec.count === 8 || rec.count === 12 || (rec.count > 12 && rec.count % 5 === 0)) {
+        notifyAdminsOfLockout(bucket, ip, rec.count, Math.ceil(appliedDurationMs / 1000));
+    }
+
+    if (authFailTracker.size > 5000) {
+        for (const [k, v] of authFailTracker.entries()) {
+            if (now - v.firstAt > 30 * 60 * 1000 && (!v.lockedUntil || now >= v.lockedUntil)) {
+                authFailTracker.delete(k);
+            }
+        }
+    }
 }
-function clearAuthFailures(ip) {
-    authFailTracker.delete(ip);
+
+function clearAuthFailures(bucket, ip, identifier = '') {
+    authFailTracker.delete(buildAuthLockoutKey(bucket, ip, identifier));
 }
 
 const userMessageLog = new Map();
@@ -260,11 +368,16 @@ app.use((req, res, next) => {
     if (isHttps) {
         res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     }
+
+    // Strict Nonce Generation per request (Fix F5)
+    const nonce = crypto.randomBytes(16).toString('base64');
+    res.locals.cspNonce = nonce;
+
     res.setHeader(
         'Content-Security-Policy',
         [
             "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://www.gstatic.com https://apis.google.com https://accounts.google.com",
+            `script-src 'self' 'nonce-${nonce}' https://cdnjs.cloudflare.com https://www.gstatic.com https://apis.google.com https://accounts.google.com`,
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
             "font-src 'self' data: https://fonts.gstatic.com",
             "img-src 'self' data: blob: https://upload.wikimedia.org https://www.gstatic.com https://*.googleusercontent.com",
@@ -278,28 +391,55 @@ app.use((req, res, next) => {
     next();
 });
 
+// Strict CORS Configuration (Fix F4 + Cloud Run / Same-Origin support)
+const isProductionMode = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
 const ALLOWED_CORS_ORIGINS = new Set([
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'https://max-code01.github.io',
     'https://mein-schach2.onrender.com',
     'https://mein-schach.onrender.com',
+    'https://max-code01.github.io',
     'https://schachlive.firebaseapp.com',
     'https://schachlive.web.app'
 ]);
 
-app.use(cors({
-    origin: function (origin, callback) {
-        if (!origin) return callback(null, true);
-        if (
-            ALLOWED_CORS_ORIGINS.has(origin) ||
-            /^https:\/\/[a-z0-9-]+\.(run\.app|onrender\.com|aistudio\.google\.com|web\.app|firebaseapp\.com)$/i.test(origin)
-        ) {
-            return callback(null, true);
+[process.env.APP_URL, process.env.SHARED_APP_URL].forEach(envUrl => {
+    if (!envUrl) return;
+    try {
+        const parsed = new URL(String(envUrl).trim());
+        if (parsed.origin && parsed.origin !== 'null') {
+            ALLOWED_CORS_ORIGINS.add(parsed.origin);
         }
-        return callback(null, false);
-    },
-    credentials: true
+    } catch (e) {}
+});
+
+// Exclude localhost/127.0.0.1 in production
+if (!isProductionMode) {
+    ALLOWED_CORS_ORIGINS.add('http://localhost:3000');
+    ALLOWED_CORS_ORIGINS.add('http://127.0.0.1:3000');
+}
+
+app.use(cors((req, callback) => {
+    const origin = req.headers.origin;
+    if (!origin) {
+        return callback(null, { origin: true, credentials: false });
+    }
+    if (ALLOWED_CORS_ORIGINS.has(origin)) {
+        return callback(null, { origin: true, credentials: false });
+    }
+    try {
+        const parsedOrigin = new URL(origin);
+        const reqHost = String(req.headers['x-forwarded-host'] || req.headers.host || '')
+            .split(',')[0]
+            .trim()
+            .toLowerCase();
+        const allowedProto = parsedOrigin.protocol === 'https:' || (!isProductionMode && parsedOrigin.protocol === 'http:');
+        if (reqHost && allowedProto && parsedOrigin.host.toLowerCase() === reqHost) {
+            return callback(null, { origin: true, credentials: false });
+        }
+    } catch (e) {}
+    if (!isProductionMode && /^https:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)?\.run\.app$/i.test(origin)) {
+        return callback(null, { origin: true, credentials: false });
+    }
+    return callback(null, { origin: false, credentials: false });
 }));
 app.use(express.json({ limit: '64kb' }));
 app.use('/api/', createHttpRateLimiter({ maxRequests: 150, windowMs: 60 * 1000, message: 'API Rate-Limit überschritten.' }));
@@ -408,19 +548,71 @@ app.get('/download-contact/:playerName', (req, res) => {
 const { firestoreClient, admin } = require('./firestoreClient');
 const { GoogleGenAI } = require('@google/genai');
 
-const firestoreDb = firestoreClient;
+let firestoreDb = firestoreClient;
 global.firestoreDb = firestoreDb;
-console.log('🔥 Firebase Admin Firestore verbunden.');
+let firestoreAccessVerified = null;
+let firestoreDisabledNoticeLogged = false;
+
+function isFirestorePermissionOrAuthError(err) {
+    if (!err) return false;
+    const msg = String(err.message || err);
+    return err.code === 7 || err.code === 16 || /PERMISSION_DENIED|UNAUTHENTICATED|Missing or insufficient permissions|Could not load the default credentials/i.test(msg);
+}
+
+function disableFirestoreAdminSync(reason = '') {
+    if (firestoreDb) {
+        firestoreDb = null;
+        global.firestoreDb = null;
+    }
+    firestoreAccessVerified = Promise.resolve(false);
+    if (!firestoreDisabledNoticeLogged) {
+        firestoreDisabledNoticeLogged = true;
+        console.log(`ℹ️ Firestore Admin-Sync deaktiviert (${reason || 'keine Service-Account-Berechtigung'} – lokaler JSON-Speicher aktiv).`);
+    }
+}
+
+function verifyFirestoreAdminAccess() {
+    if (!firestoreDb) return Promise.resolve(false);
+    if (firestoreAccessVerified) return firestoreAccessVerified;
+    firestoreAccessVerified = (async () => {
+        try {
+            await firestoreDb.collection('system').limit(1).get();
+            console.log('🔥 Firebase Admin Firestore verbunden.');
+            return true;
+        } catch (err) {
+            if (isFirestorePermissionOrAuthError(err)) {
+                disableFirestoreAdminSync(`Projekt "${FIREBASE_PROJECT_ID}" ohne Service-Account-Berechtigung`);
+                return false;
+            }
+            console.log('🔥 Firebase Admin Firestore verbunden.');
+            return true;
+        }
+    })();
+    return firestoreAccessVerified;
+}
 
 let aiClient = null;
 if (process.env.GEMINI_API_KEY) {
     try {
-        aiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        aiClient = new GoogleGenAI({
+            apiKey: process.env.GEMINI_API_KEY,
+            httpOptions: {
+                headers: {
+                    'User-Agent': 'aistudio-build'
+                }
+            }
+        });
         console.log("🤖 Google Gemini AI Client initialisiert!");
     } catch (err) {
         console.warn("Gemini Init Warning:", err.message);
     }
 }
+
+// Circuit-breaker & LRU-Cache für /analyse zur Vermeidung von 429-Rate-Limits
+let geminiQuotaBlockedUntil = 0;
+let lastGeminiCallTime = 0;
+const analyseCache = new Map();
+const MAX_ANALYSE_CACHE = 200;
 // Create required working directories
 const TEMP_DIR = path.join(__dirname, 'temp_moves');
 const VIDEO_DIR = path.join(__dirname, 'videos');
@@ -490,9 +682,10 @@ async function sendBanEmail(playerName, reason, ip) {
     }
 }
 
-function renderBannedPage(clientIP, reason) {
+function renderBannedPage(clientIP, reason, nonce = '') {
     const safeIP = String(clientIP || 'Unbekannt').replace(/[<>&"']/g, '');
     const safeReason = String(reason || 'Verstoß gegen die Community-Richtlinien / Admin-Sperre').replace(/[<>&"']/g, '');
+    const safeNonce = String(nonce || '').replace(/[^a-zA-Z0-9+/=_-]/g, '');
     return `<!DOCTYPE html>
 <html lang="de">
 <head>
@@ -672,64 +865,69 @@ function renderBannedPage(clientIP, reason) {
         <div class="ticket-section">
             <div class="ticket-header">
                 <span>📩 Support-Ticket / Entbannungsantrag</span>
-                <span class="ticket-email">blockcom130@gmail.com</span>
+                <span class="ticket-email">In-App Support</span>
             </div>
             <p>
                 Falls du glaubst, dass die Sperrung ein Missverständnis ist, kannst du hier direkt einen Entbannungsantrag einreichen.
             </p>
             <div class="form-group">
-                <input type="text" id="ticket-user" placeholder="Dein Spielername oder E-Mail...">
+                <input type="text" id="ticket-user" placeholder="Dein Spielername oder Kontakt...">
                 <textarea id="ticket-text" rows="3" placeholder="Beschreibe deinen Fall oder Entbannungsantrag..."></textarea>
-                <button type="button" class="btn-send" onclick="sendTicket()">✉️ Antrag an Support absenden</button>
+                <button type="button" id="sendTicketBtn" class="btn-send">✉️ Antrag an Support absenden</button>
             </div>
             <div id="status-feedback"></div>
         </div>
 
         <div class="footer-info">
-            Support-Kontakt: <a href="mailto:blockcom130@gmail.com">blockcom130@gmail.com</a>
+            Support-Kontakt: In-Game Support-Ticket-System
         </div>
     </div>
 
-    <script>
-        function sendTicket() {
-            var contact = document.getElementById('ticket-user').value.trim();
-            var text = document.getElementById('ticket-text').value.trim();
-            var feedback = document.getElementById('status-feedback');
+    <script nonce="${safeNonce}">
+        (function() {
+            function sendTicket() {
+                var contact = document.getElementById('ticket-user').value.trim();
+                var text = document.getElementById('ticket-text').value.trim();
+                var feedback = document.getElementById('status-feedback');
 
-            if (!text) {
-                feedback.style.color = '#e74c3c';
-                feedback.innerText = '❌ Bitte gib eine Nachricht oder Begründung ein.';
-                return;
-            }
-
-            feedback.style.color = '#f39c12';
-            feedback.innerText = '⏳ Sende Support-Ticket...';
-
-            fetch('/api/support-ticket', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contact: contact || 'Gesperrter Spieler',
-                    user: contact || 'Gesperrter Spieler',
-                    text: text,
-                    banReason: '${safeReason}'
-                })
-            })
-            .then(function(res) { return res.json(); })
-            .then(function(data) {
-                if (data && data.success) {
-                    feedback.style.color = '#2ecc71';
-                    feedback.innerHTML = '✅ Antrag übermittelt! Ticket-ID: <strong>' + (data.ticketId || 'OK') + '</strong>. Unser Support-Team (blockcom130@gmail.com) prüft deine Anfrage.';
-                    document.getElementById('ticket-text').value = '';
-                } else {
-                    throw new Error(data && data.message ? data.message : 'Senden fehlgeschlagen');
+                if (!text) {
+                    feedback.style.color = '#e74c3c';
+                    feedback.innerText = '❌ Bitte gib eine Nachricht oder Begründung ein.';
+                    return;
                 }
-            })
-            .catch(function(err) {
-                feedback.style.color = '#e74c3c';
-                feedback.innerText = '❌ Fehler beim Senden. Bitte wende dich per E-Mail an blockcom130@gmail.com';
-            });
-        }
+
+                feedback.style.color = '#f39c12';
+                feedback.innerText = '⏳ Sende Support-Ticket...';
+
+                fetch('/api/support-ticket', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contact: contact || 'Gesperrter Spieler',
+                        user: contact || 'Gesperrter Spieler',
+                        text: text,
+                        banReason: ${JSON.stringify(safeReason)}
+                    })
+                })
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    if (data && data.success) {
+                        feedback.style.color = '#2ecc71';
+                        var safeId = String(data.ticketId || 'OK').replace(/[<>&"']/g, '');
+                        feedback.innerHTML = '✅ Antrag übermittelt! Ticket-ID: <strong>' + safeId + '</strong>. Unser Support-Team prüft deine Anfrage.';
+                        document.getElementById('ticket-text').value = '';
+                    } else {
+                        throw new Error(data && data.message ? data.message : 'Senden fehlgeschlagen');
+                    }
+                })
+                .catch(function() {
+                    feedback.style.color = '#e74c3c';
+                    feedback.innerText = '❌ Fehler beim Senden. Bitte reiche dein Ticket über das Support-Formular erneut ein.';
+                });
+            }
+            var btn = document.getElementById('sendTicketBtn');
+            if (btn) btn.addEventListener('click', sendTicket);
+        })();
     </script>
 </body>
 </html>`;
@@ -741,23 +939,30 @@ app.use((req, res, next) => {
 
     // Dedicated secure emergency unban endpoint: requires genuine admin password via Header or POST body (never URL query)
     if (req.path === '/unban-self' || req.path === '/api/unban-self') {
-        if (isAuthLockedOut(clientIP)) {
+        const lockoutSec = getAuthLockoutRemaining('emergency_unban', clientIP);
+        const rateMeta = getAuthRateLimitMeta('emergency_unban', clientIP);
+        if (lockoutSec > 0) {
+            res.setHeader('Retry-After', String(lockoutSec));
+            res.setHeader('RateLimit-Limit', String(rateMeta.limit));
+            res.setHeader('RateLimit-Remaining', '0');
+            res.setHeader('RateLimit-Reset', String(lockoutSec));
             return res.status(429).json({
                 success: false,
-                message: 'Zu viele Fehlversuche. Bitte warte 15 Minuten.'
+                message: `Zu viele Fehlversuche. Bitte warte ${lockoutSec} Sekunden.`,
+                retryAfter: lockoutSec
             });
         }
         const reqPass = req.headers['x-admin-key'] || req.headers['x-admin-pass'] || req.body?.password;
         const isAdminAuthorized = reqPass && verifyAdminPassword(String(reqPass).trim());
 
         if (!isAdminAuthorized) {
-            recordAuthFailure(clientIP);
+            recordAuthFailure('emergency_unban', clientIP);
             return res.status(403).json({
                 success: false,
                 message: 'Zugriff verweigert: Gültiges Administrator-Passwort im Header oder Body erforderlich.'
             });
         }
-        clearAuthFailures(clientIP);
+        clearAuthFailures('emergency_unban', clientIP);
 
         bannedIPs.clear();
         bannedPlayers.clear();
@@ -799,7 +1004,7 @@ app.use((req, res, next) => {
         if (req.path === '/api/support-ticket') {
             return next(); // Allow banned users to submit support tickets
         }
-        return res.status(403).send(renderBannedPage(clientIP, "Deine IP-Adresse wurde auf diesem Server permanent gesperrt."));
+        return res.status(403).send(renderBannedPage(clientIP, "Deine IP-Adresse wurde auf diesem Server permanent gesperrt.", res.locals.cspNonce));
     }
 
     next();
@@ -809,7 +1014,7 @@ app.use((req, res, next) => {
 app.get('/banned', (req, res) => {
     const clientIP = getClientIP(req);
     const reason = req.query.reason || 'Zugriff verweigert / Sperrung durch Administration';
-    res.status(403).send(renderBannedPage(clientIP, reason));
+    res.status(403).send(renderBannedPage(clientIP, reason, res.locals.cspNonce));
 });
 
 // ==========================================
@@ -963,17 +1168,26 @@ function collectAdminDashboardData() {
     };
 }
 
-// 1. Admin Authentication API
-app.post('/admin/api/login', createHttpRateLimiter({ maxRequests: 15, windowMs: 5 * 60 * 1000, message: 'Zu viele Admin-Loginversuche.' }), async (req, res) => {
+// 1. Admin Authentication API (Isolated lockout buckets per auth branch - Fix F3)
+app.post('/admin/api/login', createHttpRateLimiter({ maxRequests: 25, windowMs: 5 * 60 * 1000, message: 'Zu viele Admin-Loginversuche.' }), async (req, res) => {
     const clientIP = getClientIP(req);
-    if (isAuthLockedOut(clientIP)) {
+    const { password, firebaseToken } = req.body || {};
+    const authBucket = (firebaseToken && !password) ? 'admin_firebase' : 'admin_password';
+
+    const lockoutSec = getAuthLockoutRemaining(authBucket, clientIP);
+    const rateMeta = getAuthRateLimitMeta(authBucket, clientIP);
+    if (lockoutSec > 0) {
+        res.setHeader('Retry-After', String(lockoutSec));
+        res.setHeader('RateLimit-Limit', String(rateMeta.limit));
+        res.setHeader('RateLimit-Remaining', '0');
+        res.setHeader('RateLimit-Reset', String(lockoutSec));
         return res.status(429).json({
             success: false,
-            message: 'Zu viele fehlgeschlagene Anmeldeversuche. Bitte warte 15 Minuten.'
+            message: `Zu viele fehlgeschlagene Anmeldeversuche. Bitte warte ${lockoutSec} Sekunden.`,
+            retryAfter: lockoutSec
         });
     }
 
-    const { password, firebaseToken } = req.body || {};
     let authorized = false;
     let adminName = 'Admin';
     let email = '';
@@ -1006,14 +1220,17 @@ app.post('/admin/api/login', createHttpRateLimiter({ maxRequests: 15, windowMs: 
     }
 
     if (!authorized) {
-        recordAuthFailure(clientIP);
+        recordAuthFailure(authBucket, clientIP);
+        const updatedMeta = getAuthRateLimitMeta(authBucket, clientIP);
+        res.setHeader('RateLimit-Limit', String(updatedMeta.limit));
+        res.setHeader('RateLimit-Remaining', String(updatedMeta.remaining));
         return res.status(403).json({
             success: false,
             message: 'Zugriff verweigert: Dein Konto besitzt keine Administratorrechte!'
         });
     }
 
-    clearAuthFailures(clientIP);
+    clearAuthFailures(authBucket, clientIP);
     const sessionToken = crypto.randomBytes(32).toString('hex');
     activeAdminSessions.set(sessionToken, {
         adminName,
@@ -1042,10 +1259,10 @@ app.get(['/admin/logout', '/api/admin/logout'], (req, res) => {
 app.get(['/admin', '/admin/', '/admindashboard', '/admindashboard/', '/admin-dashboard', '/admindashboard.html'], async (req, res) => {
     const auth = await verifyAdminAuth(req);
     if (!auth.authorized) {
-        return res.send(renderAdminLoginPage(req.query.err || ''));
+        return res.send(renderAdminLoginPage(req.query.err || '', res.locals.cspNonce));
     }
     const data = collectAdminDashboardData();
-    res.send(renderAdminDashboard(auth, data.stats, data.users, data.tickets, data.bannedIPs, data.bannedPlayers));
+    res.send(renderAdminDashboard(auth, data.stats, data.users, data.tickets, data.bannedIPs, data.bannedPlayers, res.locals.cspNonce));
 });
 
 // 4. GET /admin/api/data
@@ -1062,12 +1279,24 @@ app.get('/admin/api/data', async (req, res) => {
 const ALLOWED_STATIC_FILES = new Set([
     'index.html', 'handy.html', 'stats.html', 'chat.html', 'datenschutz.html', 'impressum.html', 
     'AGB.html', 'sitemap.html', 'sitemap.xml', 'robots.txt', 'manifest.json', 'sw.js',
-    'script.js', 'script2.js', 'script_chat.js', 'style.css', 'features.js', 'firebase-applet-config.json',
+    'app-ui.js', 'chat-ui.js', 'stats-ui.js', 'script.js', 'script2.js', 'script_chat.js', 'style.css', 'features.js', 'firebase-applet-config.json',
     'icon.png', 'icon.jpg', 'schach-vorschau.jpg',
-    'stockfishWorker.js', 'engineWorker.js', 'puzzleEngine.js', 'openingTrainer.js', 
+    'stockfishWorker.js', 'engineWorker.js', 'openingTrainer.js', 
     'openingBook.js', 'pgnEngine.js', 'evalEngine.js', 'bettingEngine.js', 
     'eloSystem.js', 'leaderboards.js', 'video-engine.js', 'soundEngine.js', 'emojis.js'
 ]);
+
+function sendHtmlWithNonce(res, filePath) {
+    try {
+        let html = fs.readFileSync(filePath, 'utf8');
+        const nonce = res.locals.cspNonce || '';
+        html = html.replace(/<script(?![^>]*\bnonce=)(?![^>]*\btype=['"]application\/ld\+json['"])/gi, `<script nonce="${nonce}"`);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.send(html);
+    } catch (e) {
+        return res.sendFile(filePath);
+    }
+}
 
 if (fs.existsSync(path.join(__dirname, 'public'))) {
     app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0 }));
@@ -1077,39 +1306,43 @@ app.use((req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     const reqPath = req.path.replace(/^\/+/, '');
     if (ALLOWED_STATIC_FILES.has(reqPath)) {
-        return res.sendFile(path.join(__dirname, reqPath));
+        const fullPath = path.join(__dirname, reqPath);
+        if (reqPath.endsWith('.html')) {
+            return sendHtmlWithNonce(res, fullPath);
+        }
+        return res.sendFile(fullPath);
     }
     next();
 });
 
 app.get('/', (req, res) => {
-    if (fs.existsSync(path.join(__dirname, 'index.html'))) {
-        res.sendFile(path.join(__dirname, 'index.html'));
-    } else if (fs.existsSync(path.join(__dirname, 'public', 'index.html'))) {
-        res.sendFile(path.join(__dirname, 'public', 'index.html'));
-    } else {
-        res.send("Schach-Ultra-Server: MAXIMALE VOLLVERSION - ALLER CODE ENTHALTEN");
+    const targetFile = fs.existsSync(path.join(__dirname, 'index.html')) 
+        ? path.join(__dirname, 'index.html') 
+        : (fs.existsSync(path.join(__dirname, 'public', 'index.html')) ? path.join(__dirname, 'public', 'index.html') : null);
+    if (targetFile) {
+        return sendHtmlWithNonce(res, targetFile);
     }
+    res.send("Schach-Ultra-Server: MAXIMALE VOLLVERSION - ALLER CODE ENTHALTEN");
 });
 
 app.get(['/handy', '/handy.html', '/mobile'], (req, res) => {
-    if (fs.existsSync(path.join(__dirname, 'handy.html'))) {
-        res.sendFile(path.join(__dirname, 'handy.html'));
-    } else if (fs.existsSync(path.join(__dirname, 'public', 'handy.html'))) {
-        res.sendFile(path.join(__dirname, 'public', 'handy.html'));
-    } else {
-        res.sendFile(path.join(__dirname, 'index.html'));
+    const targetFile = fs.existsSync(path.join(__dirname, 'handy.html')) 
+        ? path.join(__dirname, 'handy.html') 
+        : (fs.existsSync(path.join(__dirname, 'index.html')) ? path.join(__dirname, 'index.html') : null);
+    if (targetFile) {
+        return sendHtmlWithNonce(res, targetFile);
     }
+    res.send("Handy-Version nicht verfügbar.");
 });
 
 app.get(['/stats', '/stats.html', '/rangliste', '/leaderboard'], (req, res) => {
-    if (fs.existsSync(path.join(__dirname, 'stats.html'))) {
-        res.sendFile(path.join(__dirname, 'stats.html'));
-    } else if (fs.existsSync(path.join(__dirname, 'public', 'stats.html'))) {
-        res.sendFile(path.join(__dirname, 'public', 'stats.html'));
-    } else {
-        res.sendFile(path.join(__dirname, 'index.html'));
+    const targetFile = fs.existsSync(path.join(__dirname, 'stats.html')) 
+        ? path.join(__dirname, 'stats.html') 
+        : (fs.existsSync(path.join(__dirname, 'index.html')) ? path.join(__dirname, 'index.html') : null);
+    if (targetFile) {
+        return sendHtmlWithNonce(res, targetFile);
     }
+    res.send("Statistik-Version nicht verfügbar.");
 });
 
 // REST Endpoints for Auth and Analysis
@@ -1117,16 +1350,26 @@ const RESERVED_USERNAMES = new Set(['max', 'admin', 'administrator', 'system', '
 
 app.post('/api/login', createHttpRateLimiter({ maxRequests: 25, windowMs: 5 * 60 * 1000, message: 'Zu viele Loginversuche.' }), async (req, res) => {
     const clientIP = getClientIP(req);
-    if (isAuthLockedOut(clientIP)) {
-        return res.status(429).json({ success: false, error: "Zu viele Fehlversuche. Bitte warte 15 Minuten." });
-    }
-
     const { username, password } = req.body || {};
     if (!username || typeof username !== 'string' || !password || typeof password !== 'string') {
         return res.status(400).json({ success: false, error: "Name und Passwort erforderlich!" });
     }
 
-    const cleanUsername = username.trim();
+    const cleanUsername = sanitizePlayerName(username);
+    if (!cleanUsername) {
+        return res.status(400).json({ success: false, error: "Ungültiger Benutzername!" });
+    }
+
+    const lockoutSec = getAuthLockoutRemaining('user_login', clientIP, cleanUsername);
+    const rateMeta = getAuthRateLimitMeta('user_login', clientIP, cleanUsername);
+    if (lockoutSec > 0) {
+        res.setHeader('Retry-After', String(lockoutSec));
+        res.setHeader('RateLimit-Limit', String(rateMeta.limit));
+        res.setHeader('RateLimit-Remaining', '0');
+        res.setHeader('RateLimit-Reset', String(lockoutSec));
+        return res.status(429).json({ success: false, error: `Zu viele Fehlversuche. Bitte warte ${lockoutSec} Sekunden.`, retryAfter: lockoutSec });
+    }
+
     let user = userDB[cleanUsername];
 
     // Try fetching from Firestore if missing locally (fallback)
@@ -1141,7 +1384,7 @@ app.post('/api/login', createHttpRateLimiter({ maxRequests: 25, windowMs: 5 * 60
     }
 
     if (!user) {
-        recordAuthFailure(clientIP);
+        recordAuthFailure('user_login', clientIP, cleanUsername);
         return res.status(401).json({ success: false, error: "Ungültige Anmeldedaten!" });
     }
 
@@ -1168,10 +1411,10 @@ app.post('/api/login', createHttpRateLimiter({ maxRequests: 25, windowMs: 5 * 60
     }
 
     if (!verifyPassword(password, user.password)) {
-        recordAuthFailure(clientIP);
+        recordAuthFailure('user_login', clientIP, cleanUsername);
         return res.status(401).json({ success: false, error: "Falsches Passwort!" });
     }
-    clearAuthFailures(clientIP);
+    clearAuthFailures('user_login', clientIP, cleanUsername);
 
     // Auto-migrate legacy plaintext password to secure hash
     if (!user.password.includes(':')) {
@@ -1294,8 +1537,7 @@ function sanitizeLeaderboardEntry(data, docId) {
         wins: Math.max(0, Number(u.wins) || 0),
         losses: Math.max(0, Number(u.losses) || 0),
         level: Math.max(1, Number(u.level) || 1),
-        xp: Math.max(0, Number(u.xp) || 0),
-        role: u.role || (cleanName.toLowerCase() === 'max' ? 'admin' : 'Gast')
+        xp: Math.max(0, Number(u.xp) || 0)
     };
 }
 
@@ -1361,7 +1603,7 @@ function loadTicketsFromFile() {
 loadTicketsFromFile();
 
 async function loadFirestoreTickets() {
-    if (!firestoreDb) return;
+    if (!(await verifyFirestoreAdminAccess())) return;
     try {
         const snapshot = await firestoreDb.collection('tickets').orderBy('timestamp', 'desc').limit(100).get();
         if (!snapshot.empty) {
@@ -1402,7 +1644,7 @@ function broadcastTicketsUpdate() {
     const msgStr = JSON.stringify({
         type: 'admin_tickets_update',
         tickets: globalSupportTickets.filter(t => t.status !== 'Entbannt' && t.status !== 'Abgelehnt' && t.status !== 'Geschlossen'),
-        supportEmail: 'blockcom130@gmail.com'
+        supportContact: 'In-App Support-Ticket-System'
     });
     if (wss && wss.clients) {
         wss.clients.forEach(c => {
@@ -1681,7 +1923,6 @@ app.post('/api/support-ticket', (req, res) => {
         user: cleanUser,
         contact: cleanContact,
         clientIP: detectedIP,
-        email: 'blockcom130@gmail.com',
         text: cleanText,
         banReason: cleanBanReason,
         status: 'Offen',
@@ -1698,12 +1939,12 @@ app.post('/api/support-ticket', (req, res) => {
     saveTicketsToFile();
     saveTicketToFirestore(newTicket);
     broadcastTicketsUpdate();
-    console.log(`📩 Support-Ticket [${ticketId}] von ${cleanUser} (IP: ${detectedIP}) erfasst -> Benachrichtigung an blockcom130@gmail.com`);
+    console.log(`📩 Support-Ticket [${ticketId}] von ${cleanUser} (IP: ${detectedIP}) erfasst -> In-App Support-Queue`);
     res.json({
         success: true,
         ticketId: ticketId,
-        supportEmail: 'blockcom130@gmail.com',
-        message: 'Support-Ticket erfolgreich übermittelt. Unser Support-Team wurde benachrichtigt (blockcom130@gmail.com).'
+        supportContact: 'In-App Support-Ticket-System',
+        message: 'Support-Ticket erfolgreich übermittelt. Unser Support-Team bearbeitet dein Anliegen über das interne Support-System.'
     });
 });
 
@@ -1712,7 +1953,7 @@ app.get('/api/admin/tickets', async (req, res) => {
     if (!auth.authorized) {
         return res.status(403).json({ success: false, message: 'Zugriff verweigert' });
     }
-    res.json({ success: true, tickets: globalSupportTickets, supportEmail: 'blockcom130@gmail.com' });
+    res.json({ success: true, tickets: globalSupportTickets, supportContact: 'In-App Support-Ticket-System' });
 });
 
 app.post('/api/admin/unban-ticket', async (req, res) => {
@@ -1864,7 +2105,7 @@ app.post('/api/admin/backup', (req, res) => {
     }
 });
 
-app.post('/analyse', createHttpRateLimiter({ maxRequests: 20, windowMs: 60 * 1000, message: 'Zu viele Analyse-Anfragen.' }), async (req, res) => {
+app.post('/analyse', createHttpRateLimiter({ maxRequests: 30, windowMs: 60 * 1000, message: 'Zu viele Analyse-Anfragen.' }), async (req, res) => {
     const data = req.body || {};
     const spieler = String(data.spieler || "Unbekannt").replace(/["`\r\n]/g, '').trim().slice(0, 40) || "Unbekannt";
     const rawFen = String(data.fen || "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").trim().slice(0, 100);
@@ -1872,57 +2113,227 @@ app.post('/analyse', createHttpRateLimiter({ maxRequests: 20, windowMs: 60 * 100
     const rawZug = String(data.zug || "").trim().slice(0, 15);
     const zug = /^[a-zA-Z0-9+#=\-\s]{0,15}$/.test(rawZug) ? rawZug : "";
     const wins = userDB[spieler] ? userDB[spieler].wins || 0 : 0;
-    const estimatedElo = 1200 + wins * 25;
+    const baseElo = userDB[spieler] ? (userDB[spieler].elo || (1200 + wins * 25)) : (1200 + wins * 25);
 
-    if (aiClient) {
+    const cacheKey = `${fen}::${zug}::${spieler}`;
+    if (analyseCache.has(cacheKey)) {
+        return res.json(analyseCache.get(cacheKey));
+    }
+
+    // Deterministic chess.js tactical & positional evaluation (also guards AI response)
+    let heuristic = {
+        rank: baseElo >= 1800 ? "Meister" : baseElo >= 1400 ? "Fortgeschrittener" : "Vereinsspieler",
+        estimatedElo: baseElo,
+        accuracy: 78,
+        classification: "Solider Zug",
+        center: "Ausgeglichen",
+        development: "Normal",
+        material: "0 (Ausgeglichen)",
+        bestMove: "e2-e4",
+        aggroTotal: 52,
+        aggroLevel: "Ausgewogen",
+        explanation: "Solide Stellung mit ausgeglichenen Chancen für beide Seiten."
+    };
+
+    try {
+        const ch = new Chess(fen);
+        const turn = ch.turn(); // 'w' or 'b'
+        const board = ch.board();
+        const pieceVals = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+        let matWhite = 0, matBlack = 0, centerWhite = 0, centerBlack = 0, devWhite = 0, devBlack = 0;
+
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const sq = board[r][c];
+                if (!sq) continue;
+                const val = pieceVals[sq.type] || 0;
+                const inCenter = (r >= 3 && r <= 4 && c >= 2 && c <= 5);
+                const inInnerCenter = (r >= 3 && r <= 4 && c >= 3 && c <= 4);
+                if (sq.color === 'w') {
+                    matWhite += val;
+                    if (inInnerCenter) centerWhite += 2;
+                    else if (inCenter) centerWhite += 1;
+                    if ((sq.type === 'n' || sq.type === 'b' || sq.type === 'q') && r < 7) devWhite += 1;
+                } else {
+                    matBlack += val;
+                    if (inInnerCenter) centerBlack += 2;
+                    else if (inCenter) centerBlack += 1;
+                    if ((sq.type === 'n' || sq.type === 'b' || sq.type === 'q') && r > 0) devBlack += 1;
+                }
+            }
+        }
+
+        const matDiff = matWhite - matBlack;
+        const sideMatDiff = turn === 'w' ? matDiff : -matDiff;
+        const centerDiff = turn === 'w' ? (centerWhite - centerBlack) : (centerBlack - centerWhite);
+        const devDiff = turn === 'w' ? (devWhite - devBlack) : (devBlack - devWhite);
+
+        const legalMoves = ch.moves({ verbose: true });
+        let bestMoveObj = null;
+        let bestScore = -Infinity;
+        let aggroMoves = 0;
+
+        for (const m of legalMoves) {
+            let score = 0;
+            if (m.san && m.san.includes('#')) score += 10000;
+            if (m.san && m.san.includes('+')) { score += 55; aggroMoves++; }
+            if (m.captured) {
+                score += (pieceVals[m.captured] || 1) * 40 - (pieceVals[m.piece] || 1) * 4;
+                aggroMoves++;
+            }
+            if (m.promotion) score += (pieceVals[m.promotion] || 9) * 35;
+            if (m.san === 'O-O' || m.san === 'O-O-O') score += 45;
+            if (/^[de][45]$/.test(m.to)) score += 28;
+            else if (/^[cf][3-6]$/.test(m.to)) score += 16;
+            if ((m.piece === 'n' || m.piece === 'b') && (m.from[1] === '1' || m.from[1] === '8')) score += 18;
+            if (score > bestScore) {
+                bestScore = score;
+                bestMoveObj = m;
+            }
+        }
+
+        const inCheck = ch.inCheck();
+        const isMate = ch.isCheckmate();
+        const bestMoveStr = bestMoveObj ? `${bestMoveObj.from}-${bestMoveObj.to} (${bestMoveObj.san})` : "Keine legalen Züge";
+        const aggroTotal = Math.max(15, Math.min(98, Math.round(35 + (aggroMoves / Math.max(1, legalMoves.length)) * 85 + (inCheck ? 15 : 0))));
+        const aggroLevel = aggroTotal >= 75 ? "Hoch-Aggressiv" : aggroTotal >= 55 ? "Offensiv" : aggroTotal >= 35 ? "Ausgewogen" : "Positionell";
+
+        const matStr = matDiff === 0
+            ? "0 (Ausgeglichen)"
+            : `${matDiff > 0 ? '+' : ''}${matDiff} (${matDiff > 0 ? 'Vorteil Weiß' : 'Vorteil Schwarz'})`;
+        const centerStr = centerDiff > 1 ? "Dominiert" : centerDiff >= 0 ? "Kontrolliert" : "Unter Druck";
+        const devStr = devDiff >= 1 ? "Sehr aktiv" : devDiff === 0 ? "Ausgeglichen" : "Rückständig";
+
+        let accuracy = Math.max(40, Math.min(98, Math.round(78 + sideMatDiff * 2.5 + centerDiff * 3 + devDiff * 2)));
+        let classification = "Guter Zug";
+        if (isMate) {
+            classification = "Schachmatt 👑";
+            accuracy = 100;
+        } else if (inCheck) {
+            classification = "Starker Angriff ⭐";
+            accuracy = Math.max(accuracy, 88);
+        } else if (sideMatDiff >= 3) {
+            classification = "Gewinnstellung 💎";
+            accuracy = Math.max(accuracy, 90);
+        } else if (sideMatDiff <= -3) {
+            classification = "Kritische Stellung ⚠️";
+            accuracy = Math.min(accuracy, 62);
+        } else if (zug && bestMoveObj && (zug === bestMoveObj.san || zug.includes(bestMoveObj.from + bestMoveObj.to))) {
+            classification = "Bester Zug ⭐";
+            accuracy = Math.max(accuracy, 93);
+        }
+
+        const turnLabel = turn === 'w' ? 'Weiß' : 'Schwarz';
+        const explParts = [
+            `${turnLabel} ist am Zug (${legalMoves.length} legale Züge).`,
+            inCheck ? "Der König steht aktuell im Schach – direkte Verteidigung erforderlich." : "",
+            matDiff !== 0 ? `Materialbilanz: ${matStr}.` : "Das Material ist vollständig ausgeglichen.",
+            bestMoveObj ? `Empfohlener Zug: ${bestMoveStr}.` : ""
+        ].filter(Boolean);
+
+        heuristic = {
+            rank: heuristic.rank,
+            estimatedElo: baseElo,
+            accuracy,
+            classification,
+            center: centerStr,
+            development: devStr,
+            material: matStr,
+            bestMove: bestMoveStr,
+            aggroTotal,
+            aggroLevel,
+            explanation: explParts.join(' ')
+        };
+    } catch (chessErr) {
+        console.warn("Heuristic FEN Parse Warning:", chessErr.message);
+    }
+
+    const now = Date.now();
+    const canCallGemini = aiClient && (now > geminiQuotaBlockedUntil) && (now - lastGeminiCallTime >= 6000);
+
+    if (canCallGemini) {
         try {
-            const promptText = `Du bist die weltbeste Schach-KI und ein Großmeister-Analyst. 
+            lastGeminiCallTime = now;
+            const promptText = `Du bist ein Großmeister-Schachanalyst.
 Analysiere die folgende Schach-Position (FEN: "${fen}") nach dem Zug: "${zug}".
-Erstelle eine tiefgehende, präzise Analyse des letzten Zuges und der Gesamtstruktur.
-
-Antworte AUSSCHLIESSLICH mit einem validen JSON-Objekt. Verwende genau diese Struktur und keine zusätzliche Formatierung oder Erklärungen außerhalb des JSONs:
+Antworte AUSSCHLIESSLICH mit einem validen JSON-Objekt in exakt dieser Struktur:
 {
   "Basis_Werte": {
-    "Rang": "${estimatedElo > 1500 ? 'Meister' : 'Fortgeschrittener'}",
-    "Geschätzte_Elo": ${estimatedElo},
-    "Genauigkeit": 85,
-    "Klassifizierung": "Guter Zug"
+    "Rang": "${heuristic.rank}",
+    "Geschätzte_Elo": ${heuristic.estimatedElo},
+    "Genauigkeit": ${heuristic.accuracy},
+    "Klassifizierung": "${heuristic.classification}"
   },
   "Positions_Analyse": {
-    "Zentrum": "Kontrolliert",
-    "Entwicklung": "Aktiv",
-    "Material_Vorteil": "Ausgeglichen",
-    "Bester_Zug": "e2-e4"
+    "Zentrum": "${heuristic.center}",
+    "Entwicklung": "${heuristic.development}",
+    "Material_Vorteil": "${heuristic.material}",
+    "Bester_Zug": "${heuristic.bestMove}"
   },
   "Aggressivitäts_Index": {
-    "Gesamt": 65,
-    "Level": "Offensiv"
+    "Gesamt": ${heuristic.aggroTotal},
+    "Level": "${heuristic.aggroLevel}"
   },
-  "Erklaerung": "Ein solider Entwicklungszug, der das Zentrum stärkt und Druck aufbaut."
-}
+  "Erklaerung": "Prägnante, fachlich korrekte deutsche Stellungsbewertung."
+}`;
 
-Berechne die Genauigkeit (0 bis 100), Aggressivitätsgesamtindex (0 bis 100) und die Klassifizierung (wie 'Brillant 💎', 'Großartiger Zug ⭐', 'Buchzug 📚', 'Ungenauigkeit ⚠️', 'Fehler ❌', 'Patzer 🔴') passend zum analysierten Zug "${zug}" und der FEN-Struktur "${fen}".`;
-
-            const response = await aiClient.models.generateContent({
-                model: 'gemini-2.5-flash',
+            const aiPromise = aiClient.models.generateContent({
+                model: 'gemini-4-hydrogen',
                 contents: promptText
             });
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Gemini Timeout')), 4500));
+            const response = await Promise.race([aiPromise, timeoutPromise]);
             const text = response.text || "";
             const jsonMatch = text.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
-                return res.json(JSON.parse(jsonMatch[0]));
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (parsed && parsed.Positions_Analyse && (!parsed.Positions_Analyse.Bester_Zug || parsed.Positions_Analyse.Bester_Zug === 'e2-e4')) {
+                    parsed.Positions_Analyse.Bester_Zug = heuristic.bestMove;
+                }
+                if (analyseCache.size >= MAX_ANALYSE_CACHE) {
+                    const firstKey = analyseCache.keys().next().value;
+                    analyseCache.delete(firstKey);
+                }
+                analyseCache.set(cacheKey, parsed);
+                return res.json(parsed);
             }
         } catch (e) {
-            console.warn("Gemini Analyse Warning:", e.message);
+            const errMsg = String(e && (e.message || e.toString()) ? (e.message || e.toString()) : '');
+            if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('quota') || errMsg.includes('rate-limit') || errMsg.includes('exceeded')) {
+                geminiQuotaBlockedUntil = Date.now() + 60000;
+                console.log("ℹ️ [Gemini Analyse] Free-Tier Quota erreicht. Automatische Umschaltung auf integrierte Schach-Heuristik für 60s.");
+            } else {
+                console.log("ℹ️ [Gemini Analyse] Umschaltung auf integrierte Schach-Heuristik:", errMsg.slice(0, 100));
+            }
         }
     }
 
-    res.json({
-        Basis_Werte: { Rang: estimatedElo > 1500 ? "Meister" : "Fortgeschrittener", Geschätzte_Elo: estimatedElo, Genauigkeit: 75, Klassifizierung: "Guter Zug" },
-        Positions_Analyse: { Zentrum: "Solide", Entwicklung: "Normal", Material_Vorteil: "0", Bester_Zug: "e2-e4" },
-        Aggressivitäts_Index: { Gesamt: 55, Level: "Normal" },
-        Erklaerung: "Ein guter Entwicklungszug unter den gegebenen Umständen."
-    });
+    const fallbackResult = {
+        Basis_Werte: {
+            Rang: heuristic.rank,
+            Geschätzte_Elo: heuristic.estimatedElo,
+            Genauigkeit: heuristic.accuracy,
+            Klassifizierung: heuristic.classification
+        },
+        Positions_Analyse: {
+            Zentrum: heuristic.center,
+            Entwicklung: heuristic.development,
+            Material_Vorteil: heuristic.material,
+            Bester_Zug: heuristic.bestMove
+        },
+        Aggressivitäts_Index: {
+            Gesamt: heuristic.aggroTotal,
+            Level: heuristic.aggroLevel
+        },
+        Erklaerung: heuristic.explanation
+    };
+
+    if (analyseCache.size >= MAX_ANALYSE_CACHE) {
+        const firstKey = analyseCache.keys().next().value;
+        analyseCache.delete(firstKey);
+    }
+    analyseCache.set(cacheKey, fallbackResult);
+    res.json(fallbackResult);
 });
 
 // Bot Player configuration (Nur echte KI-Bots für Training)
@@ -1996,6 +2407,7 @@ function processElixirMatchmaking() {
                         chess: new Chess(),
                         pot: pot,
                         board: null, turn: 'white', isGhostMatch: false,
+                        moves: [],
                         whitePlayer: p2.playerName, blackPlayer: p1.playerName,
                         timeControl: tc, timeWhite: tSecs, timeBlack: tSecs, timeInc: tInc, gameOver: false
                     });
@@ -2097,11 +2509,12 @@ function getOpenChallengesList() {
             openChallenges.delete(id);
             continue;
         }
+        const cleanCreator = String(ch.creator || 'Gast').replace(/[<>"'&/\\`]/g, '').trim().slice(0, 25) || 'Gast';
         list.push({
             id: ch.id,
-            creator: ch.creator,
-            creatorElo: ch.creatorElo || 1200,
-            timeControl: ch.timeControl,
+            creator: cleanCreator,
+            creatorElo: parseInt(ch.creatorElo, 10) || 1200,
+            timeControl: String(ch.timeControl || '10').replace(/[<>"'&/\\`]/g, '').slice(0, 15),
             color: ch.color || 'random',
             createdAt: ch.createdAt
         });
@@ -2422,7 +2835,7 @@ function escapeHTML(str) {
 
 async function loadProfilesFromDB() {
     try {
-        if (firestoreDb) {
+        if (await verifyFirestoreAdminAccess()) {
             const snapshot = await firestoreDb.collection('players').get();
             const freshUserDB = {};
             let count = 0;
@@ -2448,12 +2861,16 @@ async function loadProfilesFromDB() {
             console.log(`✅ ${count} Profile erfolgreich aus Firestore geladen.`);
         }
     } catch (err) {
-        console.error("❌ Fehler beim Laden von DB:", err);
+        if (isFirestorePermissionOrAuthError(err)) {
+            disableFirestoreAdminSync(err.message);
+        } else {
+            console.error("❌ Fehler beim Laden von DB:", err);
+        }
     }
 }
 
 async function loadFirestoreProfiles() {
-    if (!firestoreDb) return;
+    if (!(await verifyFirestoreAdminAccess())) return;
     try {
         let snapshot = await firestoreDb.collection('leaderboard').get();
         if (snapshot.empty) {
@@ -2519,12 +2936,16 @@ async function loadFirestoreProfiles() {
             });
         }
     } catch (e) {
-        console.warn("Firestore profiles load error:", e.message);
+        if (isFirestorePermissionOrAuthError(e)) {
+            disableFirestoreAdminSync(e.message);
+        } else {
+            console.warn("Firestore profiles load error:", e.message);
+        }
     }
 }
 
 async function loadFirestoreBans() {
-    if (!firestoreDb) return;
+    if (!(await verifyFirestoreAdminAccess())) return;
     try {
         const snapshot = await firestoreDb.collection('bans').get();
         const freshBannedIPs = new Set();
@@ -2556,7 +2977,11 @@ async function loadFirestoreBans() {
 
         console.log(`🔥 ${snapshot.size} Bans aus Firestore synchronisiert. (Banned IPs: ${bannedIPs.size}, Banned Players: ${bannedPlayers.size})`);
     } catch (e) {
-        console.warn("Firestore bans load error:", e.message);
+        if (isFirestorePermissionOrAuthError(e)) {
+            disableFirestoreAdminSync(e.message);
+        } else {
+            console.warn("Firestore bans load error:", e.message);
+        }
     }
 }
 
@@ -2619,7 +3044,7 @@ function broadcastAdminLogs() {
     });
     if (wss && wss.clients) {
         wss.clients.forEach(c => {
-            if (c.readyState === 1) {
+            if (c.readyState === 1 && c.isAdmin === true) {
                 c.send(msgStr);
             }
         });
@@ -3140,11 +3565,14 @@ async function loadData() {
         }
     }
 
-    // Load fresh data directly from Firestore (overwriting local with remote deletions)
-    await loadFirestoreProfiles();
-    await loadFirestoreBans();
-    await loadFirestoreTickets();
-    await syncAllToFirestore();
+    // Load fresh data directly from Firestore if Admin SDK access is available
+    if (await verifyFirestoreAdminAccess()) {
+        await loadFirestoreProfiles();
+        await loadFirestoreBans();
+        await loadFirestoreTickets();
+        await syncAllToFirestore();
+        await loadBannedIPs();
+    }
 
     // Auto-clean Admin Accounts from Ban lists
     const ADMIN_NAMES = ['max.schule13@gmail.com', 'Max'];
@@ -3169,6 +3597,7 @@ loadData();
 
 // Periodic automatic background sync from Firestore every 20 seconds
 setInterval(async () => {
+    if (!firestoreDb) return;
     try {
         await loadFirestoreProfiles();
         await loadFirestoreBans();
@@ -3178,17 +3607,19 @@ setInterval(async () => {
 
 async function loadBannedIPs() {
     try {
-        if (firestoreDb) {
+        if (await verifyFirestoreAdminAccess()) {
             const snapshot = await firestoreDb.collection('bans').where('type', '==', 'ip').get();
             snapshot.forEach(doc => bannedIPs.add(doc.data().target));
             console.log(`✅ ${bannedIPs.size} gesperrte IPs aus DB geladen.`);
         }
     } catch (err) {
-        console.error("loadBannedIPs catch:", err.message);
+        if (isFirestorePermissionOrAuthError(err)) {
+            disableFirestoreAdminSync(err.message);
+        } else {
+            console.error("loadBannedIPs catch:", err.message);
+        }
     }
 }
-
-loadBannedIPs();
 
 // ==========================================
 // 🌐 RENDER SERVER SYNC & PUBLIC REST APIS
@@ -3261,24 +3692,24 @@ setInterval(() => {
 
 // API Documentation & Index
 app.get(['/api', '/api/docs', '/api/index'], (req, res) => {
-    const baseUrl = req.protocol + '://' + req.get('host');
     res.json({
         name: "SchachLive REST API",
-        version: "2.4.0",
-        author: "Max (blockcom130@gmail.com)",
-        supportContact: "blockcom130@gmail.com",
+        version: "2.5.0",
+        author: "Max",
+        supportContact: "In-App Support-Ticket-System",
         firestoreProject: "schachlive",
         connectedRenderServers: RENDER_SERVERS,
         endpoints: {
-            "GET /api/players": "Alle registrierten Schachspieler mit Statistiken und Filter (?search=..., ?limit=..., ?page=...)",
-            "GET /api/player/:username": "Detailliertes Spielerprofil mit Rang, Elo, Siegen, Niederlagen und Level",
+            "GET /api/players": "Registrierte Schachspieler mit Spielstatistiken (?search=..., ?limit=..., ?page=...)",
+            "GET /api/player/:username": "Öffentliches Spielerprofil mit Rang, Elo, Siegen, Niederlagen und Level",
             "GET /api/leaderboard": "Echtzeit-Rangliste aus Firebase Firestore & Render Server (?format=blitz|rapid|bullet)",
-            "GET /api/stats": "Aktuelle Serverstatistiken, Live-Spieler, aktive Räume & Sync-Status",
+            "GET /api/stats": "Aktuelle Serverstatistiken, Live-Spieler & aktive Räume",
             "GET /api/games": "Historie der zuletzt abgeschlossenen Partien mit FEN, Snapshots und PGN",
-            "GET /api/lobbies": "Liste aller aktiven öffentlichen & privaten Lobbys",
-            "GET /api/puzzles": "Tägliche Schach-Taktikaufgabe und Puzzles",
-            "GET /api/bans": "Öffentliche Sicherheitsübersicht und Bann-Status",
-            "POST /api/support-ticket": "Support-Ticket & Entbannungsantrag einreichen (Nachricht geht an blockcom130@gmail.com)",
+            "GET /api/lobbies": "Liste aller aktiven öffentlichen Lobbys",
+            "GET /api/puzzles": "Tägliche Schach-Taktikaufgabe und Puzzles (Stellungen)",
+            "POST /api/puzzles/verify": "Serverseitige Überprüfung eines Schachrätsel-Zuges ohne Lösungs-Leak",
+            "GET /api/bans": "Öffentliche Sicherheitsübersicht",
+            "POST /api/support-ticket": "Support-Ticket & Entbannungsantrag einreichen",
             "GET /api/sync-firebase": "Manueller Sofort-Abgleich mit Firebase Firestore",
             "GET /api/sync-render": "Manueller Sofort-Abgleich mit mein-schach2.onrender.com",
             "GET /api/sync-all": "Vollständige Synchronisation (Firebase + Render Server)"
@@ -3286,8 +3717,8 @@ app.get(['/api', '/api/docs', '/api/index'], (req, res) => {
     });
 });
 
-// GET /api/players (All Players List with search, filtering & pagination)
-app.get(['/api/players', '/api/users'], (req, res) => {
+// GET /api/players (All Players List with rate limiting & sanitized public fields - Fix F2)
+app.get(['/api/players', '/api/users'], createHttpRateLimiter({ maxRequests: 30, windowMs: 60 * 1000, message: 'Zu viele Spielerlisten-Anfragen. Bitte warte einen Moment.' }), (req, res) => {
     const { search, limit = 100, page = 1, sort = 'elo' } = req.query;
     let list = Object.values(userDB).map(u => ({
         username: u.username,
@@ -3297,10 +3728,7 @@ app.get(['/api/players', '/api/users'], (req, res) => {
         losses: Number(u.losses) || 0,
         winrate: (u.wins + u.losses > 0) ? Math.round((u.wins / (u.wins + u.losses)) * 100) + '%' : '0%',
         level: Number(u.level) || 1,
-        xp: Number(u.xp) || 0,
-        role: u.role || 'Gast',
-        is_banned: !!u.is_banned,
-        is_online: wss ? Array.from(wss.clients).some(c => c.playerName && c.playerName.toLowerCase() === (u.username || '').toLowerCase() && c.readyState === 1) : false
+        xp: Number(u.xp) || 0
     }));
 
     if (search) {
@@ -3331,11 +3759,11 @@ app.get(['/api/players', '/api/users'], (req, res) => {
     });
 });
 
-// GET /api/player/:username (Specific Player Details)
-app.get(['/api/player/:username', '/api/players/:username', '/api/user/:username'], async (req, res) => {
+// GET /api/player/:username (Specific Player Details with rate limiting & sanitized fields - Fix F2)
+app.get(['/api/player/:username', '/api/players/:username', '/api/user/:username'], createHttpRateLimiter({ maxRequests: 40, windowMs: 60 * 1000, message: 'Zu viele Spieler-Suchanfragen. Bitte warte einen Moment.' }), async (req, res) => {
     const rawUsername = req.params.username;
     if (!rawUsername) return res.status(400).json({ success: false, error: 'Spielername erforderlich' });
-    const cleanName = rawUsername.trim();
+    const cleanName = String(rawUsername).replace(/[<>"'&/\\`]/g, '').trim().slice(0, 25);
     let u = userDB[cleanName];
 
     // Fallback case-insensitive search
@@ -3355,10 +3783,9 @@ app.get(['/api/player/:username', '/api/players/:username', '/api/user/:username
     }
 
     if (!u) {
-        return res.status(404).json({ success: false, error: `Spieler '${cleanName}' nicht gefunden.` });
+        return res.status(404).json({ success: false, error: `Spieler nicht gefunden.` });
     }
 
-    const isOnline = wss ? Array.from(wss.clients).some(c => c.playerName && c.playerName.toLowerCase() === (u.username || cleanName).toLowerCase() && c.readyState === 1) : false;
     const wins = Number(u.wins) || 0;
     const losses = Number(u.losses) || 0;
     const totalGames = wins + losses;
@@ -3375,9 +3802,6 @@ app.get(['/api/player/:username', '/api/players/:username', '/api/user/:username
             level: Number(u.level) || 1,
             xp: Number(u.xp) || 0,
             coins: Number(u.coins) || 1000,
-            role: u.role || 'Gast',
-            is_banned: !!u.is_banned,
-            is_online: isOnline,
             achievements: u.achievements || [],
             board_theme: u.board_theme || 'classic',
             piece_theme: u.piece_theme || 'classic'
@@ -3385,15 +3809,13 @@ app.get(['/api/player/:username', '/api/players/:username', '/api/user/:username
     });
 });
 
-// GET /api/stats (Live platform statistics)
+// GET /api/stats (Live platform statistics without sensitive leaks - Fix F2)
 app.get(['/api/stats', '/api/server/stats', '/api/server/status'], (req, res) => {
     let onlineCount = 0;
-    const onlineNames = [];
     if (wss && wss.clients) {
         wss.clients.forEach(c => {
             if (c.readyState === 1) {
                 onlineCount++;
-                if (c.playerName) onlineNames.push(c.playerName);
             }
         });
     }
@@ -3412,10 +3834,7 @@ app.get(['/api/stats', '/api/server/stats', '/api/server/status'], (req, res) =>
         activeLobbies: activeRoomsCount,
         registeredPlayers: totalPlayers,
         totalWinsRecorded: totalWins,
-        bannedIPsCount: bannedIPs.size,
-        bannedPlayersCount: bannedPlayers.size,
-        supportTicketsCount: globalSupportTickets.length,
-        supportEmail: "blockcom130@gmail.com",
+        supportContact: "In-App Support-Ticket-System",
         firestoreConnected: typeof firestoreDb !== 'undefined' && firestoreDb !== null,
         renderSyncStatus: renderSyncStatus,
         uptimeSeconds: Math.floor(process.uptime()),
@@ -3423,7 +3842,7 @@ app.get(['/api/stats', '/api/server/stats', '/api/server/status'], (req, res) =>
     });
 });
 
-// GET /api/games (Recent matches history)
+// GET /api/games (Recent matches history with consistent field names - Fix F7.2)
 app.get(['/api/games', '/api/matches', '/api/game-history'], async (req, res) => {
     const list = [];
     if (firestoreDb) {
@@ -3431,7 +3850,17 @@ app.get(['/api/games', '/api/matches', '/api/game-history'], async (req, res) =>
             const snap = await firestoreDb.collection('games').orderBy('timestamp', 'desc').limit(50).get();
             if (!snap.empty) {
                 snap.forEach(doc => {
-                    list.push({ id: doc.id, ...doc.data() });
+                    const d = doc.data();
+                    const white = d.white_player || d.white || 'Spieler 1';
+                    const black = d.black_player || d.black || 'Spieler 2';
+                    list.push({ 
+                        id: doc.id, 
+                        ...d,
+                        white: white,
+                        black: black,
+                        white_player: white,
+                        black_player: black
+                    });
                 });
             }
         } catch (e) {}
@@ -3463,37 +3892,95 @@ app.get(['/api/lobbies', '/api/rooms'], (req, res) => {
     });
 });
 
-// GET /api/puzzles (Daily Chess Tactics)
+// Server-authoritative secret puzzle solutions repository (Fix F6)
+const SERVER_PUZZLES = [
+    {
+        id: 'puzzle_1',
+        title: 'Matt in 2 Zügen',
+        fen: 'r1bqkb1r/pppp1ppp/2n5/4p3/2B1n3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 4',
+        solution: ['Bxf7+', 'Ke7', 'd4'],
+        difficulty: 'Mittel'
+    },
+    {
+        id: 'puzzle_2',
+        title: 'Dame gewinnen (Gabel)',
+        fen: 'r1bqk2r/ppppbppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQ1RK1 b kq - 5 4',
+        solution: ['Nxe4', 'Re1', 'd5'],
+        difficulty: 'Leicht'
+    },
+    {
+        id: 'puzzle_3',
+        title: 'Grundreihenmatt (Back Rank Mate)',
+        fen: '6k1/5ppp/8/8/8/8/4QPPP/6K1 w - - 0 1',
+        solution: ['Qe8#', 'e2e8'],
+        difficulty: 'Einfach'
+    }
+];
+
+// GET /api/puzzles (Daily Chess Tactics - SOLUTIONS NEVER RETURNED TO CLIENT - Fix F6)
 app.get(['/api/puzzles', '/api/daily-puzzle', '/api/tactics'], (req, res) => {
-    const samplePuzzles = [
-        {
-            id: 'puzzle_1',
-            title: 'Matt in 2 Zügen',
-            fen: 'r1bqkb1r/pppp1ppp/2n5/4p3/2B1n3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 4',
-            solution: ['Bxf7+', 'Ke7', 'd4'],
-            difficulty: 'Mittel'
-        },
-        {
-            id: 'puzzle_2',
-            title: 'Dame gewinnen (Gabel)',
-            fen: 'r1bqk2r/ppppbppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQ1RK1 b kq - 5 4',
-            solution: ['Nxe4', 'Re1', 'd5'],
-            difficulty: 'Leicht'
-        }
-    ];
+    const safePuzzles = SERVER_PUZZLES.map(p => ({
+        id: p.id,
+        title: p.title,
+        fen: p.fen,
+        difficulty: p.difficulty
+    }));
     res.json({
         success: true,
-        puzzles: samplePuzzles
+        puzzles: safePuzzles
     });
 });
 
-// GET /api/bans (Sanitized Ban overview)
+// POST /api/puzzles/verify (Server-side move verification - Fix F6)
+app.post(['/api/puzzles/verify', '/api/verify-puzzle'], express.json(), (req, res) => {
+    const { puzzleId, move, moves } = req.body || {};
+    const puzzle = SERVER_PUZZLES.find(p => p.id === puzzleId);
+    if (!puzzle) {
+        return res.status(404).json({ success: false, error: 'Rätsel nicht gefunden' });
+    }
+
+    const submittedMoves = Array.isArray(moves) ? moves : (move ? [move] : []);
+    if (!submittedMoves.length) {
+        return res.status(400).json({ success: false, error: 'Kein Zug übermittelt' });
+    }
+
+    const norm = (str) => String(str || '').trim().toLowerCase().replace(/[+#x=]/g, '');
+    const userIndex = submittedMoves.length - 1;
+    if (userIndex >= puzzle.solution.length) {
+        return res.json({ success: true, correct: true, completed: true, message: 'Rätsel bereits gelöst!' });
+    }
+
+    const expected = puzzle.solution[userIndex];
+    const userMove = submittedMoves[userIndex];
+    const isCorrect = norm(userMove) === norm(expected) || String(userMove).trim() === String(expected).trim();
+
+    if (!isCorrect) {
+        return res.json({
+            success: true,
+            correct: false,
+            completed: false,
+            message: '❌ Das war nicht der beste Zug. Versuche es erneut!'
+        });
+    }
+
+    const isDone = userIndex >= puzzle.solution.length - 1;
+    const opponentReply = (!isDone && puzzle.solution[userIndex + 1]) ? puzzle.solution[userIndex + 1] : null;
+
+    res.json({
+        success: true,
+        correct: true,
+        completed: isDone,
+        opponentResponse: opponentReply,
+        message: isDone ? '🎉 Hervorragend! Rätsel erfolgreich gelöst!' : '✅ Richtig! Weiter so!'
+    });
+});
+
+// GET /api/bans (Sanitized Ban overview without private email or user data - Fix F2)
 app.get('/api/bans', (req, res) => {
     res.json({
         success: true,
-        bannedPlayersCount: bannedPlayers.size,
-        bannedIPsCount: bannedIPs.size,
-        supportEmail: "blockcom130@gmail.com",
+        status: "active",
+        supportContact: "In-App Support-Ticket-System",
         unbanAppealUrl: "/#unban"
     });
 });
@@ -3877,14 +4364,19 @@ wss.on('connection', function(ws, req) {
 
             if (data.type === 'login_attempt') {
                 const connIP = ws.clientIP || clientIP || '127.0.0.1';
-                if (isAuthLockedOut(connIP)) {
+                let { playerName, password, uid, firebaseToken } = data;
+                if (playerName) {
+                    playerName = sanitizePlayerName(playerName);
+                }
+                const wsBucket = firebaseToken ? 'ws_firebase_login' : 'ws_password_login';
+                const lockoutSec = getAuthLockoutRemaining(wsBucket, connIP, playerName || '');
+                if (lockoutSec > 0) {
                     return ws.send(JSON.stringify({
                         type: 'login_error',
-                        text: 'Zu viele fehlgeschlagene Anmeldeversuche. Bitte warte 15 Minuten.'
+                        text: `Zu viele fehlgeschlagene Anmeldeversuche. Bitte warte ${lockoutSec} Sekunden.`
                     }));
                 }
 
-                let { playerName, password, uid, firebaseToken } = data;
                 let isFirebaseVerified = false;
                 let verifiedEmail = null;
                 let verifiedUid = null;
@@ -3894,7 +4386,7 @@ wss.on('connection', function(ws, req) {
                 if (firebaseToken) {
                     const decodedToken = await verifyFirebaseTokenSecurely(firebaseToken);
                     if (!decodedToken) {
-                        recordAuthFailure(connIP);
+                        recordAuthFailure(wsBucket, connIP, playerName || '');
                         return ws.send(JSON.stringify({
                             type: 'login_error',
                             text: 'Ungültiges oder abgelaufenes Firebase-Token. Bitte melde dich erneut an.'
@@ -3999,7 +4491,7 @@ wss.on('connection', function(ws, req) {
                         } else if (isFirebaseVerified && verifiedUid && isVerifiedEmailFlag && user.email && verifiedEmail && user.email.toLowerCase() === verifiedEmail.toLowerCase()) {
                             user.uid = verifiedUid;
                         } else if (!isFirebaseVerified || verifiedUid !== user.uid) {
-                            recordAuthFailure(connIP);
+                            recordAuthFailure(wsBucket, connIP, playerName || '');
                             return ws.send(JSON.stringify({ 
                                 type: 'login_error', 
                                 text: 'Dieser Account ist mit Firebase geschützt. Bitte melde dich über dein verifiziertes Firebase/Google-Konto an!' 
@@ -4010,7 +4502,7 @@ wss.on('connection', function(ws, req) {
                             user.uid = verifiedUid;
                         } else {
                             if (!password || !user.password || !verifyPassword(password, user.password)) {
-                                recordAuthFailure(connIP);
+                                recordAuthFailure(wsBucket, connIP, playerName || '');
                                 return ws.send(JSON.stringify({ type: 'login_error', text: 'Falsches Passwort für diesen Spielernamen!' }));
                             }
                             if (!user.password.includes(':')) {
@@ -4018,7 +4510,7 @@ wss.on('connection', function(ws, req) {
                             }
                         }
                     }
-                    clearAuthFailures(connIP);
+                    clearAuthFailures(wsBucket, connIP, playerName || '');
                     user.last_login = new Date();
                     if (isFirebaseVerified && verifiedUid) user.uid = verifiedUid;
                     if (verifiedEmail) user.email = verifiedEmail;
@@ -4082,12 +4574,24 @@ wss.on('connection', function(ws, req) {
                     piece_theme: user.piece_theme || 'classic',
                     achievements: user.achievements || []
                 }));
+
+                // Push friends list immediately on login
+                const loginFriends = Array.isArray(user.friends) ? user.friends : [];
+                const loginFriendsStatus = loginFriends.map(f => {
+                    let isOnline = false;
+                    for (let client of wss.clients) {
+                        if (client.playerName === f && client.readyState === WebSocket.OPEN) isOnline = true;
+                    }
+                    return { name: f, online: isOnline };
+                });
+                ws.send(JSON.stringify({ type: 'friends_list', friends: loginFriendsStatus }));
+
                 console.log(`✅ Login & Profil bereit: ${playerName} (Rolle: ${ws.role}, Admin: ${isActualAdmin})`);
                 return; 
             }
 
             if (data.type === 'change_username' || data.type === 'update_username') {
-                const newUsername = String(data.newUsername || data.username || "").trim();
+                const newUsername = sanitizePlayerName(data.newUsername || data.username || "");
                 const uid = ws.uid || '';
                 const oldUsername = ws.playerName;
                 
@@ -4233,7 +4737,7 @@ wss.on('connection', function(ws, req) {
                 ws.send(JSON.stringify({
                     type: 'admin_tickets_update',
                     tickets: globalSupportTickets.filter(t => t.status !== 'Entbannt' && t.status !== 'Abgelehnt' && t.status !== 'Geschlossen'),
-                    supportEmail: 'blockcom130@gmail.com'
+                    supportContact: 'In-App Support-Ticket-System'
                 }));
                 return;
             }
@@ -4268,7 +4772,6 @@ wss.on('connection', function(ws, req) {
                     user: String(data.user || ws.playerName || 'Gesperrter Spieler').trim().slice(0, 100),
                     contact: String(data.contact || data.user || 'Unbekannt').trim().slice(0, 100),
                     clientIP: detectedIP,
-                    email: 'blockcom130@gmail.com',
                     text: cleanText,
                     banReason: String(data.banReason || 'IP/Account Gesperrt').trim().slice(0, 200),
                     status: 'Offen',
@@ -4567,10 +5070,9 @@ wss.on('connection', function(ws, req) {
                 
                 ws.send(JSON.stringify({
                     type: 'player_profile_data',
-                    name: uname,
+                    name: sanitizePlayerName(uname),
                     elo: user.elo || 1200,
                     level: user.level || 1,
-                    role: user.role || 'Gast',
                     wins: user.wins || 0,
                     recentWins
                 }));
@@ -4686,9 +5188,9 @@ wss.on('connection', function(ws, req) {
 
             // --- FEATURE 3: Freunde & Einladungen ---
             if (data.type === 'create_open_challenge') {
-                const creator = ws.playerName || "Gast";
-                const timeControl = data.timeControl || '10';
-                const color = data.color || 'random';
+                const creator = sanitizePlayerName(ws.playerName) || "Gast";
+                const timeControl = String(data.timeControl || '10').replace(/[<>"'&/\\`]/g, '').slice(0, 15) || '10';
+                const color = ['white', 'black', 'random'].includes(data.color) ? data.color : 'random';
                 const chId = "ch_" + Math.random().toString(36).substr(2, 8);
                 const creatorElo = (userDB[creator] && userDB[creator].elo) ? userDB[creator].elo : 1200;
 
@@ -4781,7 +5283,7 @@ wss.on('connection', function(ws, req) {
                         tSecs = (parseInt(tc) || 10) * 60;
                     }
                 } else {
-                    tSecs = Infinity;
+                    tSecs = null;
                 }
 
                 activeRoomStates.set(roomID, {
@@ -4789,6 +5291,7 @@ wss.on('connection', function(ws, req) {
                     pot: 0,
                     board: null,
                     turn: 'white',
+                    moves: [],
                     isGhostMatch: false,
                     whitePlayer: creatorColor === 'white' ? challenge.creator : challenger,
                     blackPlayer: creatorColor === 'black' ? challenge.creator : challenger,
@@ -4823,35 +5326,72 @@ wss.on('connection', function(ws, req) {
                 return;
             }
 
-            if (data.type === 'add_friend') {
-                const uname = ws.playerName;
-                if (!uname || !userDB[uname]) return;
-                const fname = data.friend;
-                if (!userDB[fname]) return; // Freund existiert nicht
-
-                if (!userDB[uname].friends) userDB[uname].friends = [];
-                if (!userDB[uname].friends.includes(fname)) {
-                    userDB[uname].friends.push(fname);
-                    saveAll(uname);
-                }
-                
-                // Schicke aktuelle Freundesliste zurück
-                const friendsStatus = userDB[uname].friends.map(f => {
+            function buildFriendsStatus(uname) {
+                const list = (userDB[uname] && Array.isArray(userDB[uname].friends)) ? userDB[uname].friends : [];
+                return list.map(f => {
                     let isOnline = false;
                     for (let client of wss.clients) {
                         if (client.playerName === f && client.readyState === WebSocket.OPEN) isOnline = true;
                     }
                     return { name: f, online: isOnline };
                 });
-                ws.send(JSON.stringify({ type: 'friends_list', friends: friendsStatus }));
+            }
+
+            if (data.type === 'get_friends') {
+                const uname = ws.playerName;
+                if (!uname || !userDB[uname]) {
+                    ws.send(JSON.stringify({ type: 'friends_list', friends: [] }));
+                    return;
+                }
+                ws.send(JSON.stringify({ type: 'friends_list', friends: buildFriendsStatus(uname) }));
+                return;
+            }
+
+            if (data.type === 'remove_friend') {
+                const uname = ws.playerName;
+                const fname = String(data.friend || '').trim();
+                if (!uname || !userDB[uname] || !fname) return;
+                if (!Array.isArray(userDB[uname].friends)) userDB[uname].friends = [];
+                userDB[uname].friends = userDB[uname].friends.filter(f => f.toLowerCase() !== fname.toLowerCase());
+                saveAll(uname);
+                ws.send(JSON.stringify({ type: 'friends_list', friends: buildFriendsStatus(uname) }));
+                return;
+            }
+
+            if (data.type === 'add_friend') {
+                const uname = ws.playerName;
+                if (!uname || !userDB[uname]) {
+                    ws.send(JSON.stringify({ type: 'in_app_notification', title: 'Freundesliste', message: 'Bitte melde dich zuerst an, um Freunde hinzuzufügen.', level: 'warning' }));
+                    return;
+                }
+                const fname = String(data.friend || '').trim();
+                if (!fname) return;
+                if (fname.toLowerCase() === uname.toLowerCase()) {
+                    ws.send(JSON.stringify({ type: 'in_app_notification', title: 'Freundesliste', message: 'Du kannst dich nicht selbst als Freund hinzufügen.', level: 'warning' }));
+                    return;
+                }
+                const targetKey = userDB[fname] ? fname : Object.keys(userDB).find(k => k.toLowerCase() === fname.toLowerCase());
+                if (!targetKey || !userDB[targetKey]) {
+                    ws.send(JSON.stringify({ type: 'in_app_notification', title: 'Freundesliste', message: `Spieler "${fname}" wurde nicht gefunden.`, level: 'warning' }));
+                    return;
+                }
+
+                if (!Array.isArray(userDB[uname].friends)) userDB[uname].friends = [];
+                if (!userDB[uname].friends.includes(targetKey)) {
+                    userDB[uname].friends.push(targetKey);
+                    saveAll(uname);
+                }
+
+                ws.send(JSON.stringify({ type: 'friends_list', friends: buildFriendsStatus(uname) }));
+                ws.send(JSON.stringify({ type: 'in_app_notification', title: 'Freund hinzugefügt', message: `${targetKey} ist jetzt in deiner Freundesliste.`, level: 'success' }));
                 return;
             }
 
             if (data.type === 'challenge_friend') {
-                const targetName = data.friend;
+                const targetName = String(data.friend || '').trim();
                 let targetWs = null;
                 for (let client of wss.clients) {
-                    if (client.playerName === targetName && client.readyState === WebSocket.OPEN) {
+                    if (client.playerName && client.playerName.toLowerCase() === targetName.toLowerCase() && client.readyState === WebSocket.OPEN) {
                         targetWs = client;
                         break;
                     }
@@ -4864,17 +5404,29 @@ wss.on('connection', function(ws, req) {
                     targetWs.color = 'black';
                     ws.opponentName = targetWs.playerName;
                     targetWs.opponentName = ws.playerName;
-                    
+                    ws.isGhostMatch = false;
+                    targetWs.isGhostMatch = false;
+
                     activeRoomStates.set(roomID, {
+                        chess: new Chess(),
+                        pot: 0,
                         board: null,
                         turn: 'white',
-                        isGhostMatch: ws.isGhostMatch || false,
+                        moves: [],
+                        isGhostMatch: false,
                         whitePlayer: ws.playerName,
-                        blackPlayer: targetWs.playerName
+                        blackPlayer: targetWs.playerName,
+                        timeControl: '10',
+                        timeWhite: 600,
+                        timeBlack: 600,
+                        timeInc: 0,
+                        gameOver: false
                     });
 
-                    ws.send(JSON.stringify({ type: 'gameStart', room: roomID, color: 'white', opponent: ws.opponentName }));
-                    targetWs.send(JSON.stringify({ type: 'gameStart', room: roomID, color: 'black', opponent: targetWs.opponentName }));
+                    ws.send(JSON.stringify({ type: 'gameStart', room: roomID, color: 'white', opponent: ws.opponentName, timeControl: '10', timeWhite: 600, timeBlack: 600 }));
+                    targetWs.send(JSON.stringify({ type: 'gameStart', room: roomID, color: 'black', opponent: targetWs.opponentName, timeControl: '10', timeWhite: 600, timeBlack: 600 }));
+                } else {
+                    ws.send(JSON.stringify({ type: 'in_app_notification', title: 'Herausforderung', message: `Spieler "${targetName}" ist aktuell nicht online.`, level: 'warning' }));
                 }
                 return;
             }
@@ -4882,19 +5434,49 @@ wss.on('connection', function(ws, req) {
             // --- FEATURE 4: Match History ---
             if (data.type === 'get_match_history') {
                 const uname = ws.playerName;
-                if (!uname || !firestoreDb) return;
+                if (!uname) return;
+                if (!firestoreDb) {
+                    ws.send(JSON.stringify({ type: 'match_history', games: [] }));
+                    return;
+                }
                 try {
-                    const snapshot1 = await firestoreDb.collection('games').where('white', '==', uname).orderBy('timestamp', 'desc').limit(10).get();
-                    const snapshot2 = await firestoreDb.collection('games').where('black', '==', uname).orderBy('timestamp', 'desc').limit(10).get();
-                    
-                    let games = [];
-                    snapshot1.forEach(d => games.push(d.data()));
-                    snapshot2.forEach(d => games.push(d.data()));
-                    games.sort((a,b) => b.timestamp - a.timestamp);
-                    
-                    ws.send(JSON.stringify({ type: 'match_history', games: games.slice(0, 10) }));
+                    const [s1, s2, s3, s4] = await Promise.all([
+                        firestoreDb.collection('games').where('white_player', '==', uname).limit(20).get().catch(() => null),
+                        firestoreDb.collection('games').where('black_player', '==', uname).limit(20).get().catch(() => null),
+                        firestoreDb.collection('games').where('white', '==', uname).limit(20).get().catch(() => null),
+                        firestoreDb.collection('games').where('black', '==', uname).limit(20).get().catch(() => null)
+                    ]);
+
+                    const seen = new Map();
+                    [s1, s2, s3, s4].forEach(snap => {
+                        if (!snap || snap.empty) return;
+                        snap.forEach(doc => {
+                            if (seen.has(doc.id)) return;
+                            const d = doc.data() || {};
+                            const white = d.white_player || d.white || 'Weiß';
+                            const black = d.black_player || d.black || 'Schwarz';
+                            seen.set(doc.id, {
+                                id: doc.id,
+                                ...d,
+                                white,
+                                black,
+                                white_player: white,
+                                black_player: black
+                            });
+                        });
+                    });
+
+                    const games = Array.from(seen.values());
+                    games.sort((a, b) => {
+                        const ta = typeof a.timestamp === 'number' ? a.timestamp : (Date.parse(a.timestamp) || 0);
+                        const tb = typeof b.timestamp === 'number' ? b.timestamp : (Date.parse(b.timestamp) || 0);
+                        return tb - ta;
+                    });
+
+                    ws.send(JSON.stringify({ type: 'match_history', games: games.slice(0, 15) }));
                 } catch (e) {
-                    console.error(e);
+                    console.error("get_match_history error:", e);
+                    ws.send(JSON.stringify({ type: 'match_history', games: [] }));
                 }
                 return;
             }
@@ -4957,6 +5539,7 @@ wss.on('connection', function(ws, req) {
                                 pot: 0,
                                 board: null,
                                 turn: 'white',
+                                moves: [],
                                 isGhostMatch: true,
                                 whitePlayer: ws.playerName || "Gast",
                                 blackPlayer: botName,
@@ -4996,6 +5579,8 @@ wss.on('connection', function(ws, req) {
 
             if (data.type === 'resign') {
                 const room = data.room || "global";
+                const rState = activeRoomStates.get(room);
+                if (rState) rState.gameOver = true;
                 const loser = currentName;
                 const winner = ws.opponentName || null;
 
@@ -5110,6 +5695,7 @@ wss.on('connection', function(ws, req) {
                     }
                     const targetRoom = data.room || ws.room || "global";
                     let roomState = activeRoomStates.get(targetRoom);
+                    if (roomState && roomState.gameOver) return;
                     
                     if (roomState && roomState.chess) {
                         // === RUST ANTI-CHEAT ENGINE ===
@@ -5118,12 +5704,16 @@ wss.on('connection', function(ws, req) {
                         const toSq = cols[data.tc] + (8 - data.tr);
                         
                         try {
-                            const move = roomState.chess.move({ from: fromSq, to: toSq, promotion: 'q' });
+                            const promoChoice = (data.promotion && ['q', 'r', 'b', 'n'].includes(String(data.promotion).toLowerCase())) ? String(data.promotion).toLowerCase() : 'q';
+                            const move = roomState.chess.move({ from: fromSq, to: toSq, promotion: promoChoice });
                             if (!move) {
                                 throw new Error("Illegal Move");
                             }
-                            console.log(`🛡️ [RUST ENGINE] Zug genehmigt: ${fromSq} -> ${toSq}`);
+                            if (!Array.isArray(roomState.moves)) roomState.moves = [];
+                            roomState.moves.push(move.san || (fromSq + toSq));
+                            console.log(`🛡️ [RUST ENGINE] Zug genehmigt: ${fromSq} -> ${toSq}${move.promotion ? '=' + move.promotion.toUpperCase() : ''}`);
                             data.fen = roomState.chess.fen();
+                            data.promotion = move.promotion || data.promotion;
                         } catch (e) {
                             console.log(`🛡️ [RUST ENGINE] ILLEGALER ZUG BLOCKIERT! ${fromSq} -> ${toSq} von ${ws.playerName}`);
                             ws.send(JSON.stringify({ type: 'chat', text: '🛡️ [RUST ANTI-CHEAT] Manipulierter oder ungültiger Zug blockiert!', system: true, lobby: targetRoom }));
@@ -5168,6 +5758,9 @@ wss.on('connection', function(ws, req) {
                             move: data.move,
                             board: data.board,
                             turn: data.turn,
+                            fen: data.fen,
+                            promotion: data.promotion,
+                            lastMove: data.lastMove || (data.fr !== undefined ? { fr: data.fr, fc: data.fc, tr: data.tr, tc: data.tc } : null),
                             room: targetRoom
                         }, targetRoom);
                     }
@@ -5223,6 +5816,7 @@ wss.on('connection', function(ws, req) {
                 const todayStr = new Date().toISOString().split('T')[0];
                 const alreadySolved = !!(user && user.last_puzzle_solved === todayStr);
 
+                // Never leak puzzle solution to client (Fix F6)
                 ws.send(JSON.stringify({
                     type: 'daily_puzzle',
                     puzzle: {
@@ -5230,8 +5824,7 @@ wss.on('connection', function(ws, req) {
                         title: puzzle.title,
                         description: puzzle.description,
                         fen: puzzle.fen,
-                        color: puzzle.color,
-                        solution: puzzle.solution
+                        color: puzzle.color
                     },
                     alreadySolved: alreadySolved
                 }));
@@ -5244,20 +5837,22 @@ wss.on('connection', function(ws, req) {
                 const dayIndex = new Date().getDate() % TACTICAL_PUZZLES.length;
                 const activePuzzle = TACTICAL_PUZZLES[dayIndex];
 
-                // Verify submitted move coordinates when solution is supplied
-                if (data.solution && typeof data.solution === 'object') {
-                    const sol = data.solution;
+                // Server-authoritative move validation (supports data.move or data.solution)
+                const submittedMove = (data.move && typeof data.move === 'object') ? data.move : ((data.solution && typeof data.solution === 'object') ? data.solution : null);
+                if (submittedMove) {
                     const expected = activePuzzle.solution;
-                    if (Number(sol.fr) !== expected.fr || Number(sol.fc) !== expected.fc || Number(sol.tr) !== expected.tr || Number(sol.tc) !== expected.tc) {
+                    if (Number(submittedMove.fr) !== expected.fr || Number(submittedMove.fc) !== expected.fc || Number(submittedMove.tr) !== expected.tr || Number(submittedMove.tc) !== expected.tc) {
                         return ws.send(JSON.stringify({
-                            type: 'puzzle_info',
-                            text: '❌ Falscher Zug für das heutige Rätsel.'
+                            type: 'puzzle_wrong',
+                            text: '❌ Falscher Zug! Versuche es noch einmal.',
+                            fen: activePuzzle.fen
                         }));
                     }
                 } else {
                     return ws.send(JSON.stringify({
-                        type: 'puzzle_info',
-                        text: '❌ Rätsel-Lösung konnte nicht verifiziert werden.'
+                        type: 'puzzle_wrong',
+                        text: '❌ Kein gültiger Rätsel-Zug übermittelt.',
+                        fen: activePuzzle.fen
                     }));
                 }
 
@@ -5410,9 +6005,9 @@ wss.on('connection', function(ws, req) {
             }
 
             if (data.type === 'join_room' || data.type === 'join_tournament') {
-                const roomName = String(data.room || data.tournamentName || "global_tournament").trim().slice(0, 40);
+                const roomName = String(data.room || data.tournamentName || "global_tournament").replace(/[<>"'&/\\`]/g, '').trim().slice(0, 40);
                 let playerName = ws.playerName || "Gast";
-                const requestedName = String(data.playerName || "").trim();
+                const requestedName = sanitizePlayerName(data.playerName || "");
                 if ((!ws.playerName || ws.playerName.startsWith('Spieler_')) && requestedName && requestedName.length >= 3 && requestedName.length <= 25) {
                     const reqLower = requestedName.toLowerCase();
                     if (!RESERVED_USERNAMES.has(reqLower) && !userDB[requestedName] && (typeof isNameAllowed !== 'function' || isNameAllowed(requestedName))) {
@@ -5449,16 +6044,22 @@ wss.on('connection', function(ws, req) {
                     if (timeControl !== 'unlimited') {
                         if (timeControl.includes('+')) {
                             const pts = timeControl.split('+');
-                            tSecs = parseInt(pts[0]) * 60;
-                            tInc = parseInt(pts[1]);
+                            tSecs = (parseInt(pts[0]) || 10) * 60;
+                            tInc = parseInt(pts[1]) || 0;
                         } else {
-                            tSecs = parseInt(timeControl) * 60;
+                            tSecs = (parseInt(timeControl) || 10) * 60;
                         }
+                    } else {
+                        tSecs = null;
                     }
 
                     activeRoomStates.set(roomName, {
+                        chess: new Chess(),
+                        pot: 0,
                         board: null,
                         turn: 'white',
+                        moves: [],
+                        isGhostMatch: false,
                         whitePlayer: opponent.playerName || "Spieler 1",
                         blackPlayer: ws.playerName || "Spieler 2",
                         timeControl: timeControl,
@@ -5473,8 +6074,9 @@ wss.on('connection', function(ws, req) {
                         room: roomName,
                         color: 'black',
                         opponent: ws.opponentName,
-                        
-                        timeControl: timeControl
+                        timeControl: timeControl,
+                        timeWhite: tSecs,
+                        timeBlack: tSecs
                     }));
 
                     opponent.send(JSON.stringify({
@@ -5482,8 +6084,9 @@ wss.on('connection', function(ws, req) {
                         room: roomName,
                         color: 'white',
                         opponent: opponent.opponentName,
-                        
-                        timeControl: timeControl
+                        timeControl: timeControl,
+                        timeWhite: tSecs,
+                        timeBlack: tSecs
                     }));
 
                     broadcastGlobalMessage({
@@ -5537,6 +6140,7 @@ wss.on('connection', function(ws, req) {
                                 pot: 0,
                                 board: null,
                                 turn: 'white',
+                                moves: [],
                                 isGhostMatch: true,
                                 whitePlayer: ws.playerName || "Gast",
                                 blackPlayer: botName,
@@ -5816,11 +6420,11 @@ wss.on('connection', function(ws, req) {
 
                 if (firestoreDb) {
                     try {
-                        /* replaced const */
                         const finalBoard = roomState ? roomState.board : ws.lastBoardState;
                         const whiteP = roomState ? roomState.whitePlayer : (ws.color === 'white' ? ws.playerName : ws.opponentName) || 'Weiß';
                         const blackP = roomState ? roomState.blackPlayer : (ws.color === 'black' ? ws.playerName : ws.opponentName) || 'Schwarz';
                         const winnerName = data.winner || (data.text && data.text.includes('Weiß') ? whiteP : data.text && data.text.includes('Schwarz') ? blackP : 'Remis');
+                        let base64Snapshot = null;
 
                         if (finalBoard && createCanvas) {
                             const canvas = createCanvas(400, 400);
@@ -5838,19 +6442,23 @@ wss.on('connection', function(ws, req) {
                                     }
                                 });
                             });
-                            const base64Snapshot = canvas.toDataURL("image/png");
-
-                            await firestoreDb.collection('games').add({
-                                room_id: targetRoom,
-                                white_player: whiteP,
-                                black_player: blackP,
-                                winner: winnerName,
-                                reason: data.text || data.reason || 'Spiel beendet',
-                                snapshot: base64Snapshot,
-                                timestamp: new Date().toISOString()
-                            });
-                            console.log(`📸 FOTO-SNAPSHOT: Erfolgreich in Google Firebase unter 'games' gespeichert für Raum ${targetRoom}!`);
+                            base64Snapshot = canvas.toDataURL("image/png");
                         }
+
+                        await firestoreDb.collection('games').add({
+                            room_id: targetRoom,
+                            white: whiteP,
+                            black: blackP,
+                            white_player: whiteP,
+                            black_player: blackP,
+                            winner: winnerName,
+                            reason: data.text || data.reason || 'Spiel beendet',
+                            moves: Array.isArray(roomState?.moves) ? roomState.moves : [],
+                            pgn: roomState?.chess ? roomState.chess.pgn() : '',
+                            snapshot: base64Snapshot,
+                            timestamp: new Date().toISOString()
+                        });
+                        console.log(`📸 SPIEL-HISTORIE: Erfolgreich in Google Firebase unter 'games' gespeichert für Raum ${targetRoom}!`);
                     } catch (snapErr) {
                         console.error("Fehler beim Erstellen/Speichern des Spiel-Snapshots:", snapErr);
                     }
@@ -5897,7 +6505,7 @@ server.listen(PORT, '0.0.0.0', async function() {
         console.error("❌ Fehler beim Laden der IP-Bans:", err);
     }
 
-    if (typeof startBackupScheduler === 'function') {
+    if (typeof startBackupScheduler === 'function' && (await verifyFirestoreAdminAccess())) {
         startBackupScheduler(firestoreDb);
     }
 

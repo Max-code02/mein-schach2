@@ -39,8 +39,9 @@ async function runBackup(db) {
         fs.mkdirSync(backupDir);
     }
     try {
-        if (!db) {
-            console.error("❌ Firestore DB instance not provided to runBackup");
+        const activeDb = (typeof global !== 'undefined' && 'firestoreDb' in global) ? global.firestoreDb : db;
+        if (!activeDb) {
+            console.log("ℹ️ [BACKUP] Firestore Admin-Sync nicht aktiv – Remote-Backup übersprungen.");
             return;
         }
         
@@ -52,11 +53,15 @@ async function runBackup(db) {
             console.log(`⏳ [DB] Lade Collection: ${tableName}...`);
             let data = [];
             try {
-                const snapshot = await db.collection(tableName).get();
+                const snapshot = await activeDb.collection(tableName).get();
                 snapshot.forEach(doc => {
                     data.push({ id: doc.id, ...doc.data() });
                 });
             } catch (err) {
+                if (err && (err.code === 7 || /PERMISSION_DENIED|Missing or insufficient permissions/i.test(String(err.message || '')))) {
+                    console.log(`ℹ️ [BACKUP] ${tableName} übersprungen (keine Firestore Admin-Berechtigung).`);
+                    return;
+                }
                 console.error(`❌ [DB] Fehler bei ${tableName}:`, err.message);
                 continue;
             }

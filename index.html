@@ -228,15 +228,7 @@
 .checkmate-btn:hover { background: #d35400; }
     </style>
 
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js')
-        .then(reg => console.log('Service Worker registriert!', reg))
-        .catch(err => console.log('Service Worker Fehler:', err));
-    });
-  }
-</script>
+
 </head>
 <body>
     <!-- Extreme Animated Background -->
@@ -251,47 +243,47 @@
     <!-- Chess.com Style Full Layout -->
     <div class="chesscom-layout" id="chesscom-layout">
         <!-- Backdrop for mobile drawer -->
-        <div id="sidebar-backdrop" class="sidebar-backdrop" onclick="closeMobileSidebar()"></div>
+        <div id="sidebar-backdrop" class="sidebar-backdrop" data-action="closeMobileSidebar"></div>
 
         <!-- ♟️ CHESS.COM COLLAPSIBLE SIDEBAR -->
         <nav id="chesscom-sidebar" class="chesscom-sidebar">
             <div class="sidebar-top-brand">
-                <div class="sidebar-brand-link" onclick="navSelectTab('tab-game')">
+                <div class="sidebar-brand-link" data-action="navSelectTab" data-arg1="tab-game">
                     <span class="sidebar-logo">♟️</span>
                     <span class="sidebar-title">Schach Live</span>
                 </div>
-                <button id="sidebarCollapseToggle" class="sidebar-collapse-btn" onclick="toggleSidebarCollapse()" title="Seitenleiste ein-/ausklappen">
+                <button id="sidebarCollapseToggle" class="sidebar-collapse-btn" data-action="toggleSidebarCollapse" title="Seitenleiste ein-/ausklappen">
                     <span id="sidebarCollapseIcon">«</span>
                 </button>
             </div>
 
             <div class="sidebar-nav-items">
-                <button class="sidebar-nav-btn active" data-tooltip="Spielen & Spielmodus" onclick="openGameModeModal()">
+                <button class="sidebar-nav-btn active" data-tooltip="Spielen & Spielmodus" data-action="openGameModeModal">
                     <span class="nav-icon">♟️</span>
                     <span class="nav-label">Spielen</span>
                 </button>
-                <button class="sidebar-nav-btn" data-tooltip="Gegen KI-Bot" onclick="startBotMatchFromNav()">
+                <button class="sidebar-nav-btn" data-tooltip="Gegen KI-Bot" data-action="startBotMatchFromNav">
                     <span class="nav-icon">🤖</span>
                     <span class="nav-label">KI-Gegner</span>
                 </button>
-                <button class="sidebar-nav-btn" data-tooltip="Live-Chat & Lobbies" onclick="navSelectTab('tab-chat')">
+                <button class="sidebar-nav-btn" data-tooltip="Live-Chat & Lobbies" data-action="navSelectTab" data-arg1="tab-chat">
                     <span class="nav-icon">💬</span>
                     <span class="nav-label">Live-Chat</span>
                 </button>
-                <button class="sidebar-nav-btn" data-tooltip="Taktik-Rätsel" onclick="openPuzzleModal()">
+                <button class="sidebar-nav-btn" data-tooltip="Taktik-Rätsel" data-action="openPuzzleModal">
                     <span class="nav-icon">🧩</span>
                     <span class="nav-label">Rätsel</span>
                     <span class="nav-badge">Neu</span>
                 </button>
-                <button class="sidebar-nav-btn" data-tooltip="Globale Rangliste" onclick="openLeaderboardModal()">
+                <button class="sidebar-nav-btn" data-tooltip="Globale Rangliste" data-action="openLeaderboardModal">
                     <span class="nav-icon">🏆</span>
                     <span class="nav-label">Rangliste</span>
                 </button>
-                <button class="sidebar-nav-btn" data-tooltip="Casino & Wetten" onclick="openCasinoModal()">
+                <button class="sidebar-nav-btn" data-tooltip="Casino & Wetten" data-action="openCasinoModal">
                     <span class="nav-icon">🎰</span>
                     <span class="nav-label">Casino</span>
                 </button>
-                <button class="sidebar-nav-btn" data-tooltip="Partie-Analyse & KI" onclick="openAnalysisModal()">
+                <button class="sidebar-nav-btn" data-tooltip="Partie-Analyse & KI" data-action="openAnalysisModal">
                     <span class="nav-icon">📊</span>
                     <span class="nav-label">Analyse</span>
                 </button>
@@ -299,14 +291,14 @@
                     <span class="nav-icon">👑</span>
                     <span class="nav-label">Admin-Portal</span>
                 </a>
-                <button class="sidebar-nav-btn" data-tooltip="Optionen & Varianten" onclick="openFeaturesModal()">
+                <button class="sidebar-nav-btn" data-tooltip="Optionen & Varianten" data-action="openFeaturesModal">
                     <span class="nav-icon">⚙️</span>
                     <span class="nav-label">Optionen</span>
                 </button>
             </div>
 
             <div class="sidebar-footer">
-                <div class="sidebar-user-card" onclick="openProfileModal()" title="Profil & Medaillen ansehen">
+                <div class="sidebar-user-card" data-action="openProfileModal" title="Profil & Medaillen ansehen">
                     <div class="sidebar-user-avatar">
                         <span id="sidebar-avatar-icon">👤</span>
                     </div>
@@ -315,7 +307,7 @@
                         <div id="sidebar-user-rating" class="sidebar-user-rating">1200 Elo</div>
                     </div>
                 </div>
-                <button id="sidebar-auth-btn" class="glass-btn primary" style="width: 100%; padding: 8px; font-size: 0.85em; font-weight: bold; border-radius: 6px; cursor: pointer;" onclick="openAuthModal()">
+                <button id="sidebar-auth-btn" class="glass-btn primary" style="width: 100%; padding: 8px; font-size: 0.85em; font-weight: bold; border-radius: 6px; cursor: pointer;" data-action="openAuthModal">
                     🔐 Anmelden
                 </button>
             </div>
@@ -326,30 +318,30 @@
             <!-- Top Navigation Header -->
             <header class="top-header">
                 <div style="display: flex; align-items: center; gap: 10px;">
-                    <button class="mobile-sidebar-toggle" onclick="toggleMobileSidebar()" aria-label="Menü öffnen">
+                    <button class="mobile-sidebar-toggle" data-action="toggleMobileSidebar" aria-label="Menü öffnen">
                         ☰
                     </button>
                     <div class="header-brand">
                         <span class="brand-logo" style="display: none;">♟️</span>
                         <span class="brand-title" style="display:flex; align-items:center; gap:8px; font-weight:800; font-size:1.2rem; letter-spacing:-0.4px;">Schach Live <span style="font-size: 0.65rem; background: rgba(52, 152, 219, 0.2); color: #3498db; border: 1px solid rgba(52, 152, 219, 0.4); padding: 2px 7px; border-radius: 10px; font-weight:600;">PRO</span></span>
-                        <div id="daily-streak" style="margin-left: 15px; background: rgba(231, 76, 60, 0.15); backdrop-filter: blur(2px); border: 1px solid #e74c3c; color: #e74c3c; padding: 3px 8px; border-radius: 12px; font-size: 0.8em; display: flex; align-items: center; gap: 4px; cursor: pointer; font-weight: bold;" title="Tägliche Serie" onclick="openFeaturesModal()">
+                        <div id="daily-streak" style="margin-left: 15px; background: rgba(231, 76, 60, 0.15); backdrop-filter: blur(2px); border: 1px solid #e74c3c; color: #e74c3c; padding: 3px 8px; border-radius: 12px; font-size: 0.8em; display: flex; align-items: center; gap: 4px; cursor: pointer; font-weight: bold;" title="Tägliche Serie" data-action="openFeaturesModal">
                             🔥 <span id="streak-count">1</span>
                         </div>
                     </div>
                 </div>
                 <div class="header-stats">
-                    <span class="status-badge"><span class="pulse-green">●</span> <span id="nav-server-status">Server Online</span></span>
+                    <span class="status-badge"><span style="color:#81b64c;font-weight:bold;">●</span> <span id="nav-server-status">Server Online</span></span>
                     <span class="status-badge">👥 <span id="nav-user-counter">1 Online</span></span>
-                    <span class="status-badge">⚡ <span id="nav-ping">-- ms</span></span>
+                    <span class="status-badge">⚡ <span id="nav-ping" style="font-variant-numeric: tabular-nums;">-- ms</span></span>
                 </div>
                 <div class="header-user-actions">
                     <a href="handy.html" class="glass-btn nav-btn" style="color: #2ecc71; text-decoration: none; display: flex; align-items: center; gap: 4px; font-weight: bold;">📱 Handy-Ansicht</a>
-                    <button id="navFocusToggle" onclick="toggleChessMode()" class="glass-btn nav-btn" style="color:#e74c3c;">🎯 Fokus</button>
-                    <button id="navThemeToggle" onclick="toggleAppTheme()" class="glass-btn nav-btn">🌙 Theme</button>
-                    <button id="navAuthBtn" onclick="openAuthModal()" class="glass-btn nav-btn primary">🔐 Einloggen / Registrieren</button>
+                    <button id="navFocusToggle" data-action="toggleChessMode" class="glass-btn nav-btn" style="color:#e74c3c;">🎯 Fokus</button>
+                    <button id="navThemeToggle" data-action="toggleAppTheme" class="glass-btn nav-btn">🌙 Theme</button>
+                    <button id="navAuthBtn" data-action="openAuthModal" class="glass-btn nav-btn primary">🔐 Einloggen / Registrieren</button>
                     <div id="navUserPill" style="display: none; align-items: center; gap: 8px; background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.15);">
                         <span id="navUserName" style="font-weight: bold; color: #f1c40f; font-size: 0.85em;">Gast</span>
-                        <button id="navLogoutBtn" onclick="logout()" class="glass-btn nav-btn danger" style="padding: 3px 8px; font-size: 0.75em;">Abmelden</button>
+                        <button id="navLogoutBtn" data-action="logout" class="glass-btn nav-btn danger" style="padding: 3px 8px; font-size: 0.75em;">Abmelden</button>
                     </div>
                 </div>
             </header>
@@ -364,7 +356,7 @@
             </p>
             
             <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
-                <button onclick="chooseDeviceSelection('mobile')" id="device-btn-mobile" class="glass-btn" style="display: flex; align-items: center; gap: 15px; padding: 14px 18px; border-radius: 12px; background: rgba(46, 204, 113, 0.15); border: 2px solid #2ecc71; color: white; cursor: pointer; text-align: left; transition: all 0.2s;">
+                <button data-action="chooseDeviceSelection" data-arg1="mobile" id="device-btn-mobile" class="glass-btn" style="display: flex; align-items: center; gap: 15px; padding: 14px 18px; border-radius: 12px; background: rgba(46, 204, 113, 0.15); border: 2px solid #2ecc71; color: white; cursor: pointer; text-align: left; transition: all 0.2s;">
                     <span style="font-size: 2.2rem;">📱</span>
                     <div style="flex: 1;">
                         <div style="font-weight: bold; font-size: 1.05rem; color: #2ecc71;">Handy / Smartphone</div>
@@ -373,7 +365,7 @@
                     <span style="font-size: 1.2rem; color: #2ecc71;">➔</span>
                 </button>
 
-                <button onclick="chooseDeviceSelection('pc')" id="device-btn-pc" class="glass-btn" style="display: flex; align-items: center; gap: 15px; padding: 14px 18px; border-radius: 12px; background: rgba(52, 152, 219, 0.15); border: 2px solid #3498db; color: white; cursor: pointer; text-align: left; transition: all 0.2s;">
+                <button data-action="chooseDeviceSelection" data-arg1="pc" id="device-btn-pc" class="glass-btn" style="display: flex; align-items: center; gap: 15px; padding: 14px 18px; border-radius: 12px; background: rgba(52, 152, 219, 0.15); border: 2px solid #3498db; color: white; cursor: pointer; text-align: left; transition: all 0.2s;">
                     <span style="font-size: 2.2rem;">💻</span>
                     <div style="flex: 1;">
                         <div style="font-weight: bold; font-size: 1.05rem; color: #3498db;">PC / Desktop</div>
@@ -389,47 +381,7 @@
             </div>
         </div>
     </div>
-    <script>
-        function checkDevicePreferenceOnLoad() {
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('mode') === 'desktop') {
-                sessionStorage.setItem('device_choice_dismissed', 'true');
-                return;
-            }
-            const pref = localStorage.getItem('device_preference');
-            if (pref === 'mobile') {
-                window.location.href = 'handy.html';
-                return;
-            }
-            if (pref === 'pc' || sessionStorage.getItem('device_choice_dismissed') === 'true') {
-                return;
-            }
-            const modal = document.getElementById('device-select-modal');
-            if (modal) {
-                modal.style.display = 'flex';
-                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (window.innerWidth <= 768);
-                if (isMobile) {
-                    const mobileBtn = document.getElementById('device-btn-mobile');
-                    if (mobileBtn) {
-                        mobileBtn.style.boxShadow = '0 0 15px rgba(46, 204, 113, 0.6)';
-                    }
-                }
-            }
-        }
-        function chooseDeviceSelection(choice) {
-            const remember = document.getElementById('remember-device-choice')?.checked;
-            if (remember) {
-                localStorage.setItem('device_preference', choice);
-            }
-            sessionStorage.setItem('device_choice_dismissed', 'true');
-            const modal = document.getElementById('device-select-modal');
-            if (modal) modal.style.display = 'none';
-            if (choice === 'mobile') {
-                window.location.href = 'handy.html';
-            }
-        }
-        window.addEventListener('DOMContentLoaded', checkDevicePreferenceOnLoad);
-    </script>
+    
 
     <div id="agb-popup">
         <div class="popup-content">
@@ -440,7 +392,7 @@
             <p style="font-size: 0.8em; color: #aaa; margin-top: 8px; line-height: 1.4;">
                 🔒 Hinweis (§ 25 TDDDG): Wir nutzen keine Werbe- oder Tracking-Cookies, sondern ausschließlich technisch notwendigen Browser-Speicher (LocalStorage) für Designs, Einstellungen und Spielstände.
             </p>
-            <button class="glass-btn accept-btn" onclick="acceptAGB()">Akzeptieren &amp; Starten</button>
+            <button class="glass-btn accept-btn" data-action="acceptAGB">Akzeptieren &amp; Starten</button>
         </div>
     </div>
 
@@ -467,7 +419,7 @@
     <!-- Auth Modal -->
     <div id="auth-modal" class="modal-overlay">
         <div class="modal-box" style="max-width: 420px; width: 90%;">
-            <span class="close-modal" onclick="document.getElementById('auth-modal').style.display='none'">&times;</span>
+            <span class="close-modal" data-action="closeAuthModal">&times;</span>
             <h2 style="color: white; margin-top: 0; margin-bottom: 15px;">Einloggen / Registrieren</h2>
             <p style="color: #bdc3c7; font-size: 0.85em; margin-bottom: 15px;">Melde dich mit E-Mail/Passwort oder Google an, um deinen Spielfortschritt und Elo-Wert zu speichern.</p>
             
@@ -476,8 +428,8 @@
                 <input type="email" id="auth-email-input" class="auth-input" placeholder="E-Mail-Adresse" style="padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: white; width: 100%; box-sizing: border-box;">
                 <input type="password" id="auth-password-input" class="auth-input" placeholder="Passwort (min. 6 Zeichen)" style="padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: white; width: 100%; box-sizing: border-box;">
                 <div style="display: flex; gap: 10px;">
-                    <button class="glass-btn success auth-btn" style="flex: 1; /*bg-removed*/; color: white; padding: 10px;  border-radius: 6px; cursor: pointer; font-weight: bold;" onclick="submitAuthEmailLogin()">Einloggen</button>
-                    <button class="glass-btn primary auth-btn" style="flex: 1; /*bg-removed*/; color: white; padding: 10px;  border-radius: 6px; cursor: pointer; font-weight: bold;" onclick="submitAuthEmailRegister()">Registrieren</button>
+                    <button class="glass-btn success auth-btn" style="flex: 1; /*bg-removed*/; color: white; padding: 10px;  border-radius: 6px; cursor: pointer; font-weight: bold;" data-action="submitAuthEmailLogin">Einloggen</button>
+                    <button class="glass-btn primary auth-btn" style="flex: 1; /*bg-removed*/; color: white; padding: 10px;  border-radius: 6px; cursor: pointer; font-weight: bold;" data-action="submitAuthEmailRegister">Registrieren</button>
                 </div>
             </div>
 
@@ -487,11 +439,11 @@
                 <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.15);"></div>
             </div>
 
-            <button id="auth-google-btn" class="glass-btn auth-btn" style="width: 100%; background: #ffffff; color: #333; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid #ddd; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="submitAuthGoogle()">
+            <button id="auth-google-btn" class="glass-btn auth-btn" style="width: 100%; background: #ffffff; color: #333; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid #ddd; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer;" data-action="submitAuthGoogle">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width: 18px; height: 18px;" alt="Google Logo">
                 Mit Google anmelden
             </button>
-            <button id="auth-guest-btn" class="glass-btn auth-btn" style="width: 100%; background: rgba(255,255,255,0.1); color: #fff; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer;" onclick="playAsGuest()">
+            <button id="auth-guest-btn" class="glass-btn auth-btn" style="width: 100%; background: rgba(255,255,255,0.1); color: #fff; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer;" data-action="playAsGuest">
                 👤 Als Gast spielen (Ohne Konto)
             </button>
             <div id="auth-status" style="margin-top: 15px; font-size: 0.9em; text-align: left;"></div>
@@ -501,11 +453,11 @@
     <!-- Name Modal -->
     <div id="name-modal" class="modal-overlay">
         <div class="modal-box">
-            <span class="close-modal" onclick="document.getElementById('name-modal').style.display='none'">&times;</span>
+            <span class="close-modal" data-action="closeNameModal">&times;</span>
             <h2 style="color: white; margin-top: 0; margin-bottom: 20px;">Benutzername ändern</h2>
             <p style="color: #bdc3c7; font-size: 0.9em; margin-bottom: 20px;">Lege einen eindeutigen Namen für Leaderboard und Chat fest.</p>
             <input type="text" id="new-username" class="auth-input" placeholder="Neuer Name" maxlength="15">
-            <button class="glass-btn auth-btn" onclick="submitNameChange()">Speichern</button>
+            <button class="glass-btn auth-btn" data-action="submitNameChange">Speichern</button>
             <div id="name-status" style="margin-top: 15px; font-size: 0.9em;"></div>
         </div>
     </div>
@@ -513,23 +465,24 @@
     <!-- Checkmate Modal -->
     <div id="checkmate-modal" class="modal-overlay">
         <div class="modal-box" style="border-color: #f1c40f; box-shadow: 0 0 40px rgba(241, 196, 15, 0.3);">
-            <span class="close-modal" onclick="document.getElementById('checkmate-modal').style.display='none'">&times;</span>
-            <div class="checkmate-icon">👑</div>
+            <span class="close-modal" data-action="closeCheckmateModal">&times;</span>
+            <div class="checkmate-icon" id="checkmate-icon">👑</div>
             <div class="checkmate-title">Schachmatt!</div>
             <div class="checkmate-winner" id="checkmate-winner-text">Weiß gewinnt das Spiel.</div>
-            <button class="glass-btn checkmate-btn" onclick="document.getElementById('checkmate-modal').style.display='none'; resetGame();">Neue Partie starten</button>
-            <button class="glass-btn success checkmate-btn" style="margin-top: 10px; background: linear-gradient(135deg, #25D366 0%, #128C7E 100%); color: white; border: 1px solid rgba(255,255,255,0.3); font-weight: bold;" onclick="shareVictoryWhatsApp();">
+            <div id="checkmate-accuracy-summary" style="display:none; background:#262421; border:1px solid rgba(255,255,255,0.1); border-radius:10px; padding:12px; margin-bottom:16px; text-align:left; font-size:0.86rem;"></div>
+            <button class="glass-btn checkmate-btn" data-action="closeCheckmateModal" data-arg1="reset">Neue Partie starten</button>
+            <button class="glass-btn success checkmate-btn" style="margin-top: 10px; background: linear-gradient(135deg, #25D366 0%, #128C7E 100%); color: white; border: 1px solid rgba(255,255,255,0.3); font-weight: bold;" data-action="shareVictoryWhatsApp">
                 💬 Sieg auf WhatsApp / Freunde teilen 🏆
             </button>
-            <button class="glass-btn primary checkmate-btn" style="margin-top: 10px;" onclick="downloadReplay();">📥 Replay (PGN) herunterladen</button>
-            <button class="glass-btn purple checkmate-btn" style="margin-top: 10px;" onclick="shareGameForAnalysis();">🔍 Spiel-Analyse (Lichess)</button>
+            <button class="glass-btn primary checkmate-btn" style="margin-top: 10px;" data-action="downloadReplay">📥 Replay (PGN) herunterladen</button>
+            <button class="glass-btn purple checkmate-btn" style="margin-top: 10px;" data-action="shareGameForAnalysis">🔍 Spiel-Analyse (Lichess)</button>
         </div>
     </div>
 
     <!-- 🏆 1. DEDIZIERTES LEADERBOARD MODAL (Extra Fenster statt scrollen) -->
     <div id="leaderboard-modal" class="modal-overlay" style="display: none; z-index: 100000; background: rgba(0, 0, 0, 0.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; padding: 15px; box-sizing: border-box;">
         <div class="modal-box" style="max-width: 680px; width: 100%; max-height: 88vh; display: flex; flex-direction: column; background: #1e1d1a; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 14px; box-shadow: 0 15px 50px rgba(0,0,0,0.85); text-align: left; padding: 22px; position: relative; box-sizing: border-box;">
-            <span class="close-modal" onclick="closeLeaderboardModal()" style="position: absolute; top: 16px; right: 20px; font-size: 28px; cursor: pointer; color: #aaa; z-index: 10;" title="Schließen">&times;</span>
+            <span class="close-modal" data-action="closeLeaderboardModal" style="position: absolute; top: 16px; right: 20px; font-size: 28px; cursor: pointer; color: #aaa; z-index: 10;" title="Schließen">&times;</span>
             
             <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 14px; margin-bottom: 15px; padding-right: 35px;">
                 <div style="display: flex; align-items: center; gap: 12px;">
@@ -539,13 +492,13 @@
                         <div style="font-size: 0.82rem; color: #8c8a87;">Top 100 Spieler • Echtzeit-Synchronisation</div>
                     </div>
                 </div>
-                <button onclick="if(typeof requestLeaderboardRefresh === 'function') requestLeaderboardRefresh();" class="glass-btn" style="padding: 6px 12px; font-size: 0.82rem; display: flex; align-items: center; gap: 6px; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #fff; cursor: pointer;">
+                <button data-action="openLeaderboardModal" class="glass-btn" style="padding: 6px 12px; font-size: 0.82rem; display: flex; align-items: center; gap: 6px; border-radius: 6px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #fff; cursor: pointer;">
                     🔄 Aktualisieren
                 </button>
             </div>
 
             <div style="display: flex; gap: 10px; margin-bottom: 12px;">
-                <input type="text" id="modal-leaderboard-search" placeholder="🔍 Spieler suchen..." oninput="filterModalLeaderboard(this.value)" style="flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: #262421; color: white; font-size: 0.9rem; outline: none; box-sizing: border-box;">
+                <input type="text" id="modal-leaderboard-search" placeholder="🔍 Spieler suchen..." style="flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: #262421; color: white; font-size: 0.9rem; outline: none; box-sizing: border-box;">
                 <div style="display: flex; align-items: center; gap: 6px; padding: 0 14px; background: rgba(255,255,255,0.04); border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); font-size: 0.85rem; color: #aaa; white-space: nowrap;">
                     <span id="modal-leaderboard-count">100 Spieler</span>
                 </div>
@@ -572,7 +525,7 @@
     <!-- 🧩 2. DEDIZIERTES PUZZLE MODAL -->
     <div id="puzzle-modal" class="modal-overlay" style="display: none; z-index: 100000; background: rgba(0, 0, 0, 0.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; padding: 15px; box-sizing: border-box;">
         <div class="modal-box" style="max-width: 520px; width: 100%; background: #1e1d1a; border: 1px solid rgba(241, 196, 15, 0.3); border-radius: 14px; box-shadow: 0 15px 50px rgba(0,0,0,0.85); text-align: left; padding: 25px; position: relative; color: white;">
-            <span class="close-modal" onclick="closePuzzleModal()" style="position: absolute; top: 16px; right: 20px; font-size: 28px; cursor: pointer; color: #aaa;" title="Schließen">&times;</span>
+            <span class="close-modal" data-action="closePuzzleModal" style="position: absolute; top: 16px; right: 20px; font-size: 28px; cursor: pointer; color: #aaa;" title="Schließen">&times;</span>
             <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
                 <span style="font-size: 2.2rem;">🧩</span>
                 <div>
@@ -586,10 +539,10 @@
                 <div id="modal-puzzle-status" style="font-size: 0.85em; color: #81b64c; margin-top: 10px; font-weight: bold;"><span id="puzzle-status"></span></div>
             </div>
             <div style="display: flex; gap: 10px;">
-                <button onclick="startModalPuzzle()" class="glass-btn primary" style="flex: 1; padding: 12px; font-weight: bold; border-radius: 8px; cursor: pointer; font-size: 0.95rem;">
+                <button data-action="startModalPuzzle" class="glass-btn primary" style="flex: 1; padding: 12px; font-weight: bold; border-radius: 8px; cursor: pointer; font-size: 0.95rem;">
                     🚀 Rätsel auf dem Brett starten
                 </button>
-                <button onclick="closePuzzleModal()" class="glass-btn" style="padding: 12px 18px; border-radius: 8px; cursor: pointer;">
+                <button data-action="closePuzzleModal" class="glass-btn" style="padding: 12px 18px; border-radius: 8px; cursor: pointer;">
                     Schließen
                 </button>
             </div>
@@ -599,7 +552,7 @@
     <!-- 🎰 3. DEDIZIERTES CASINO MODAL -->
     <div id="casino-modal" class="modal-overlay" style="display: none; z-index: 100000; background: rgba(0, 0, 0, 0.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; padding: 15px; box-sizing: border-box;">
         <div class="modal-box" style="max-width: 480px; width: 100%; background: #1e1d1a; border: 1px solid rgba(230, 126, 34, 0.4); border-radius: 14px; box-shadow: 0 15px 50px rgba(0,0,0,0.85); text-align: center; padding: 25px; position: relative; color: white;">
-            <span class="close-modal" onclick="closeCasinoModal()" style="position: absolute; top: 16px; right: 20px; font-size: 28px; cursor: pointer; color: #aaa;" title="Schließen">&times;</span>
+            <span class="close-modal" data-action="closeCasinoModal" style="position: absolute; top: 16px; right: 20px; font-size: 28px; cursor: pointer; color: #aaa;" title="Schließen">&times;</span>
             <div style="font-size: 2.8rem; margin-bottom: 8px;">🎰</div>
             <h2 style="margin: 0 0 8px 0; color: #e67e22; font-size: 1.35rem;">COBOL Casino & Wetten</h2>
             <p style="color: #aaa; font-size: 0.88rem; margin-bottom: 18px; line-height: 1.4;">
@@ -608,18 +561,18 @@
             <div style="background: rgba(230, 126, 34, 0.08); border: 1px solid rgba(230, 126, 34, 0.25); padding: 16px; border-radius: 10px; margin-bottom: 20px;">
                 <div style="font-size: 0.85rem; color: #ccc; margin-bottom: 10px;">Einsatz auswählen:</div>
                 <div style="display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;">
-                    <button class="glass-btn casino-bet-btn" onclick="setCasinoBet(0); updateModalBetDisplay(0);" style="padding: 7px 14px; border-radius: 6px; cursor: pointer; color: white;">0</button>
-                    <button class="glass-btn casino-bet-btn" onclick="setCasinoBet(50); updateModalBetDisplay(50);" style="padding: 7px 14px; border-radius: 6px; cursor: pointer; color: white;">50</button>
-                    <button class="glass-btn casino-bet-btn" onclick="setCasinoBet(100); updateModalBetDisplay(100);" style="padding: 7px 14px; border-radius: 6px; cursor: pointer; color: white;">100</button>
-                    <button class="glass-btn casino-bet-btn" onclick="setCasinoBet(250); updateModalBetDisplay(250);" style="padding: 7px 14px; border-radius: 6px; cursor: pointer; color: white;">250</button>
-                    <button class="glass-btn casino-bet-btn" onclick="setCasinoBet(500); updateModalBetDisplay(500);" style="padding: 7px 14px; border-radius: 6px; cursor: pointer; color: white;">500</button>
-                    <button class="glass-btn casino-bet-btn" onclick="setCasinoBet(1000); updateModalBetDisplay(1000);" style="padding: 7px 14px; border-radius: 6px; cursor: pointer; color: white;">1000 💎</button>
+                    <button class="glass-btn casino-bet-btn" data-action="setCasinoBet" data-arg1="0" style="padding: 7px 14px; border-radius: 6px; cursor: pointer; color: white;">0</button>
+                    <button class="glass-btn casino-bet-btn" data-action="setCasinoBet" data-arg1="50" style="padding: 7px 14px; border-radius: 6px; cursor: pointer; color: white;">50</button>
+                    <button class="glass-btn casino-bet-btn" data-action="setCasinoBet" data-arg1="100" style="padding: 7px 14px; border-radius: 6px; cursor: pointer; color: white;">100</button>
+                    <button class="glass-btn casino-bet-btn" data-action="setCasinoBet" data-arg1="250" style="padding: 7px 14px; border-radius: 6px; cursor: pointer; color: white;">250</button>
+                    <button class="glass-btn casino-bet-btn" data-action="setCasinoBet" data-arg1="500" style="padding: 7px 14px; border-radius: 6px; cursor: pointer; color: white;">500</button>
+                    <button class="glass-btn casino-bet-btn" data-action="setCasinoBet" data-arg1="1000" style="padding: 7px 14px; border-radius: 6px; cursor: pointer; color: white;">1000 💎</button>
                 </div>
                 <div style="margin-top: 14px; font-size: 1.05rem; color: #ffffff;">
                     Aktueller Einsatz: <strong id="modal-current-bet" style="color: #e67e22;">0 Coins</strong>
                 </div>
             </div>
-            <button onclick="closeCasinoModal()" class="glass-btn success" style="width: 100%; padding: 12px; font-weight: bold; border-radius: 8px; cursor: pointer; font-size: 0.95rem;">
+            <button data-action="closeCasinoModal" class="glass-btn success" style="width: 100%; padding: 12px; font-weight: bold; border-radius: 8px; cursor: pointer; font-size: 0.95rem;">
                 Fertig / Übernehmen
             </button>
         </div>
@@ -628,7 +581,7 @@
     <!-- 📊 4. DEDIZIERTES ANALYSE MODAL -->
     <div id="analysis-modal" class="modal-overlay" style="display: none; z-index: 100000; background: rgba(0, 0, 0, 0.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; padding: 15px; box-sizing: border-box;">
         <div class="modal-box" style="max-width: 540px; width: 100%; background: #1e1d1a; border: 1px solid rgba(52, 152, 219, 0.4); border-radius: 14px; box-shadow: 0 15px 50px rgba(0,0,0,0.85); text-align: left; padding: 25px; position: relative; color: white;">
-            <span class="close-modal" onclick="closeAnalysisModal()" style="position: absolute; top: 16px; right: 20px; font-size: 28px; cursor: pointer; color: #aaa;" title="Schließen">&times;</span>
+            <span class="close-modal" data-action="closeAnalysisModal" style="position: absolute; top: 16px; right: 20px; font-size: 28px; cursor: pointer; color: #aaa;" title="Schließen">&times;</span>
             <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
                 <span style="font-size: 2.2rem;">📊</span>
                 <div>
@@ -655,16 +608,16 @@
                 </div>
             </div>
             <div style="display: flex; flex-direction: column; gap: 10px;">
-                <button onclick="shareGameForAnalysis()" class="glass-btn primary" style="padding: 12px; font-weight: bold; border-radius: 8px; cursor: pointer; font-size: 0.95rem;">
+                <button data-action="shareGameForAnalysis" class="glass-btn primary" style="padding: 12px; font-weight: bold; border-radius: 8px; cursor: pointer; font-size: 0.95rem;">
                     🔍 Vollständige Analyse auf Lichess öffnen
                 </button>
-                <button onclick="downloadReplay()" class="glass-btn" style="padding: 10px; border-radius: 8px; cursor: pointer;">
+                <button data-action="downloadReplay" class="glass-btn" style="padding: 10px; border-radius: 8px; cursor: pointer;">
                     📥 Replay (PGN) herunterladen
                 </button>
             </div>
 
             <!-- Python-Labor & Video Generator im Analyse-Modal -->
-            <div class="glass-panel" id="python-lab" style="border-left: 4px solid #3498db; width: 100%; box-sizing: border-box; margin-top: 15px; padding: 12px; background: rgba(0,0,0,0.3);">
+            <div class="glass-panel" id="python-lab" style="width: 100%; box-sizing: border-box; margin-top: 15px; padding: 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(52, 152, 219, 0.35);">
                 <span>🐍 <strong>KI-Analyse (Python-Labor)</strong></span>
                 <div style="margin-top: 8px; font-size: 0.85em; display: flex; flex-direction: column; gap: 4px;">
                     <div id="elo-display">Geschätzte Elo: <span style="color: #f1c40f;">1200</span></div>
@@ -678,7 +631,7 @@
                 <div style="font-size: 0.85rem; font-weight: bold; margin-bottom: 6px;">🎬 KI-Video Highlight generieren:</div>
                 <div style="display: flex; gap: 6px;">
                     <input type="text" id="videoPrompt" placeholder="Was soll passieren? (z.B. episches Matt)" style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #444; background: #262421; color: white;">
-                    <button id="generateVideoBtn" onclick="startGeneration()" class="glass-btn primary" style="padding: 8px 12px; font-size: 0.85rem; font-weight: bold;">Generieren</button>
+                    <button id="generateVideoBtn" data-action="startGeneration" class="glass-btn primary" style="padding: 8px 12px; font-size: 0.85rem; font-weight: bold;">Generieren</button>
                 </div>
                 <div id="videoStatus" style="font-size: 0.8rem; margin-top: 4px;"></div>
                 <div id="videoResultContainer"></div> 
@@ -689,7 +642,7 @@
     <!-- 👤 5. DEDIZIERTES PROFIL MODAL (Ausgelagert aus dem Haupt-Spielfeld) -->
     <div id="profile-modal" class="modal-overlay" style="display: none; z-index: 100000; background: rgba(0, 0, 0, 0.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; padding: 15px; box-sizing: border-box;">
         <div class="modal-box" style="max-width: 600px; width: 100%; max-height: 88vh; display: flex; flex-direction: column; background: #1e1d1a; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 14px; box-shadow: 0 15px 50px rgba(0,0,0,0.85); text-align: left; padding: 22px; position: relative; box-sizing: border-box; overflow-y: auto;">
-            <span class="close-modal" onclick="closeProfileModal()" style="position: absolute; top: 16px; right: 20px; font-size: 28px; cursor: pointer; color: #aaa; z-index: 10;" title="Schließen">&times;</span>
+            <span class="close-modal" data-action="closeProfileModal" style="position: absolute; top: 16px; right: 20px; font-size: 28px; cursor: pointer; color: #aaa; z-index: 10;" title="Schließen">&times;</span>
             
             <div style="display: flex; align-items: center; gap: 14px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 15px;">
                 <div style="width: 50px; height: 50px; border-radius: 50%; background: #363431; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; border: 2px solid #81b64c; flex-shrink: 0;">
@@ -698,7 +651,7 @@
                 <div style="flex: 1; overflow: hidden;">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <h2 id="profile-name" style="margin: 0; font-size: 1.3rem; color: #ffffff; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Gastspieler</h2>
-                        <button id="edit-name-btn" onclick="openNameModal()" style="background: none; border: none; cursor: pointer; color: #aaa; padding: 2px; font-size: 1.1rem;" title="Name ändern">✏️</button>
+                        <button id="edit-name-btn" data-action="openNameModal" style="background: none; border: none; cursor: pointer; color: #aaa; padding: 2px; font-size: 1.1rem;" title="Name ändern">✏️</button>
                     </div>
                     <div id="profile-stats" style="font-size: 0.85rem; color: #8c8a87; margin-top: 2px;">Elo: 1200 | Siege: 0</div>
                 </div>
@@ -707,10 +660,10 @@
 
             <!-- Profil Aktionen & Auth -->
             <div style="display: flex; gap: 8px; margin-bottom: 15px;">
-                <button id="openAuthBtn" onclick="openAuthModal()" class="glass-btn primary" style="flex: 1; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer;">
+                <button id="openAuthBtn" data-action="openAuthModal" class="glass-btn primary" style="flex: 1; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer;">
                     🔐 Einloggen / Registrieren
                 </button>
-                <button id="logoutBtn" onclick="logout()" class="glass-btn danger" style="display: none; flex: 1; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer;">
+                <button id="logoutBtn" data-action="logout" class="glass-btn danger" style="display: none; flex: 1; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer;">
                     🚪 Abmelden
                 </button>
             </div>
@@ -774,7 +727,7 @@
                 <div id="admin-logs-section" style="display: none;"></div>
             </div>
 
-            <button onclick="closeProfileModal()" class="glass-btn" style="width: 100%; padding: 10px; border-radius: 8px; cursor: pointer;">
+            <button data-action="closeProfileModal" class="glass-btn" style="width: 100%; padding: 10px; border-radius: 8px; cursor: pointer;">
                 Schließen
             </button>
         </div>
@@ -783,7 +736,7 @@
     <!-- 🎮 6. DEDIZIERTES SPIELMODUS & MATCH-FINDER MODAL -->
     <div id="gamemode-modal" class="modal-overlay" style="display: none; z-index: 100000; background: rgba(0, 0, 0, 0.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; padding: 15px; box-sizing: border-box;">
         <div class="modal-box" style="max-width: 640px; width: 100%; max-height: 88vh; display: flex; flex-direction: column; background: #1e1d1a; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 14px; box-shadow: 0 15px 50px rgba(0,0,0,0.85); text-align: left; padding: 22px; position: relative; box-sizing: border-box; overflow-y: auto;">
-            <span class="close-modal" onclick="closeGameModeModal()" style="position: absolute; top: 16px; right: 20px; font-size: 28px; cursor: pointer; color: #aaa; z-index: 10;" title="Schließen">&times;</span>
+            <span class="close-modal" data-action="closeGameModeModal" style="position: absolute; top: 16px; right: 20px; font-size: 28px; cursor: pointer; color: #aaa; z-index: 10;" title="Schließen">&times;</span>
             
             <div style="display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 14px; margin-bottom: 16px;">
                 <span style="font-size: 2.2rem; line-height: 1;">🎮</span>
@@ -814,16 +767,21 @@
                     </div>
                     <div>
                         <div id="bot-difficulty-container" style="margin-bottom: 8px;">
-                            <span style="font-size: 0.75rem; color: #888; display: block; margin-bottom: 4px;">Schwierigkeit:</span>
-                            <select id="botDifficulty" style="width: 100%; padding: 7px 10px; border-radius: 6px; background: #161512; color: #fff; border: 1px solid rgba(255,255,255,0.15); font-size: 0.82rem; outline: none;">
+                            <span style="font-size: 0.75rem; color: #888; display: block; margin-bottom: 4px;">Schwierigkeit & Farbe:</span>
+                            <select id="botDifficulty" style="width: 100%; padding: 7px 10px; border-radius: 6px; background: #161512; color: #fff; border: 1px solid rgba(255,255,255,0.15); font-size: 0.82rem; outline: none; margin-bottom: 6px;">
                                 <option value="instant" selected>⚡ Sofort-Bot (Schnell)</option>
                                 <option value="1">Leicht (Anfänger)</option>
                                 <option value="3">Mittel (Fortgeschritten)</option>
                                 <option value="5">Schwer (Profi)</option>
                                 <option value="10">Meister (Stockfish 🔥)</option>
                             </select>
+                            <select id="botColorSelect" style="width: 100%; padding: 7px 10px; border-radius: 6px; background: #161512; color: #fff; border: 1px solid rgba(255,255,255,0.15); font-size: 0.82rem; outline: none;">
+                                <option value="white" selected>♔ Als Weiß spielen</option>
+                                <option value="black">♚ Als Schwarz spielen</option>
+                                <option value="random">🎲 Farbe zufällig</option>
+                            </select>
                         </div>
-                        <button onclick="selectModeFromModal('bot', true);" class="glass-btn primary" style="width: 100%; padding: 8px; font-size: 0.85rem; font-weight: bold; border-radius: 6px; cursor: pointer;">
+                        <button data-action="selectModeFromModal" data-arg1="bot" data-arg2="true" class="glass-btn primary" style="width: 100%; padding: 8px; font-size: 0.85rem; font-weight: bold; border-radius: 6px; cursor: pointer;">
                             🤖 Bot-Spiel starten
                         </button>
                     </div>
@@ -838,7 +796,7 @@
                         </div>
                         <div style="font-size: 0.78rem; color: #aaa; line-height: 1.3;">Spiele sofort gegen den nächsten verfügbaren Online-Gegner.</div>
                     </div>
-                    <button onclick="selectModeFromModal('random', true);" class="glass-btn success" style="width: 100%; padding: 10px; font-size: 0.85rem; font-weight: bold; border-radius: 6px; cursor: pointer;">
+                    <button data-action="selectModeFromModal" data-arg1="random" data-arg2="true" class="glass-btn success" style="width: 100%; padding: 10px; font-size: 0.85rem; font-weight: bold; border-radius: 6px; cursor: pointer;">
                         ⚡ Gegner suchen
                     </button>
                 </div>
@@ -852,7 +810,7 @@
                         </div>
                         <div style="font-size: 0.78rem; color: #aaa; line-height: 1.3;">Spielt zu zweit an diesem Gerät abwechselnd.</div>
                     </div>
-                    <button onclick="selectModeFromModal('local', true);" class="glass-btn" style="width: 100%; padding: 10px; font-size: 0.85rem; font-weight: bold; border-radius: 6px; cursor: pointer; border: 1px solid rgba(255,255,255,0.15);">
+                    <button data-action="selectModeFromModal" data-arg1="local" data-arg2="true" class="glass-btn" style="width: 100%; padding: 10px; font-size: 0.85rem; font-weight: bold; border-radius: 6px; cursor: pointer; border: 1px solid rgba(255,255,255,0.15);">
                         👥 Lokales Match starten
                     </button>
                 </div>
@@ -885,7 +843,7 @@
                 </div>
                 <div class="room-controls" style="display: flex; gap: 8px; margin-bottom: 10px;">
                     <input type="text" id="roomID" placeholder="Raum ID eingeben (z.B. duell-max)" style="flex: 1; padding: 9px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); background: #161512; color: #fff; font-size: 0.88rem; outline: none;">
-                    <button id="connectMP" class="glass-btn primary" style="padding: 9px 16px; font-size: 0.88rem; font-weight: bold; border-radius: 6px; cursor: pointer;" onclick="selectModeFromModal('online', false); closeGameModeModal();">
+                    <button id="connectMP" class="glass-btn primary" style="padding: 9px 16px; font-size: 0.88rem; font-weight: bold; border-radius: 6px; cursor: pointer;" data-action="selectModeFromModal" data-arg1="online" data-arg2="false">
                         Beitreten
                     </button>
                 </div>
@@ -893,10 +851,10 @@
                     <span>💬</span> Freund per WhatsApp / Link herausfordern
                 </button>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-                    <button id="copyInviteLinkBtn" onclick="quickCopyInviteLink()" class="glass-btn" style="padding: 7px; font-size: 0.8em; display: flex; align-items: center; justify-content: center; gap: 4px; border-radius: 6px;">
+                    <button id="copyInviteLinkBtn" data-action="quickCopyInviteLink" class="glass-btn" style="padding: 7px; font-size: 0.8em; display: flex; align-items: center; justify-content: center; gap: 4px; border-radius: 6px;">
                         <span>📋</span> Link kopieren
                     </button>
-                    <button id="shareNativeBtn" onclick="quickNativeShare()" class="glass-btn primary" style="padding: 7px; font-size: 0.8em; display: flex; align-items: center; justify-content: center; gap: 4px; border-radius: 6px;">
+                    <button id="shareNativeBtn" data-action="quickNativeShare" class="glass-btn primary" style="padding: 7px; font-size: 0.8em; display: flex; align-items: center; justify-content: center; gap: 4px; border-radius: 6px;">
                         <span>📱</span> Teilen (Apps)
                     </button>
                 </div>
@@ -914,7 +872,7 @@
                 </div>
             </div>
 
-            <button onclick="closeGameModeModal()" class="glass-btn" style="width: 100%; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 0.9rem;">
+            <button data-action="closeGameModeModal" class="glass-btn" style="width: 100%; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 0.9rem;">
                 Schließen
             </button>
         </div>
@@ -923,7 +881,7 @@
     <!-- ⚙️ 7. DEDIZIERTES OPTIONEN & VARIANTEN MODAL -->
     <div id="features-modal" class="modal-overlay" style="display: none; z-index: 100000; background: rgba(0, 0, 0, 0.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; padding: 15px; box-sizing: border-box;">
         <div class="modal-box" style="max-width: 650px; width: 100%; max-height: 88vh; display: flex; flex-direction: column; background: #1e1d1a; border: 1px solid rgba(142, 68, 173, 0.4); border-radius: 14px; box-shadow: 0 15px 50px rgba(0,0,0,0.85); text-align: left; padding: 22px; position: relative; box-sizing: border-box; overflow-y: auto;">
-            <span class="close-modal" onclick="closeFeaturesModal()" style="position: absolute; top: 16px; right: 20px; font-size: 28px; cursor: pointer; color: #aaa; z-index: 10;" title="Schließen">&times;</span>
+            <span class="close-modal" data-action="closeFeaturesModal" style="position: absolute; top: 16px; right: 20px; font-size: 28px; cursor: pointer; color: #aaa; z-index: 10;" title="Schließen">&times;</span>
             
             <div style="display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 14px; margin-bottom: 16px;">
                 <span style="font-size: 2.2rem; line-height: 1;">⚙️</span>
@@ -945,10 +903,10 @@
                         <option value="blindfold">Blindfold Chess (Unsichtbare Figuren)</option>
                     </select>
                     
-                    <button id="startVariantBtn" onclick="if(typeof startVariantGame === 'function') startVariantGame(); closeFeaturesModal();" class="glass-btn success" style="width: 100%; padding: 8px; font-size: 0.85rem; font-weight: bold; border-radius: 6px; cursor: pointer; margin-bottom: 6px;">
+                    <button id="startVariantBtn" data-action="startVariantGame" class="glass-btn success" style="width: 100%; padding: 8px; font-size: 0.85rem; font-weight: bold; border-radius: 6px; cursor: pointer; margin-bottom: 6px;">
                         🚀 Variante starten
                     </button>
-                    <button id="passPlayBtn" onclick="if(typeof startPassAndPlay === 'function') startPassAndPlay(); closeFeaturesModal();" class="glass-btn" style="width: 100%; padding: 8px; font-size: 0.85rem; font-weight: bold; border-radius: 6px; cursor: pointer; border: 1px solid rgba(255,255,255,0.15);">
+                    <button id="passPlayBtn" data-action="startPassAndPlay" class="glass-btn" style="width: 100%; padding: 8px; font-size: 0.85rem; font-weight: bold; border-radius: 6px; cursor: pointer; border: 1px solid rgba(255,255,255,0.15);">
                         👥 Pass & Play (Lokal)
                     </button>
                 </div>
@@ -957,15 +915,33 @@
                 <div style="background: #262421; padding: 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08);">
                     <div style="font-weight: bold; color: #e67e22; margin-bottom: 8px; font-size: 0.95rem;">🎨 Optik & Sound</div>
                     
-                    <label style="display: block; margin-bottom: 4px; font-size: 0.82rem; color: #bbb;">Figuren-Set:</label>
-                    <select id="pieceSetSelect" onchange="if(typeof changePieceSet === 'function') changePieceSet(this.value)" style="width: 100%; padding: 7px; border-radius: 6px; background: #161512; color: white; border: 1px solid rgba(255,255,255,0.15); margin-bottom: 8px; font-size: 0.85rem;">
+                    <label style="display: block; margin-bottom: 4px; font-size: 0.82rem; color: #bbb;">Brett-Stil:</label>
+                    <select id="boardThemeSelect" style="width: 100%; padding: 7px; border-radius: 6px; background: #161512; color: white; border: 1px solid rgba(255,255,255,0.15); margin-bottom: 8px; font-size: 0.85rem;">
+                        <option value="classic">Klassisch (Turnier)</option>
+                        <option value="wood">Klassisches Holz 🪵</option>
+                        <option value="neon">Moderner Neon-Look ⚡</option>
+                        <option value="marble">Weißer Marmor 🏛️</option>
+                        <option value="slate">Luxuriöser 3D-Schiefer 💎</option>
+                    </select>
+
+                    <label style="display: block; margin-bottom: 4px; font-size: 0.82rem; color: #bbb;">Figuren-Stil:</label>
+                    <select id="pieceThemeSelect" style="width: 100%; padding: 7px; border-radius: 6px; background: #161512; color: white; border: 1px solid rgba(255,255,255,0.15); margin-bottom: 8px; font-size: 0.85rem;">
+                        <option value="classic">Klassisch (Turnier)</option>
+                        <option value="goldsilver">Gold &amp; Silber ✨</option>
+                        <option value="neon">Neon Glow 🔴🔵</option>
+                        <option value="vintage">Vintage Holz 🪵</option>
+                        <option value="pixel">8-Bit Pixel Art 🎮</option>
+                    </select>
+
+                    <label style="display: block; margin-bottom: 4px; font-size: 0.82rem; color: #bbb;">Figuren-Set (Schnellwahl):</label>
+                    <select id="pieceSetSelect" style="width: 100%; padding: 7px; border-radius: 6px; background: #161512; color: white; border: 1px solid rgba(255,255,255,0.15); margin-bottom: 8px; font-size: 0.85rem;">
                         <option value="neo">Klassisch (Neo)</option>
                         <option value="pixel">8-Bit Pixel Art</option>
                         <option value="wood">Holz-Stil</option>
                     </select>
 
                     <label style="display: block; margin-bottom: 4px; font-size: 0.82rem; color: #bbb;">Sound-Pack:</label>
-                    <select id="soundPackSelect" onchange="if(typeof changeSoundPack === 'function') changeSoundPack(this.value)" style="width: 100%; padding: 7px; border-radius: 6px; background: #161512; color: white; border: 1px solid rgba(255,255,255,0.15); margin-bottom: 10px; font-size: 0.85rem;">
+                    <select id="soundPackSelect" style="width: 100%; padding: 7px; border-radius: 6px; background: #161512; color: white; border: 1px solid rgba(255,255,255,0.15); margin-bottom: 10px; font-size: 0.85rem;">
                         <option value="classic">Klassisches Holz</option>
                         <option value="arcade">Arcade / 8-Bit</option>
                         <option value="orchestra">Orchester / Episch</option>
@@ -992,19 +968,19 @@
             <div style="background: #262421; padding: 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); margin-bottom: 16px;">
                 <div style="font-weight: bold; color: #2ecc71; margin-bottom: 8px; font-size: 0.95rem;">🎓 Training & Tools</div>
                 <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                    <button onclick="if(typeof openPuzzleModal === 'function') { closeFeaturesModal(); openPuzzleModal(); }" class="glass-btn primary" style="padding: 8px 14px; font-size: 0.85rem; font-weight: bold; border-radius: 6px; flex: 1;">
+                    <button data-action="openPuzzleModal" class="glass-btn primary" style="padding: 8px 14px; font-size: 0.85rem; font-weight: bold; border-radius: 6px; flex: 1;">
                         🧩 Taktik-Rätsel lösen
                     </button>
-                    <button onclick="if(typeof openAnalysisModal === 'function') { closeFeaturesModal(); openAnalysisModal(); }" class="glass-btn" style="padding: 8px 14px; font-size: 0.85rem; font-weight: bold; border-radius: 6px; flex: 1; border: 1px solid rgba(255,255,255,0.15);">
+                    <button data-action="openAnalysisModal" class="glass-btn" style="padding: 8px 14px; font-size: 0.85rem; font-weight: bold; border-radius: 6px; flex: 1; border: 1px solid rgba(255,255,255,0.15);">
                         📊 KI-Analyse öffnen
                     </button>
-                    <button onclick="toggleAppTheme()" class="glass-btn" style="padding: 8px 14px; font-size: 0.85rem; font-weight: bold; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15);">
+                    <button data-action="toggleAppTheme" class="glass-btn" style="padding: 8px 14px; font-size: 0.85rem; font-weight: bold; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15);">
                         🌓 Theme wechseln
                     </button>
                 </div>
             </div>
 
-            <button onclick="closeFeaturesModal()" class="glass-btn" style="width: 100%; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 0.9rem;">
+            <button data-action="closeFeaturesModal" class="glass-btn" style="width: 100%; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 0.9rem;">
                 Fertig / Schließen
             </button>
         </div>
@@ -1013,67 +989,110 @@
 
     <div class="game-container">
         <div class="board-section">
-            <div class="top-scoreboard">
-                <div class="player-clock" id="clock-black">
-                    <span class="name" id="name-black">Schwarz</span>
-                    <span class="time" id="time-black">10:00</span>
-                </div>
-                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                    <div style="font-weight: 800; color: #888; font-size: 1rem; background: rgba(255,255,255,0.06); padding: 4px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); letter-spacing: 1px;">VS</div>
-                    <button id="themeToggleBtn" onclick="toggleAppTheme()" style="display:none;"></button>
-                </div>
-                <div class="player-clock active" id="clock-white">
-                    <span class="name" id="name-white">Weiß</span>
-                    <span class="time" id="time-white">10:00</span>
-                </div>
-            </div>
-
-            <div id="spectating-banner" style="display: none; background: rgba(41, 128, 185, 0.2); border: 1px solid #2980b9; padding: 10px; border-radius: 8px; margin-bottom: 15px; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; width: 100%; max-width: 600px;">
+            <div id="spectating-banner" style="display: none; background: rgba(41, 128, 185, 0.2); border: 1px solid #2980b9; padding: 10px; border-radius: 8px; margin-bottom: 10px; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; width: 100%; max-width: 600px;">
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <span class="pulse" style="width: 8px; height: 8px; background: #e74c3c; border-radius: 50%; display: inline-block;"></span>
+                    <span style="width: 8px; height: 8px; background: #e74c3c; border-radius: 50%; display: inline-block;"></span>
                     <span id="spectating-text" style="font-weight: bold; font-size: 0.9em; color: #3498db;">👁️ Zuschauer-Modus: Du schaust zu</span>
                 </div>
                 <button id="leaveSpectateBtn" style="color: white; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 0.8em; font-weight: bold;" class="glass-btn danger">Beenden</button>
             </div>
 
-            <h2 id="status-display" style="display: none;">Weiß am Zug</h2>
-            
-            <div id="board-wrapper" style="position: relative;">
-                <div id="emote-popup-area" style="position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 100; overflow: hidden; display: flex; justify-content: center; align-items: center;"></div>
-                <div id="chess-board"></div> 
+            <div class="board-status-strip">
+                <span id="status-display" class="board-status-text">Weiß am Zug</span>
+                <span id="opening-name-badge" class="opening-badge">Standardposition</span>
             </div>
+
+            <div id="board-area-column" class="board-area-column">
+                <!-- Black Player Bar (Default Top) -->
+                <div class="cc-player-bar" id="player-bar-black">
+                    <div class="cc-player-left">
+                        <div class="cc-avatar cc-avatar-black">♚</div>
+                        <div class="cc-player-meta">
+                            <div class="cc-player-name-row">
+                                <span class="cc-player-name" id="name-black">Schwarz</span>
+                                <span class="cc-player-elo" id="elo-black"></span>
+                            </div>
+                            <div class="cc-captured-row">
+                                <span id="captured-black" class="cc-captured-pieces"></span>
+                                <span id="material-black" class="cc-material-diff"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="player-clock cc-clock" id="clock-black">
+                        <span class="time" id="time-black">10:00</span>
+                    </div>
+                </div>
+
+                <!-- Center Stage: Eval Bar + Board -->
+                <div id="board-stage-row" class="board-stage-row">
+                    <div id="eval-bar-container" class="eval-bar-container" title="Live-Stellungsbewertung">
+                        <div id="eval-bar-white" class="eval-bar-white" style="height: 50%;"></div>
+                        <span id="eval-score-label" class="eval-score-label">0.0</span>
+                    </div>
+
+                    <div id="board-wrapper" style="position: relative;">
+                        <div id="emote-popup-area" style="position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 100; overflow: hidden; display: flex; justify-content: center; align-items: center;"></div>
+                        <div id="chess-board"></div>
+                        <div id="promotion-picker" class="promotion-picker" style="display: none;"></div>
+                    </div>
+                </div>
+
+                <!-- White Player Bar (Default Bottom) -->
+                <div class="cc-player-bar" id="player-bar-white">
+                    <div class="cc-player-left">
+                        <div class="cc-avatar cc-avatar-white">♔</div>
+                        <div class="cc-player-meta">
+                            <div class="cc-player-name-row">
+                                <span class="cc-player-name" id="name-white">Weiß</span>
+                                <span class="cc-player-elo" id="elo-white"></span>
+                            </div>
+                            <div class="cc-captured-row">
+                                <span id="captured-white" class="cc-captured-pieces"></span>
+                                <span id="material-white" class="cc-material-diff"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="player-clock active cc-clock" id="clock-white">
+                        <span class="time" id="time-white">10:00</span>
+                    </div>
+                </div>
+            </div>
+            <button id="themeToggleBtn" data-action="toggleAppTheme" style="display:none;"></button>
 
             <img src="schach-vorschau.jpg" alt="Max' Schach Live - Online Schachspiel Vorschau" style="display:none;">
 
             <!-- Saubere, aufgeräumte Aktionsleiste -->
-            <div class="in-game-action-bar" style="margin-top: 14px; display: flex; flex-direction: column; gap: 8px; background: rgba(0,0,0,0.3); padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);">
+            <div class="in-game-action-bar" style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px; background: #21201d; padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); width: 100%; box-sizing: border-box;">
                 <!-- Primäre Spielzüge -->
                 <div style="display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap;">
-                    <button id="undoBtn" class="glass-btn" style="padding: 7px 14px; font-size: 0.85rem;" title="Zug zurücknehmen (Lokales / Bot-Spiel)">↩️ Rücknahme</button>
-                    <button id="offerDrawBtn" class="glass-btn" style="padding: 7px 14px; font-size: 0.85rem;" title="Remis anbieten">🤝 Remis</button>
-                    <button id="resignBtn" class="glass-btn danger" style="padding: 7px 14px; font-size: 0.85rem;" title="Partie aufgeben">🚩 Aufgeben</button>
-                    <button id="resetBtn" class="glass-btn primary" style="padding: 7px 16px; font-size: 0.85rem; font-weight: bold;" title="Neues Spiel starten" onclick="openGameModeModal()">🆕 Neues Spiel</button>
+                    <button id="flipBoardBtn" data-action="flipBoard" class="glass-btn" style="padding: 7px 12px; font-size: 0.85rem;" title="Brett drehen (Taste F)">⇅ Drehen</button>
+                    <button id="undoBtn" class="glass-btn" style="padding: 7px 12px; font-size: 0.85rem;" title="Zug zurücknehmen (Lokales / Bot-Spiel)">↩️ Rücknahme</button>
+                    <button id="offerDrawBtn" class="glass-btn" style="padding: 7px 12px; font-size: 0.85rem;" title="Remis anbieten">🤝 Remis</button>
+                    <button id="resignBtn" class="glass-btn danger" style="padding: 7px 12px; font-size: 0.85rem;" title="Partie aufgeben">🚩 Aufgeben</button>
+                    <button id="resetBtn" class="glass-btn primary" style="padding: 7px 14px; font-size: 0.85rem; font-weight: bold;" title="Neues Spiel starten" data-action="openGameModeModal">🆕 Neues Spiel</button>
                 </div>
                 <!-- Werkzeuge & Optionen -->
-                <div style="display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
+                <div style="display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
                     <div style="position: relative; display: inline-block;">
                         <button id="emoteBtn" class="glass-btn" style="padding: 5px 10px; font-size: 0.82rem;" title="Emotes senden">😀 Emotes</button>
                         <div id="emote-menu" style="display: none; position: absolute; bottom: 120%; left: 50%; transform: translateX(-50%); background: #21201d; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 8px 24px rgba(0,0,0,0.6); border-radius: 8px; padding: 8px; z-index: 99999; white-space: nowrap;">
-                            <span class="emote-select" style="cursor: pointer; padding: 6px; font-size: 1.5em; transition: 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">🤔</span>
-                            <span class="emote-select" style="cursor: pointer; padding: 6px; font-size: 1.5em; transition: 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">👏</span>
-                            <span class="emote-select" style="cursor: pointer; padding: 6px; font-size: 1.5em; transition: 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">😱</span>
-                            <span class="emote-select" style="cursor: pointer; padding: 6px; font-size: 1.5em; transition: 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">😡</span>
-                            <span class="emote-select" style="cursor: pointer; padding: 6px; font-size: 1.5em; transition: 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">😂</span>
+                            <span class="emote-select" style="cursor: pointer; padding: 6px; font-size: 1.5em; transition: 0.15s;">🤔</span>
+                            <span class="emote-select" style="cursor: pointer; padding: 6px; font-size: 1.5em; transition: 0.15s;">👏</span>
+                            <span class="emote-select" style="cursor: pointer; padding: 6px; font-size: 1.5em; transition: 0.15s;">😱</span>
+                            <span class="emote-select" style="cursor: pointer; padding: 6px; font-size: 1.5em; transition: 0.15s;">😡</span>
+                            <span class="emote-select" style="cursor: pointer; padding: 6px; font-size: 1.5em; transition: 0.15s;">😂</span>
                         </div>
                     </div>
-                    <button id="saveGameBtn" class="glass-btn success" style="padding: 5px 10px; font-size: 0.82rem;" onclick="saveCurrentGame()" title="Partie im Browser speichern">💾 Speichern</button>
-                    <button id="voiceMoveBtn" onclick="toggleVoiceMoveControl()" class="glass-btn" style="padding: 5px 10px; font-size: 0.82rem;" title="Sprachsteuerung per Mikrofon">🎤 Sprache</button>
-                    <button id="featuresBtn" onclick="openFeaturesModal()" class="glass-btn purple" style="padding: 5px 10px; font-size: 0.82rem;" title="Designs & Optionen">⚙️ Optionen</button>
+                    <button id="hintMoveBtn" class="glass-btn" style="padding: 5px 10px; font-size: 0.82rem;" data-action="requestHintMove" title="Besten Zug vorschlagen">💡 Tipp</button>
+                    <button id="saveGameBtn" class="glass-btn success" style="padding: 5px 10px; font-size: 0.82rem;" data-action="saveCurrentGame" title="Partie im Browser speichern">💾 Speichern</button>
+                    <button id="fenPgnBtn" class="glass-btn" style="padding: 5px 10px; font-size: 0.82rem;" data-action="openFenPgnModal" title="FEN / PGN importieren oder kopieren">📄 FEN / PGN</button>
+                    <button id="soundToggleBtn" class="glass-btn" style="padding: 5px 10px; font-size: 0.82rem;" data-action="toggleSoundEnabled" title="Spielgeräusche an-/ausschalten">🔊 Ton</button>
+                    <button id="voiceMoveBtn" data-action="toggleVoiceMoveControl" class="glass-btn" style="padding: 5px 10px; font-size: 0.82rem;" title="Sprachsteuerung per Mikrofon">🎤 Sprache</button>
+                    <button id="featuresBtn" data-action="openFeaturesModal" class="glass-btn purple" style="padding: 5px 10px; font-size: 0.82rem;" title="Designs & Optionen">⚙️ Optionen</button>
                     <button id="fullscreenBtn" class="glass-btn" style="padding: 5px 10px; font-size: 0.82rem;" title="Vollbild-Modus">📺 Vollbild</button>
-                    
-                    <!-- Versteckte Hilfselemente für Kompatibilität -->
-                    <button id="voiceChatBtn" style="display: none;"></button>
-                    <span id="voice-status" style="display: none;"></span>
+                    <button id="voiceChatBtn" class="glass-btn" style="display: none; padding: 5px 10px; font-size: 0.82rem;">🎤 Voice-Chat</button>
+                    <button id="voiceMuteBtn" class="glass-btn" style="display: none; padding: 5px 10px; font-size: 0.82rem;" data-action="toggleVoiceMute">🎙️ Mikro an</button>
+                    <span id="voice-status" style="font-size: 0.78rem; color: #2ecc71;"></span>
                     <span id="server-status" style="display: none;">Online</span>
                     <span id="online-users-count" style="display: none;">1</span>
                     <span id="ping-display" style="display: none;">-- ms</span>
@@ -1087,39 +1106,74 @@
         <div class="sidebar">
             <!-- Sidebar Navigation Tabs: Nur noch Partie/Züge und Live-Chat während des Spiels -->
             <div class="sidebar-tabs">
-                <button class="glass-btn sidebar-tab-btn active" onclick="switchSidebarTab('tab-game', this)">📜 Partie & Züge</button>
-                <button class="glass-btn sidebar-tab-btn" onclick="switchSidebarTab('tab-chat', this)">💬 Live-Chat</button>
+                <button class="glass-btn sidebar-tab-btn active" data-action="switchSidebarTab" data-arg1="tab-game">📜 Partie & Züge</button>
+                <button class="glass-btn sidebar-tab-btn" data-action="switchSidebarTab" data-arg1="tab-chat">💬 Live-Chat</button>
             </div>
 
-            <!-- TAB 1: NOTATION & IN-GAME SPIEL-KONTROLLE (Klar, fokussiert & aufgeräumt während des Matches) -->
+            <!-- TAB 1: NOTATION & IN-GAME SPIEL-KONTROLLE -->
             <div id="tab-game" class="sidebar-tab-content active" style="display: flex; flex-direction: column; gap: 10px; height: 100%;">
                 <!-- Live-Partie Status & Spieleranzeige -->
                 <div class="glass-panel" style="background: rgba(0,0,0,0.3); border-radius: 8px; padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid rgba(255,255,255,0.08);">
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <span class="pulse-green" style="width: 8px; height: 8px; border-radius: 50%; display: inline-block;"></span>
+                        <span style="width: 8px; height: 8px; border-radius: 50%; background: #81b64c; display: inline-block;"></span>
                         <span style="font-weight: 700; font-size: 0.9rem;" id="match-live-title">Live-Partie</span>
                     </div>
-                    <button onclick="openGameModeModal()" class="glass-btn primary" style="padding: 4px 10px; font-size: 0.78rem; font-weight: bold; display: flex; align-items: center; gap: 4px; border-radius: 6px; cursor: pointer;" title="Neuen Spielmodus oder Gegner wählen">
+                    <button data-action="openGameModeModal" class="glass-btn primary" style="padding: 4px 10px; font-size: 0.78rem; font-weight: bold; display: flex; align-items: center; gap: 4px; border-radius: 6px; cursor: pointer;" title="Neuen Spielmodus oder Gegner wählen">
                         🎮 Neuer Modus
                     </button>
                 </div>
 
-                <!-- Zugsverlauf / Notation (Vollflächig, übersichtlich und scrollbar) -->
+                <!-- Zugsverlauf / Notation (Interaktiv wie Chess.com) -->
                 <div class="glass-panel" id="move-history-panel" style="display: flex; flex-direction: column; gap: 8px; flex-grow: 1; min-height: 280px; max-height: 480px; border: 1px solid rgba(255,255,255,0.08);">
                     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px;">
-                        <span style="font-weight: 700; font-size: 0.92rem;">📋 <strong>Zugsverlauf (Notation)</strong></span>
-                        <span style="font-size: 0.78rem; color: #81b64c; font-weight: bold;">Standard PGN</span>
+                        <span style="font-weight: 700; font-size: 0.92rem;">📋 <strong>Zugsverlauf</strong></span>
+                        <div style="display: flex; gap: 4px;">
+                            <button data-action="copyCurrentFEN" class="glass-btn" style="padding: 2px 7px; font-size: 0.72rem;" title="FEN in Zwischenablage kopieren">FEN</button>
+                            <button data-action="copyCurrentPGN" class="glass-btn" style="padding: 2px 7px; font-size: 0.72rem;" title="PGN in Zwischenablage kopieren">PGN</button>
+                        </div>
                     </div>
-                    <div id="move-history-list" style="overflow-y: auto; flex-grow: 1; min-height: 220px; font-family: monospace; font-size: 0.92rem; display: flex; flex-direction: column; gap: 4px; padding-right: 5px; background: rgba(0,0,0,0.25); border-radius: 6px; padding: 8px;">
+                    <div id="move-history-list" class="move-history-grid"></div>
+                    <!-- Move Step Controls -->
+                    <div class="move-nav-bar">
+                        <button id="navFirstBtn" data-action="jumpToMoveIndex" data-arg1="0" class="glass-btn move-nav-btn" title="Zum Anfang (Pos1)">⏮</button>
+                        <button id="navPrevBtn" data-action="stepHistory" data-arg1="-1" class="glass-btn move-nav-btn" title="Vorheriger Zug (Pfeil links)">◀</button>
+                        <button id="navNextBtn" data-action="stepHistory" data-arg1="1" class="glass-btn move-nav-btn" title="Nächster Zug (Pfeil rechts)">▶</button>
+                        <button id="navLastBtn" data-action="jumpToLive" class="glass-btn move-nav-btn" title="Zur aktuellen Stellung (Ende)">⏭</button>
+                    </div>
+                    <div id="opening-continuations" class="opening-continuations-bar" style="display:none;"></div>
+                    <div id="opening-trainer-bar" class="opening-trainer-bar">
+                        <div class="opening-trainer-row">
+                            <select id="trainer-repertoire-select" title="Eröffnungsrepertoire auswählen"></select>
+                            <button id="trainerToggleBtn" class="glass-btn" data-action="toggleOpeningTrainer" style="padding: 4px 10px; font-size: 0.76rem; white-space: nowrap;">🎓 Trainer</button>
+                        </div>
+                        <div id="trainer-status-text" style="display:none; font-size: 0.76rem; color: #a9d977;"></div>
+                    </div>
+                    <div id="replay-controls-bar" style="display:none;">
+                        <span id="replay-status-text">Replay</span>
+                        <div class="replay-btn-group">
+                            <button id="replayPrevBtn" class="glass-btn" data-action="replayStep" data-arg1="-1" title="Schritt zurück">◀</button>
+                            <button id="replayPauseBtn" class="glass-btn" data-action="replayTogglePause" title="Pause / Weiter">⏸️ Pause</button>
+                            <button id="replayNextBtn" class="glass-btn" data-action="replayStep" data-arg1="1" title="Schritt vor">▶</button>
+                            <select id="replay-speed-select" title="Geschwindigkeit">
+                                <option value="0.5">0.5x</option>
+                                <option value="1" selected>1x</option>
+                                <option value="2">2x</option>
+                                <option value="3">3x</option>
+                            </select>
+                            <button id="replayStopBtn" class="glass-btn danger" data-action="replayStop" title="Replay beenden">✖</button>
+                        </div>
+                    </div>
+                    <div id="replay-review-banner" style="display:none; font-size: 0.78rem; color: #f1c40f; text-align: center; background: rgba(241,196,15,0.12); padding: 4px 8px; border-radius: 6px; cursor: pointer;" data-action="jumpToLive">
+                        ⏪ Rückblick-Ansicht aktiv — Klicke hier für Live-Stellung
                     </div>
                 </div>
 
                 <!-- In-Game Quick Action Bar -->
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                    <button onclick="switchSidebarTab('tab-chat', document.querySelectorAll('.sidebar-tab-btn')[1])" class="glass-btn primary" style="padding: 9px; font-size: 0.85rem; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 6px; cursor: pointer;">
+                    <button data-action="switchSidebarTab" data-arg1="tab-chat" class="glass-btn primary" style="padding: 9px; font-size: 0.85rem; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 6px; cursor: pointer;">
                         <span>💬</span> Live-Chat öffnen
                     </button>
-                    <button onclick="openGameModeModal()" class="glass-btn" style="padding: 9px; font-size: 0.85rem; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); cursor: pointer;">
+                    <button data-action="openGameModeModal" class="glass-btn" style="padding: 9px; font-size: 0.85rem; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); cursor: pointer;">
                         <span>🆕</span> Neues Spiel
                     </button>
                 </div>
@@ -1201,281 +1255,24 @@
     </main>
     </div><!-- End .chesscom-layout -->
 
-    <script>
-        function toggleSidebarCollapse() {
-            const sidebar = document.getElementById('chesscom-sidebar');
-            const layout = document.getElementById('chesscom-layout');
-            const icon = document.getElementById('sidebarCollapseIcon');
-            if (!sidebar) return;
-            const isCollapsed = sidebar.classList.toggle('collapsed');
-            if (layout) layout.classList.toggle('sidebar-collapsed', isCollapsed);
-            if (icon) icon.innerText = isCollapsed ? '»' : '«';
-            try {
-                localStorage.setItem('chesscom_sidebar_collapsed', isCollapsed ? 'true' : 'false');
-            } catch (e) {}
-        }
-
-        function toggleMobileSidebar() {
-            const sidebar = document.getElementById('chesscom-sidebar');
-            const backdrop = document.getElementById('sidebar-backdrop');
-            if (!sidebar) return;
-            const isOpen = sidebar.classList.toggle('mobile-open');
-            if (backdrop) backdrop.classList.toggle('active', isOpen);
-        }
-
-        function closeMobileSidebar() {
-            const sidebar = document.getElementById('chesscom-sidebar');
-            const backdrop = document.getElementById('sidebar-backdrop');
-            if (sidebar) sidebar.classList.remove('mobile-open');
-            if (backdrop) backdrop.classList.remove('active');
-        }
-
-        // --- 🏆 LEADERBOARD MODAL CONTROLLER ---
-        window.openLeaderboardModal = function() {
-            if (window.innerWidth <= 1024) closeMobileSidebar();
-            const modal = document.getElementById('leaderboard-modal');
-            if (modal) {
-                modal.style.display = 'flex';
-                const searchInput = document.getElementById('modal-leaderboard-search');
-                if (searchInput) searchInput.value = '';
-                if (window.currentLeaderboardUsers && window.currentLeaderboardUsers.length > 0) {
-                    window.renderModalLeaderboard(window.currentLeaderboardUsers);
-                } else if (typeof window.requestLeaderboardRefresh === 'function') {
-                    window.requestLeaderboardRefresh();
-                }
-            }
-        };
-
-        window.closeLeaderboardModal = function() {
-            const modal = document.getElementById('leaderboard-modal');
-            if (modal) modal.style.display = 'none';
-        };
-
-        window.renderModalLeaderboard = function(users) {
-            const modalList = document.getElementById('modal-leaderboard-list');
-            const countEl = document.getElementById('modal-leaderboard-count');
-            if (!modalList) return;
-            const list = users || window.currentLeaderboardUsers || [];
-            if (countEl) countEl.innerText = `${list.length} Spieler`;
-            
-            if (list.length === 0) {
-                modalList.innerHTML = '<div style="text-align: center; color: #888; padding: 30px 0;">Keine Spieler in der Rangliste gefunden.</div>';
-                return;
-            }
-
-            const myName = (localStorage.getItem('playerName') || '').toLowerCase();
-
-            modalList.innerHTML = list.map((p, i) => {
-                let badge = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
-                let badgeColor = i === 0 ? '#f1c40f' : i === 1 ? '#bdc3c7' : i === 2 ? '#cd7f32' : '#8c8a87';
-                let isMe = p.name && p.name.toLowerCase() === myName;
-                let rowBg = isMe 
-                    ? 'rgba(129, 182, 76, 0.18)' 
-                    : (i === 0 
-                        ? 'linear-gradient(90deg, rgba(241,196,15,0.12), transparent)' 
-                        : (i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'transparent'));
-                let borderStyle = isMe ? '1px solid rgba(129, 182, 76, 0.5)' : '1px solid rgba(255,255,255,0.04)';
-                let encName = encodeURIComponent(p.name || '');
-
-                return `
-                <div onclick="if(typeof viewPlayerProfile==='function')viewPlayerProfile(decodeURIComponent('${encName}'))" style="cursor: pointer; background: ${rowBg}; border: ${borderStyle}; border-radius: 8px; padding: 10px 12px; display: grid; grid-template-columns: 50px 1fr 110px 80px; align-items: center; transition: all 0.15s ease;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='${rowBg}'">
-                    <div style="font-weight: 800; font-size: ${i < 3 ? '1.25rem' : '0.9rem'}; color: ${badgeColor};">
-                        ${badge}
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 10px; overflow: hidden;">
-                        <div style="width: 30px; height: 30px; border-radius: 50%; background: #363431; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.12);">
-                            ${(p.name && p.name.toLowerCase() === 'max') ? '👑' : '♟️'}
-                        </div>
-                        <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                            <div style="font-weight: 700; color: ${isMe ? '#81b64c' : '#ffffff'}; font-size: 0.95rem;">
-                                ${p.name || 'Anonym'} ${isMe ? '<span style="font-size: 0.7rem; background: #81b64c; color: white; padding: 1px 5px; border-radius: 4px; margin-left: 4px;">DU</span>' : ''}
-                            </div>
-                            <div style="font-size: 0.72rem; color: #8c8a87;">Level ${p.level || 1}</div>
-                        </div>
-                    </div>
-                    <div style="text-align: right; font-weight: 800; color: #f1c40f; font-size: 1.05rem; font-family: monospace;">
-                        ${p.elo || 1200}
-                    </div>
-                    <div style="text-align: right; color: #bab8b5; font-size: 0.9rem; font-weight: 600;">
-                        ${p.wins || 0} 🏆
-                    </div>
-                </div>
-                `;
-            }).join('');
-        };
-
-        window.filterModalLeaderboard = function(query) {
-            if (!window.currentLeaderboardUsers) return;
-            const q = (query || '').toLowerCase().trim();
-            if (!q) {
-                window.renderModalLeaderboard(window.currentLeaderboardUsers);
-                return;
-            }
-            const filtered = window.currentLeaderboardUsers.filter(u => u.name && u.name.toLowerCase().includes(q));
-            window.renderModalLeaderboard(filtered);
-        };
-
-        // --- 🧩 PUZZLE MODAL CONTROLLER ---
-        window.openPuzzleModal = function() {
-            if (window.innerWidth <= 1024) closeMobileSidebar();
-            const modal = document.getElementById('puzzle-modal');
-            if (modal) modal.style.display = 'flex';
-        };
-        window.closePuzzleModal = function() {
-            const modal = document.getElementById('puzzle-modal');
-            if (modal) modal.style.display = 'none';
-        };
-        window.startModalPuzzle = function() {
-            window.closePuzzleModal();
-            const pBtn = document.getElementById('loadPuzzleBtn');
-            if (pBtn) pBtn.click();
-        };
-
-        // --- 🎰 CASINO MODAL CONTROLLER ---
-        window.openCasinoModal = function() {
-            if (window.innerWidth <= 1024) closeMobileSidebar();
-            const modal = document.getElementById('casino-modal');
-            if (modal) modal.style.display = 'flex';
-        };
-        window.closeCasinoModal = function() {
-            const modal = document.getElementById('casino-modal');
-            if (modal) modal.style.display = 'none';
-        };
-        window.updateModalBetDisplay = function(val) {
-            const el = document.getElementById('modal-current-bet');
-            if (el) el.innerText = val + ' Coins';
-        };
-
-        // --- 📊 ANALYSE MODAL CONTROLLER ---
-        window.openAnalysisModal = function() {
-            if (window.innerWidth <= 1024) closeMobileSidebar();
-            const modal = document.getElementById('analysis-modal');
-            if (modal) {
-                const eloEl = document.getElementById('elo-display');
-                const accEl = document.getElementById('accuracy-display');
-                const aggroEl = document.getElementById('aggro-display');
-                const matEl = document.getElementById('material-display');
-                if (eloEl) document.getElementById('modal-elo-display').innerText = eloEl.innerText.replace('Geschätzte Elo:', '').trim() || '1200';
-                if (accEl) document.getElementById('modal-accuracy-display').innerText = accEl.innerText.replace('Genauigkeit:', '').trim() || '--%';
-                if (aggroEl) document.getElementById('modal-aggro-display').innerText = aggroEl.innerText.replace('Aggressivität:', '').trim() || 'Normal';
-                if (matEl) document.getElementById('modal-material-display').innerText = matEl.innerText.replace('Gewonnenes Material:', '').trim() || '0';
-                modal.style.display = 'flex';
-            }
-        };
-        window.closeAnalysisModal = function() {
-            const modal = document.getElementById('analysis-modal');
-            if (modal) modal.style.display = 'none';
-        };
-
-        window.startBotMatchFromNav = function() {
-            if (window.innerWidth <= 1024) closeMobileSidebar();
-            const gm = document.getElementById('gameMode');
-            if (gm) {
-                gm.value = 'bot';
-                gm.dispatchEvent(new Event('change'));
-            }
-            if (typeof resetGame === 'function') resetGame();
-            if (typeof window.showInAppNotification === 'function') {
-                window.showInAppNotification("Bot-Match gestartet", "Du spielst jetzt gegen den Computer (KI).", "info");
-            }
-        };
-
-        window.openGameModeModal = function() {
-            if (window.innerWidth <= 1024) closeMobileSidebar();
-            const modal = document.getElementById('gamemode-modal');
-            if (modal) modal.style.display = 'flex';
-        };
-
-        window.closeGameModeModal = function() {
-            const modal = document.getElementById('gamemode-modal');
-            if (modal) modal.style.display = 'none';
-        };
-
-        window.openFeaturesModal = function() {
-            if (window.innerWidth <= 1024) closeMobileSidebar();
-            const modal = document.getElementById('features-modal');
-            if (modal) modal.style.display = 'flex';
-        };
-
-        window.closeFeaturesModal = function() {
-            const modal = document.getElementById('features-modal');
-            if (modal) modal.style.display = 'none';
-        };
-
-        window.selectModeFromModal = function(mode, autoStart) {
-            const gm = document.getElementById('gameMode');
-            if (gm) {
-                gm.value = mode;
-                gm.dispatchEvent(new Event('change'));
-            }
-            if (autoStart) {
-                if (typeof resetGame === 'function') resetGame();
-                window.closeGameModeModal();
-                if (typeof window.showInAppNotification === 'function') {
-                    const label = mode === 'bot' ? 'Gegen KI-Bot' : (mode === 'random' ? 'Online-Suche' : (mode === 'local' ? 'Lokales Spiel' : 'Privater Raum'));
-                    window.showInAppNotification("Spielmodus gewählt", label + " gestartet.", "info");
-                }
-            }
-        };
-
-        // Global ESC key listener to dismiss any active modal
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                window.closeLeaderboardModal();
-                window.closePuzzleModal();
-                window.closeCasinoModal();
-                window.closeAnalysisModal();
-                window.closeProfileModal();
-                window.closeGameModeModal();
-                window.closeFeaturesModal();
-            }
-        });
-
-        function navSelectTab(tabId, subSection) {
-            if (window.innerWidth <= 1024) {
-                closeMobileSidebar();
-            }
-            document.querySelectorAll('.sidebar-nav-btn').forEach(b => b.classList.remove('active'));
-            if (window.event && window.event.currentTarget && window.event.currentTarget.classList) {
-                window.event.currentTarget.classList.add('active');
-            }
-            
-            const targetBtn = document.querySelector(`.sidebar-tab-btn[onclick*="${tabId}"]`);
-            if (typeof window.switchSidebarTab === 'function') {
-                window.switchSidebarTab(tabId, targetBtn);
-            }
-        }
-
-        try {
-            if (localStorage.getItem('chesscom_sidebar_collapsed') === 'true') {
-                const sb = document.getElementById('chesscom-sidebar');
-                const ly = document.getElementById('chesscom-layout');
-                const ic = document.getElementById('sidebarCollapseIcon');
-                if (sb) sb.classList.add('collapsed');
-                if (ly) ly.classList.add('sidebar-collapsed');
-                if (ic) ic.innerText = '»';
-            }
-        } catch (e) {}
-    </script>
+    
     <div id="videoModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background: rgba(10, 10, 15, 0.05); backdrop-filter: blur(2px) saturate(110%); -webkit-backdrop-filter: blur(2px) saturate(110%); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index:9999; justify-content:center; align-items:center;">
     <div style="background: transparent; padding:20px; border-radius:10px; position:relative; max-width:80%;">
-        <span onclick="document.getElementById('videoModal').style.display='none'" style="position:absolute; top:10px; right:20px; color:white; cursor:pointer; font-size:30px;">&times;</span>
+        <span data-action="closeVideoModal" style="position:absolute; top:10px; right:20px; color:white; cursor:pointer; font-size:30px;">&times;</span>
         <video id="player" controls width="100%"></video>
     </div>
 </div>
 
-<script>
-function playVideo(url) {
-    const modal = document.getElementById('videoModal');
-    const player = document.getElementById('player');
-    player.src = url;
-    modal.style.display = 'flex';
-    player.play();
-}
-</script>
+
     
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="soundEngine.js"></script>
+    <script src="openingBook.js"></script>
+    <script src="openingTrainer.js"></script>
+    <script src="evalEngine.js"></script>
+    <script src="pgnEngine.js"></script>
+    <script src="app-ui.js"></script>
     <script type="module" src="features.js"></script>
     <script type="module" src="script.js"></script>
     <script type="module" src="script2.js"></script>
@@ -1542,7 +1339,7 @@ function playVideo(url) {
         <div style="background:#1a1a1a; padding:20px; border-radius:15px; border:1px solid #444; max-width:500px; width:90%; max-height:80vh; overflow-y:auto;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
                 <h2 id="ppm-name" style="margin:0; color:#f1c40f;">Spielername</h2>
-                <button onclick="document.getElementById('player-profile-modal').style.display='none'" class="glass-btn" style="background:#e74c3c;">X</button>
+                <button data-action="closePlayerProfileModal" class="glass-btn" style="background:#e74c3c;">X</button>
             </div>
             <div style="display:flex; gap:10px; margin-bottom:15px; color:#ccc;">
                 <span id="ppm-elo">Elo: 1200</span> | <span id="ppm-level">Level: 1</span> | <span id="ppm-role">Gast</span>
@@ -1600,6 +1397,44 @@ function playVideo(url) {
                     <button id="cancelJoinLobbyPasswordBtn" class="glass-btn" style="padding: 8px 16px; border-radius: 6px; cursor: pointer;">Abbrechen</button>
                     <button id="submitJoinLobbyPasswordBtn" class="glass-btn success" style="padding: 8px 18px; border-radius: 6px; background: #3498db; color: white; font-weight: bold; border: none; cursor: pointer;">Beitreten</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FEN / PGN Import & Export Modal -->
+    <div id="fen-pgn-modal" class="modal-overlay" style="display: none; z-index: 100000; background: rgba(0, 0, 0, 0.78); backdrop-filter: blur(8px); justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; padding: 15px; box-sizing: border-box;">
+        <div class="modal-box" style="max-width: 520px; width: 100%; background: #1e1d1a; border: 1px solid rgba(255,255,255,0.15); border-radius: 14px; text-align: left; padding: 22px; color: white;">
+            <span class="close-modal" data-action="closeFenPgnModal">&times;</span>
+            <h2 style="margin: 0 0 12px 0; font-size: 1.25rem; color: #f1c40f;">📄 FEN & PGN Import / Export</h2>
+            <div style="margin-bottom: 12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <label style="font-size:0.82rem; color:#bab8b5; font-weight:bold;">Aktuelle FEN-Stellung:</label>
+                    <button data-action="copyCurrentFEN" class="glass-btn" style="padding:3px 9px; font-size:0.75rem;">📋 Kopieren</button>
+                </div>
+                <input type="text" id="fen-modal-input" style="width:100%; box-sizing:border-box; font-family:monospace; font-size:0.82rem;" placeholder="FEN einfügen..." />
+                <button data-action="applyFenFromModal" class="glass-btn primary" style="margin-top:6px; width:100%; padding:8px; font-size:0.85rem;">📥 FEN-Stellung laden</button>
+            </div>
+            <div style="margin-bottom: 12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <label style="font-size:0.82rem; color:#bab8b5; font-weight:bold;">Aktuelle PGN-Notation:</label>
+                    <button data-action="copyCurrentPGN" class="glass-btn" style="padding:3px 9px; font-size:0.75rem;">📋 Kopieren</button>
+                </div>
+                <textarea id="pgn-modal-input" rows="4" style="width:100%; box-sizing:border-box; font-family:monospace; font-size:0.82rem; resize:vertical;" placeholder="PGN hier einfügen..."></textarea>
+                <button data-action="applyPgnFromModal" class="glass-btn success" style="margin-top:6px; width:100%; padding:8px; font-size:0.85rem;">📥 PGN-Partie laden</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Save Game Name Modal (replaces prompt) -->
+    <div id="save-game-modal" class="modal-overlay" style="display: none; z-index: 100000; background: rgba(0, 0, 0, 0.78); backdrop-filter: blur(8px); justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; padding: 15px; box-sizing: border-box;">
+        <div class="modal-box" style="max-width: 400px; width: 100%; background: #1e1d1a; border: 1px solid rgba(129,182,76,0.4); border-radius: 14px; text-align: left; padding: 22px; color: white;">
+            <span class="close-modal" data-action="closeSaveGameModal">&times;</span>
+            <h2 style="margin: 0 0 10px 0; font-size: 1.2rem; color: #81b64c;">💾 Partie speichern</h2>
+            <p style="font-size: 0.85rem; color: #bab8b5; margin-bottom: 12px;">Gib einen Namen für diese Partie ein:</p>
+            <input type="text" id="save-game-name-input" class="auth-input" maxlength="50" placeholder="z. B. Meisterpartie" />
+            <div style="display: flex; gap: 8px;">
+                <button data-action="closeSaveGameModal" class="glass-btn" style="flex:1; padding:10px;">Abbrechen</button>
+                <button data-action="confirmSaveCurrentGame" class="glass-btn success" style="flex:1; padding:10px;">Speichern</button>
             </div>
         </div>
     </div>

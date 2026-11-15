@@ -236,7 +236,7 @@
             <h2 style="margin-top:0; color:#2ecc71;">Willkommen bei Prochess!</h2>
             <p style="color:#ccc; font-size:0.92em; line-height:1.45;">Bitte bestätige vor dem Betreten des Chats unsere <a href="AGB.html" target="_blank" rel="noopener noreferrer" style="color:#3498db;">AGB</a>, die <a href="datenschutz.html" target="_blank" rel="noopener noreferrer" style="color:#3498db;">Datenschutzerklärung</a> sowie das <a href="impressum.html" target="_blank" rel="noopener noreferrer" style="color:#f39c12;">Impressum</a>.</p>
             <p style="color:#9aa5b1; font-size:0.78em; line-height:1.35;">🔒 Kein Tracking – nur technisch notwendiger LocalStorage (§ 25 TDDDG).</p>
-            <button class="btn-green" style="padding: 10px 24px; border-radius: 8px;" onclick="acceptAGB()">Akzeptieren &amp; Chat betreten</button>
+            <button id="acceptAgbBtn" class="btn-green" style="padding: 10px 24px; border-radius: 8px;">Akzeptieren &amp; Chat betreten</button>
         </div>
     </div>
     
@@ -330,66 +330,8 @@
         </div>
     </div>
 
-    <script type="module">
-        window.acceptAGB = function() {
-            localStorage.setItem('agbAkzeptiert', 'true');
-            document.getElementById('agb-popup').style.display = 'none';
-        };
-        if (!localStorage.getItem('agbAkzeptiert')) {
-            document.getElementById('agb-popup').style.display = 'flex';
-        }
-
-        // Display current user name in header if available
-        const savedName = localStorage.getItem('playerName');
-        if (savedName) {
-            const pill = document.getElementById('headerPlayerPill');
-            if (pill) pill.textContent = '👤 ' + savedName;
-        }
-    </script>
+    <script src="chat-ui.js"></script>
     <script src="script.js"></script>
-
-    <script id="fragmentShader" type="x-shader/x-fragment">
-        precision highp float;
-        uniform float time;
-        uniform vec2 resolution;
-        float wave(vec2 p, float t) {
-            return sin(p.x * 5.0 + t) + sin((p.y + t) * 0.5);
-        }
-        void main() {
-            vec2 uv = gl_FragCoord.xy / resolution.xy;
-            vec2 p = -1.0 + 2.0 * uv;
-            p.x *= resolution.x / resolution.y;
-            float t = time * 0.2;
-            float v = wave(p, t);
-            vec3 color = vec3(0.02, 0.05, 0.15) + 0.05 * sin(v + vec3(0.0, 2.0, 4.0));
-            gl_FragColor = vec4(color, 1.0);
-        }
-    </script>
-    <script>
-        (function() {
-            const canvas = document.getElementById('glCanvas');
-            const gl = canvas.getContext('webgl');
-            if (!gl) return;
-            const vs = gl.createShader(gl.VERTEX_SHADER);
-            gl.shaderSource(vs, `attribute vec4 p; void main(){gl_Position=p;}`); gl.compileShader(vs);
-            const fs = gl.createShader(gl.FRAGMENT_SHADER);
-            gl.shaderSource(fs, document.getElementById('fragmentShader').text); gl.compileShader(fs);
-            const prog = gl.createProgram(); gl.attachShader(prog, vs); gl.attachShader(prog, fs);
-            gl.linkProgram(prog); gl.useProgram(prog);
-            const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]), gl.STATIC_DRAW);
-            const pLoc = gl.getAttribLocation(prog, "p"); gl.enableVertexAttribArray(pLoc);
-            gl.vertexAttribPointer(pLoc, 2, gl.FLOAT, false, 0, 0);
-            const tLoc = gl.getUniformLocation(prog, "time"); const rLoc = gl.getUniformLocation(prog, "resolution");
-            function render(now) {
-                canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-                gl.viewport(0, 0, canvas.width, canvas.height);
-                gl.uniform1f(tLoc, now * 0.001); gl.uniform2f(rLoc, canvas.width, canvas.height);
-                gl.drawArrays(gl.TRIANGLES, 0, 6); requestAnimationFrame(render);
-            }
-            requestAnimationFrame(render);
-        })();
-    </script>
 
     <!-- MODALS FOR CUSTOM LOBBIES -->
     <div id="createLobbyModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 10000; align-items: center; justify-content: center; padding: 15px;">

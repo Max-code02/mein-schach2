@@ -1220,7 +1220,7 @@ async function handleAdminCommand(ws, text, context) {
             } else {
                 ws.send(JSON.stringify({ 
                     type: 'chat', 
-                    text: `💬 **PROCHESS SPIELER-BEFEHLE:**\n══════════════════════════════════════\n🎮 **1. Partie & Zuschauen:**\n• \`!watch "Name"\` — Schaut einer aktiven Partie live zu\n• \`!unwatch\` — Verlässt den Zuschauermodus\n• \`!draw\` / \`!remis\` — Bietet dem Gegner Remis an\n• \`!resign\` / \`!aufgeben\` — Gibt die aktuelle Partie auf\n• \`!undo\` / \`!zurueck\` — Fordert Zug-Rücknahme an\n\n📊 **2. Profil & Statistiken:**\n• \`!stats\` / \`!profile\` — Zeigt dein persönliches Profil & ELO\n• \`!stats "Name"\` — Profil & Statistiken eines Mitspielers\n• \`!rank\` / \`!top\` — Zeigt die Bestenliste\n• \`!myip\` — Zeigt deine aktuelle Verbindungs-IP\n• \`!ping\` — Misst Latenz zum Server\n\n💬 **3. Lobbies & Support:**\n• \`!lobby "Name"\` — Erstellt/Betritt eine Chat-Lobby\n• \`!ticket\` — Support-Ticket & Entbannungsantrag\n• \`!emotes\` — Liste aller Chat-Emojis & Reaktionen\n\n🎨 **4. Design & Einstellungen:**\n• \`!theme\` — Menü für Farb- & Brettdesigns\n• \`!glass\` — Glassmorphismus-Effekt umschalten\n• \`!keybinds\` — Tastenkombinationen-Übersicht\n\n⚖️ **5. Rechtliches:**\n• \`!rules\` / \`!agb\` — Fairplay-Regeln\n• \`!impressum\` — Kontakt & Datenschutz (Support: blockcom130@gmail.com)`, 
+                    text: `💬 **PROCHESS SPIELER-BEFEHLE:**\n══════════════════════════════════════\n🎮 **1. Partie & Zuschauen:**\n• \`!watch "Name"\` — Schaut einer aktiven Partie live zu\n• \`!unwatch\` — Verlässt den Zuschauermodus\n• \`!draw\` / \`!remis\` — Bietet dem Gegner Remis an\n• \`!resign\` / \`!aufgeben\` — Gibt die aktuelle Partie auf\n• \`!undo\` / \`!zurueck\` — Fordert Zug-Rücknahme an\n\n📊 **2. Profil & Statistiken:**\n• \`!stats\` / \`!profile\` — Zeigt dein persönliches Profil & ELO\n• \`!stats "Name"\` — Profil & Statistiken eines Mitspielers\n• \`!rank\` / \`!top\` — Zeigt die Bestenliste\n• \`!myip\` — Zeigt deine aktuelle Verbindungs-IP\n• \`!ping\` — Misst Latenz zum Server\n\n💬 **3. Lobbies & Support:**\n• \`!lobby "Name"\` — Erstellt/Betritt eine Chat-Lobby\n• \`!ticket\` — Support-Ticket & Entbannungsantrag\n• \`!emotes\` — Liste aller Chat-Emojis & Reaktionen\n\n🎨 **4. Design & Einstellungen:**\n• \`!theme\` — Menü für Farb- & Brettdesigns\n• \`!glass\` — Glassmorphismus-Effekt umschalten\n• \`!keybinds\` — Tastenkombinationen-Übersicht\n\n⚖️ **5. Rechtliches:**\n• \`!rules\` / \`!agb\` — Fairplay-Regeln\n• \`!impressum\` — Kontakt & Datenschutz (Support: Support über das In-Game Ticket-System)`, 
                     system: true 
                 }));
             }
@@ -1251,7 +1251,7 @@ async function handleAdminCommand(ws, text, context) {
 
         case 'ticket':
         case 'support':
-            ws.send(JSON.stringify({ type: 'chat', text: `📩 **Support-Kontakt:** E-Mail: blockcom130@gmail.com oder nutze das Support-Ticket Formular im Profil/Modal.`, system: true }));
+            ws.send(JSON.stringify({ type: 'chat', text: `📩 **Support-Kontakt:** E-Mail: Support über das In-Game Ticket-System oder nutze das Support-Ticket Formular im Profil/Modal.`, system: true }));
             break;
 
         case 'agb':
@@ -1261,7 +1261,7 @@ async function handleAdminCommand(ws, text, context) {
 
         case 'datenschutz':
         case 'impressum':
-            ws.send(JSON.stringify({ type: 'chat', text: `⚖️ **Impressum & Datenschutz:** E-Mail: blockcom130@gmail.com | Details unter /impressum.html & /datenschutz.html`, system: true }));
+            ws.send(JSON.stringify({ type: 'chat', text: `⚖️ **Impressum & Datenschutz:** E-Mail: Support über das In-Game Ticket-System | Details unter /impressum.html & /datenschutz.html`, system: true }));
             break;
 
         case 'emotes':
