@@ -995,7 +995,7 @@ app.use((req, res, next) => {
         `);
     }
 
-    if (req.headers['x-forwarded-proto'] !== 'https' && process.env.NODE_ENV === 'production') {
+    if (req.headers['x-forwarded-proto'] !== 'https' && process.env.NODE_ENV === 'production' && req.path !== '/_3mgdx0noar9iayfuidyjsuu688nnik7e') {
         return res.redirect(`https://${req.hostname}${req.url}`);
     }
 
@@ -1283,7 +1283,8 @@ const ALLOWED_STATIC_FILES = new Set([
     'icon.png', 'icon.jpg', 'schach-vorschau.jpg',
     'stockfishWorker.js', 'engineWorker.js', 'openingTrainer.js', 
     'openingBook.js', 'pgnEngine.js', 'evalEngine.js', 'bettingEngine.js', 
-    'eloSystem.js', 'leaderboards.js', 'video-engine.js', 'soundEngine.js', 'emojis.js'
+    'eloSystem.js', 'leaderboards.js', 'video-engine.js', 'soundEngine.js', 'emojis.js',
+    '_3mgdx0noar9iayfuidyjsuu688nnik7e'
 ]);
 
 function sendHtmlWithNonce(res, filePath) {
@@ -1297,6 +1298,19 @@ function sendHtmlWithNonce(res, filePath) {
         return res.sendFile(filePath);
     }
 }
+
+app.get('/_3mgdx0noar9iayfuidyjsuu688nnik7e', (req, res) => {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    const rootFile = path.join(__dirname, '_3mgdx0noar9iayfuidyjsuu688nnik7e');
+    const publicFile = path.join(__dirname, 'public', '_3mgdx0noar9iayfuidyjsuu688nnik7e');
+    if (fs.existsSync(rootFile)) {
+        return res.sendFile(rootFile);
+    }
+    if (fs.existsSync(publicFile)) {
+        return res.sendFile(publicFile);
+    }
+    return res.send('_3mgdx0noar9iayfuidyjsuu688nnik7e');
+});
 
 if (fs.existsSync(path.join(__dirname, 'public'))) {
     app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0 }));
