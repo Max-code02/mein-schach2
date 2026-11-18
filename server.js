@@ -691,6 +691,7 @@ function renderBannedPage(clientIP, reason, nonce = '') {
 <head>
     <meta charset="UTF-8">
     <meta name="strix-verification" content="strix-verify-d42958f109fb3690dfb44210a3c9038e">
+    <meta name="barrion-site-verification" content="barrion-site-verification=a1ea1d9c8d69ac70d877cdaadbabe930">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zugriff verweigert – Schach-Server</title>
     <style>
@@ -974,6 +975,7 @@ app.use((req, res, next) => {
             <head>
                 <meta charset="UTF-8">
                 <meta name="strix-verification" content="strix-verify-d42958f109fb3690dfb44210a3c9038e">
+                <meta name="barrion-site-verification" content="barrion-site-verification=a1ea1d9c8d69ac70d877cdaadbabe930">
                 <title>IP Entsperrt - Schach</title>
                 <style>
                     body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; text-align: center; padding: 60px 20px; }

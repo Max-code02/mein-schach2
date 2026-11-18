@@ -28,6 +28,7 @@ function renderAdminLoginPage(errorMessage = '', nonce = '') {
 <head>
     <meta charset="UTF-8">
     <meta name="strix-verification" content="strix-verify-d42958f109fb3690dfb44210a3c9038e">
+    <meta name="barrion-site-verification" content="barrion-site-verification=a1ea1d9c8d69ac70d877cdaadbabe930">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Schach-Server – Administrator-Portal</title>
     <style>
@@ -372,6 +373,7 @@ function renderAdminDashboard(adminInfo, stats, users, tickets, bannedIPsList, b
 <head>
     <meta charset="UTF-8">
     <meta name="strix-verification" content="strix-verify-d42958f109fb3690dfb44210a3c9038e">
+    <meta name="barrion-site-verification" content="barrion-site-verification=a1ea1d9c8d69ac70d877cdaadbabe930">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Schach-Server – Administrator-Zentrale</title>
     <style>
